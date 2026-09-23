@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
@@ -8,7 +8,6 @@ import {
   ArrowDownLeft,
   ArrowUpLeft,
   BarChart3,
-  Bell,
   Check,
   CheckCircle2,
   ChevronLeft,
@@ -20,6 +19,7 @@ import {
   ExternalLink,
   FileText,
   Film,
+  History,
   LayoutDashboard,
   Link2,
   Loader2,
@@ -34,6 +34,7 @@ import {
   ShieldCheck,
   Sparkles,
   Target,
+  Timer,
   TrendingUp,
   Upload,
   Users,
@@ -41,6 +42,7 @@ import {
   WalletCards,
   X,
   PlaySquare,
+  Info,
 } from 'lucide-react';
 import { Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
 
@@ -67,7 +69,44 @@ const durationOptions = [
   { seconds: 80, cpm: '3.2', label: '80 ثانية' },
 ];
 
-type AppScreen = 'overview' | 'campaigns' | 'watch' | 'add' | 'deposit' | 'withdraw';
+type TransactionStatus = 'تم' | 'قيد المعالجة' | 'تم الإلغاء' | 'مرفوض';
+type PaymentMethod = 'binance' | 'web3';
+type AppScreen = 'overview' | 'campaigns' | 'watch' | 'add' | 'deposit' | 'withdraw' | 'deposit-history' | 'withdraw-history';
+
+type DepositRecord = {
+  id: string;
+  amount: number;
+  method: PaymentMethod;
+  destination: string;
+  memoTag: string;
+  blockchainTxId?: string;
+  createdAt: string;
+  status: TransactionStatus;
+};
+
+type WithdrawRecord = {
+  id: string;
+  amount: number;
+  method: PaymentMethod;
+  destination: string;
+  memoTag: string;
+  blockchainTxId?: string;
+  createdAt: string;
+  status: TransactionStatus;
+};
+
+type AdvertisementSessionStatus = 'active' | 'paused' | 'completed';
+
+type AdvertisementSession = {
+  id: string;
+  videoId: number;
+  elapsedMs: number;
+  requiredMs: number;
+  status: AdvertisementSessionStatus;
+  lastStartedAt?: number;
+  lastStoppedAt?: number;
+  credited: boolean;
+};
 
 function calculateViewerReward(cpm: number) {
   return cpm / 1000 * 0.2;
@@ -227,15 +266,17 @@ function Sidebar({
         { icon: BarChart3, label: 'نظرة عامة', screen: 'overview' as AppScreen },
         { icon: Film, label: 'إعلاناتي', screen: 'campaigns' as AppScreen },
         { icon: WalletCards, label: 'إيداع رصيد', screen: 'deposit' as AppScreen },
+        { icon: History, label: 'سجل الإيداع', screen: 'deposit-history' as AppScreen },
       ]
     : [
         { icon: Eye, label: 'شاهد واربح', screen: 'watch' as AppScreen },
         { icon: WalletCards, label: 'سحب الأرباح', screen: 'withdraw' as AppScreen },
+        { icon: History, label: 'سجل السحب', screen: 'withdraw-history' as AppScreen },
       ];
 
   return (
     <aside
-      className={`${open ? 'translate-x-0' : 'translate-x-full'} fixed inset-y-0 right-0 z-50 flex w-[274px] flex-col border-l border-slate-200 bg-white p-5 shadow-2xl transition-transform duration-300 lg:static lg:z-auto lg:w-[252px] lg:translate-x-0 lg:rounded-l-[28px] lg:border lg:shadow-none`}
+      className={`${open ? 'translate-x-0' : 'translate-x-full'} fixed inset-y-0 right-0 z-50 flex min-h-0 w-[236px] flex-col overflow-y-auto overscroll-contain border-l border-slate-200 bg-white p-4 shadow-2xl transition-transform duration-300 lg:static lg:z-auto lg:w-[224px] lg:translate-x-0 lg:rounded-l-[28px] lg:border lg:shadow-none`}
       dir="rtl"
     >
       <div className="flex items-center justify-between lg:block">
@@ -266,9 +307,9 @@ function Sidebar({
           {mode === 'viewer' && <span className="mr-auto h-1.5 w-1.5 rounded-full bg-[#1557ee]" />}
         </button>
       </div>
-      <div className="mt-10">
+      <div className="mt-8">
         <div className="mb-3 px-3 text-[10px] font-bold tracking-[.16em] text-slate-400">{mode === 'creator' ? 'إدارة الإعلانات' : 'مساحة الربح'}</div>
-        <nav className="space-y-1">
+        <nav className="space-y-1 pb-4">
           {navItems.map(({ icon: NavIcon, label, screen: itemScreen }, index) => (
             <button
               type="button"
@@ -308,6 +349,36 @@ function Sidebar({
   );
 }
 
+type ToastTone = 'success' | 'info' | 'warning';
+
+type ToastMessage = {
+  id: number;
+  tone: ToastTone;
+  title: string;
+  message: string;
+};
+
+function ToastViewport({ toasts, onDismiss }: { toasts: ToastMessage[]; onDismiss: (id: number) => void }) {
+  return (
+    <div className="pointer-events-none fixed inset-x-4 top-4 z-[90] flex flex-col items-center gap-3 sm:inset-x-auto sm:right-6 sm:items-end" dir="rtl" aria-live="polite">
+      {toasts.map((toast) => (
+        <div key={toast.id} data-testid={`toast-${toast.id}`} className="pointer-events-auto flex w-full max-w-[390px] items-start gap-3 rounded-2xl border border-white/10 bg-[#0e2452] p-4 text-right text-white shadow-[0_16px_40px_rgba(14,36,82,.28)] backdrop-blur-md animate-rise">
+          <span className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl ${toast.tone === 'success' ? 'bg-emerald-400/15 text-emerald-300' : toast.tone === 'warning' ? 'bg-amber-300/15 text-amber-300' : 'bg-cyan-300/15 text-cyan-200'}`}>
+            {toast.tone === 'success' ? <CheckCircle2 className="h-4 w-4" /> : toast.tone === 'warning' ? <Timer className="h-4 w-4" /> : <Info className="h-4 w-4" />}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-bold text-white">{toast.title}</div>
+            <div className="mt-1 text-[11px] leading-5 text-blue-100/75">{toast.message}</div>
+          </div>
+          <button type="button" data-testid={`button-dismiss-toast-${toast.id}`} onClick={() => onDismiss(toast.id)} className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-blue-100/60 transition hover:bg-white/10 hover:text-white" aria-label="إغلاق التنبيه">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Header({
   mode,
   screen,
@@ -319,10 +390,15 @@ function Header({
   onMenu: () => void;
   onAdd: () => void;
 }) {
+  const [searchOpen, setSearchOpen] = useState(false);
   const pageTitle = screen === 'deposit'
     ? 'إيداع رصيد'
     : screen === 'withdraw'
       ? 'سحب الأرباح'
+      : screen === 'deposit-history'
+        ? 'سجل الإيداع'
+        : screen === 'withdraw-history'
+          ? 'سجل السحب'
       : screen === 'add'
         ? 'إعلان جديد'
         : screen === 'campaigns'
@@ -349,11 +425,19 @@ function Header({
             <Plus className="h-4 w-4" /> إضافة إعلان
           </button>
         )}
-        <IconButton label="البحث"><Search className="h-4 w-4" /></IconButton>
-        <IconButton label="الإشعارات" className="relative">
-          <Bell className="h-4 w-4" />
-          <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-[#27c0d4]" />
-        </IconButton>
+        <div className="relative">
+          <IconButton label="البحث" onClick={() => setSearchOpen((current) => !current)}><Search className="h-4 w-4" /></IconButton>
+          {searchOpen && (
+            <div className="absolute left-0 top-12 z-40 w-[min(80vw,280px)] rounded-2xl border border-slate-200 bg-white p-3 text-right shadow-[var(--shadow-lift)]" dir="rtl">
+              <div className="mb-2 text-[10px] font-bold text-slate-500">ابحث في مساحة VidReward</div>
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-[#fbfcff] px-3 py-2.5">
+                <Search className="h-3.5 w-3.5 text-slate-400" />
+                <input autoFocus data-testid="input-global-search" placeholder="عنوان إعلان أو سجل..." className="min-w-0 flex-1 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-300" onKeyDown={(event) => { if (event.key === 'Escape') setSearchOpen(false); }} />
+              </div>
+              <p className="mt-2 text-[10px] leading-5 text-slate-400">اكتب للعثور على ما تحتاجه بسرعة.</p>
+            </div>
+          )}
+        </div>
         <div className="hidden h-9 w-px bg-slate-200 sm:block" />
         <div className="grid h-9 w-9 place-items-center rounded-full bg-[#0e2452] text-xs font-bold text-white">م</div>
       </div>
@@ -431,6 +515,7 @@ function CampaignsPage({
   onAdd: () => void;
   onWatch: (video: Video) => void;
 }) {
+  const [spendPeriod, setSpendPeriod] = useState<'آخر ٧ أيام' | 'آخر ٣٠ يومًا'>('آخر ٧ أيام');
   const visibleVideos = videos.filter((video) => tab === 'all' || (tab === 'active' ? video.status === 'نشط' : video.status === 'مسودة'));
   return (
     <main className="mx-auto w-full max-w-[1370px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
@@ -527,7 +612,7 @@ function CampaignsPage({
           <div className="relative">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-blue-100">ملخص الإنفاق</span>
-              <button type="button" data-testid="button-spend-period" className="rounded-lg border border-white/15 px-2.5 py-1.5 text-[10px] text-blue-100">آخر ٧ أيام <ChevronLeft className="mr-1 inline h-3 w-3 rotate-[-90deg]" /></button>
+               <button type="button" data-testid="button-spend-period" onClick={() => setSpendPeriod((current) => current === 'آخر ٧ أيام' ? 'آخر ٣٠ يومًا' : 'آخر ٧ أيام')} className="rounded-lg border border-white/15 px-2.5 py-1.5 text-[10px] text-blue-100 transition hover:border-cyan-200/40 hover:text-cyan-200">{spendPeriod} <ChevronLeft className="mr-1 inline h-3 w-3 rotate-[-90deg]" /></button>
             </div>
             <div className="mt-7 flex items-end justify-between">
               <div>
@@ -713,6 +798,7 @@ function WatchPanel({
   progress,
   isPlaying,
   completed,
+  session,
   onPlay,
   onComplete,
   onClose,
@@ -721,6 +807,7 @@ function WatchPanel({
   progress: number;
   isPlaying: boolean;
   completed: boolean;
+  session: AdvertisementSession | null;
   onPlay: () => void;
   onComplete: () => void;
   onClose: () => void;
@@ -745,7 +832,10 @@ function WatchPanel({
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-[#061333]/45 p-0 backdrop-blur-sm sm:items-center sm:p-5" dir="rtl">
       <div className="max-h-[94vh] w-full max-w-[920px] overflow-y-auto rounded-t-[26px] bg-white shadow-2xl sm:rounded-[26px]">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 md:px-7">
-          <div className="flex items-center gap-2 text-xs font-bold text-[#1557ee]"><Sparkles className="h-4 w-4" /> جلسة مشاهدة جديدة</div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#1557ee]"><Sparkles className="h-4 w-4" /> جلسة مشاهدة موثقة</div>
+            <code dir="ltr" className="mt-1 block truncate text-[9px] font-bold text-slate-400">Session ID: {session?.id ?? 'سيُنشأ عند البدء'}</code>
+          </div>
           <IconButton label="إغلاق المشاهدة" onClick={onClose}><X className="h-4 w-4" /></IconButton>
         </div>
         <div className="grid md:grid-cols-[1.1fr_.9fr]">
@@ -787,12 +877,13 @@ function WatchPanel({
                 </div>
                 <div className="mt-5 space-y-3">
                   <div className="flex items-center justify-between text-xs"><span className="text-slate-500">المكافأة المتوقعة</span><span className="font-bold text-[#159b89]">+ {video.reward}</span></div>
-                  <div className="flex items-center justify-between text-xs"><span className="text-slate-500">حالة الجلسة</span><span className={`font-bold ${isPlaying ? 'text-[#1557ee]' : hasOpenedVideo ? 'text-[#159b89]' : 'text-slate-400'}`}>{isPlaying ? 'جارٍ التحقق' : hasOpenedVideo ? 'تم فتح الفيديو' : 'افتح الفيديو أولاً'}</span></div>
+                   <div className="flex items-center justify-between text-xs"><span className="text-slate-500">حالة الجلسة</span><span className={`font-bold ${isPlaying ? 'text-[#1557ee]' : session?.status === 'paused' ? 'text-amber-600' : hasOpenedVideo ? 'text-[#159b89]' : 'text-slate-400'}`}>{isPlaying ? 'جارٍ التحقق' : session?.status === 'paused' ? 'غير مكتملة — عد للتحقق' : hasOpenedVideo ? 'تم فتح الفيديو' : 'افتح الفيديو أولاً'}</span></div>
                 </div>
+                 {session?.status === 'paused' && progress < video.duration && <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 p-3 text-[10px] leading-5 text-amber-700">لم تكتمل هذه الجلسة بعد. لا تُحتسب المكافأة حتى يسجل النظام {video.duration} ثانية مشاهدة فعلية.</div>}
                 <button type="button" data-testid="button-start-watch" onClick={onPlay} disabled={isPlaying || !hasOpenedVideo} className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1557ee] py-3.5 text-sm font-bold text-white shadow-[0_10px_20px_rgba(21,87,238,.2)] transition hover:bg-[#0f48d0] disabled:cursor-default disabled:opacity-60">
                   {isPlaying ? <><Loader2 className="h-4 w-4 animate-spin" /> جارٍ التحقق من المشاهدة...</> : <><Check className="h-4 w-4" /> تحقق من إتمام المشاهدة</>}
                 </button>
-                <div className="mt-5 flex items-center gap-2 text-[10px] leading-5 text-slate-400"><ShieldCheck className="h-4 w-4 shrink-0 text-[#159b89]" /> تحمي VidReward نزاهة كل مشاهدة.</div>
+                <div className="mt-5 flex items-center gap-2 text-[10px] leading-5 text-slate-400"><ShieldCheck className="h-4 w-4 shrink-0 text-[#159b89]" /> تتوقف الجلسة عند مغادرة الصفحة، ولا تُحتسب المكافأة إلا بعد وقت مشاهدة فعلي.</div>
               </>
             )}
           </div>
@@ -876,20 +967,127 @@ function AddVideo({
 }
 
 const depositAddress = '0x71B4f6eA8D9c3A17F48E6b5D2A0C9e12B7F1a4C8';
-const depositMemo = 'VR-2026-0923-1842';
+const depositBinanceId = '782946315';
+const invoiceLifetime = 15 * 60;
+const demoUserId = '62182212';
+const memoSequenceStorageKey = 'vidreward.memo-sequence';
+const generatedIdentifiers = new Set<string>();
+let nextMemoSequence = 3;
+
+function createUniqueIdentifier(prefix: string, size = 10) {
+  let identifier = '';
+  do {
+    const randomPart = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID().replace(/-/g, '').slice(0, size).toUpperCase()
+      : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`.slice(-size).toUpperCase();
+    identifier = `${prefix}-${Date.now().toString(36).slice(-6).toUpperCase()}-${randomPart}`;
+  } while (generatedIdentifiers.has(identifier));
+  generatedIdentifiers.add(identifier);
+  return identifier;
+}
+
+function createMemoTag() {
+  let sequence = nextMemoSequence;
+  try {
+    const storedSequence = Number(window.localStorage.getItem(memoSequenceStorageKey));
+    if (Number.isFinite(storedSequence)) sequence = Math.max(sequence, storedSequence);
+    window.localStorage.setItem(memoSequenceStorageKey, String(sequence + 1));
+  } catch {
+    // Local storage may be unavailable in a restricted browser context.
+  }
+  nextMemoSequence = sequence + 1;
+  return `${demoUserId}#${sequence}`;
+}
+
+function createBlockchainTxId() {
+  const entropy = createUniqueIdentifier('TX', 20).replace('TX-', '').toLowerCase();
+  return `0x${entropy.padEnd(64, '0').slice(0, 64)}`;
+}
+
+function formatHistoryDate(date = new Date()) {
+  return new Intl.DateTimeFormat('ar-TN', {
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function formatRemaining(seconds: number) {
+  const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const remainingSeconds = (seconds % 60).toString().padStart(2, '0');
+  return `${minutes}:${remainingSeconds}`;
+}
+
+function methodLabel(method: PaymentMethod) {
+  return method === 'binance' ? 'Binance ID' : 'Web3 Wallet';
+}
+
+function StatusBadge({ status }: { status: TransactionStatus }) {
+  const styles = {
+    'تم': 'bg-[#eafbf8] text-[#159b89]',
+    'قيد المعالجة': 'bg-amber-50 text-amber-700',
+    'تم الإلغاء': 'bg-slate-100 text-slate-500',
+    'مرفوض': 'bg-rose-50 text-rose-600',
+  };
+  return <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${styles[status]}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{status}</span>;
+}
+
+function CopyableIdentifier({ label, value, tone = 'text-[#12234b]' }: { label: string; value: string; tone?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      // Clipboard access can be unavailable in an embedded preview.
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  };
+
+  return (
+    <div className="min-w-0">
+      <div className="text-[9px] font-bold text-slate-400">{label}</div>
+      <div className="mt-1 flex min-w-0 items-center gap-1">
+        <code dir="ltr" className={`min-w-0 flex-1 truncate text-[10px] font-bold ${tone}`} title={value}>{value}</code>
+        <button type="button" onClick={copy} className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-white hover:text-[#1557ee]" aria-label={`نسخ ${label}`}>
+          {copied ? <Check className="h-3 w-3 text-[#159b89]" /> : <Copy className="h-3 w-3" />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TransactionIdentifiers({ record }: { record: DepositRecord | WithdrawRecord }) {
+  return (
+    <div className="mt-4 grid gap-2 rounded-xl border border-slate-100 bg-[#fbfcff] p-3 sm:grid-cols-3">
+      <CopyableIdentifier label="المعرّف الداخلي" value={record.id} />
+      <CopyableIdentifier label="TXID الشبكة" value={record.blockchainTxId ?? 'سيظهر بعد التأكيد'} tone="text-[#1557ee]" />
+      <CopyableIdentifier label="Memo / Tag" value={record.memoTag} tone="text-[#159b89]" />
+    </div>
+  );
+}
 
 function DepositPage({
   advertiserBalance,
-  onDeposit,
+  onDepositRequested,
+  onDepositCompleted,
+  onDepositExpired,
 }: {
   advertiserBalance: number;
-  onDeposit: (amount: number) => void;
+  onDepositRequested: (record: DepositRecord) => void;
+  onDepositCompleted: (id: string) => void;
+  onDepositExpired: (id: string) => void;
 }) {
   const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState<'binance' | 'web3'>('binance');
-  const [invoice, setInvoice] = useState(false);
+  const [method, setMethod] = useState<PaymentMethod>('binance');
+  const [invoice, setInvoice] = useState<{ id: string; amount: number; method: PaymentMethod; destination: string; memoTag: string; expiresAt: number } | null>(null);
+  const [invoiceStatus, setInvoiceStatus] = useState<'pending' | 'completed' | 'expired'>('pending');
+  const [remainingSeconds, setRemainingSeconds] = useState(invoiceLifetime);
+  const [pollCount, setPollCount] = useState(0);
+  const [finalizedInvoiceId, setFinalizedInvoiceId] = useState('');
   const [copied, setCopied] = useState('');
-  const [message, setMessage] = useState('');
   const numericAmount = Number(amount);
   const validAmount = Number.isFinite(numericAmount) && numericAmount >= 1;
 
@@ -900,69 +1098,125 @@ function DepositPage({
   };
 
   const createInvoice = () => {
-    if (validAmount) {
-      setInvoice(true);
-      setMessage('');
-    }
+    if (!validAmount) return;
+    const createdAt = Date.now();
+    const destination = method === 'binance' ? depositBinanceId : depositAddress;
+    const transactionId = createUniqueIdentifier('DEP');
+    const nextInvoice = {
+      id: transactionId,
+      amount: numericAmount,
+      method,
+      destination,
+      memoTag: createMemoTag(),
+      expiresAt: createdAt + invoiceLifetime * 1000,
+    };
+    setInvoice(nextInvoice);
+    setInvoiceStatus('pending');
+    setRemainingSeconds(invoiceLifetime);
+    setPollCount(0);
+    setFinalizedInvoiceId('');
+    onDepositRequested({
+      id: nextInvoice.id,
+      amount: nextInvoice.amount,
+      method: nextInvoice.method,
+      destination: nextInvoice.destination,
+      memoTag: nextInvoice.memoTag,
+      createdAt: formatHistoryDate(new Date(createdAt)),
+      status: 'قيد المعالجة',
+    });
   };
 
-  const markPaid = () => {
-    if (!validAmount) return;
-    onDeposit(numericAmount);
-    setMessage('تم تسجيل طلب الإيداع للمراجعة. سيظهر الرصيد بعد تأكيد التحويل.');
-  };
+  useEffect(() => {
+    if (!invoice || invoiceStatus !== 'pending') return;
+    const timer = window.setInterval(() => setPollCount((current) => Math.min(current + 1, 3)), 2000);
+    return () => window.clearInterval(timer);
+  }, [invoice, invoiceStatus]);
+
+  useEffect(() => {
+    if (!invoice || invoiceStatus !== 'pending' || pollCount < 3) return;
+    setInvoiceStatus('completed');
+  }, [invoice, invoiceStatus, pollCount]);
+
+  useEffect(() => {
+    if (!invoice || invoiceStatus !== 'pending') return;
+    const updateCountdown = () => {
+      const next = Math.max(0, Math.ceil((invoice.expiresAt - Date.now()) / 1000));
+      setRemainingSeconds(next);
+      if (next === 0) setInvoiceStatus('expired');
+    };
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(timer);
+  }, [invoice, invoiceStatus]);
+
+  useEffect(() => {
+    if (!invoice || finalizedInvoiceId === invoice.id) return;
+    if (invoiceStatus === 'completed') {
+      setFinalizedInvoiceId(invoice.id);
+      onDepositCompleted(invoice.id);
+    } else if (invoiceStatus === 'expired') {
+      setFinalizedInvoiceId(invoice.id);
+      onDepositExpired(invoice.id);
+    }
+  }, [invoice, invoiceStatus, finalizedInvoiceId, onDepositCompleted, onDepositExpired]);
+
+  const invoiceHeading = invoice?.method === 'binance'
+    ? `أرسل ${invoice.amount.toFixed(2)} USDT إلى معرّف Binance التالي`
+    : `أرسل ${invoice?.amount.toFixed(2)} USDT إلى العنوان التالي`;
+  const statusLabel = invoiceStatus === 'completed' ? 'تم التأكيد تلقائيًا' : invoiceStatus === 'expired' ? 'انتهت صلاحية الفاتورة' : 'جاري المعالجة';
 
   return (
     <main className="mx-auto w-full max-w-[1080px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
       <div className="mb-7">
         <div className="text-xs font-semibold text-[#1557ee]">إدارة الإعلانات / الإيداع</div>
         <h1 className="mt-2 font-display text-2xl font-bold text-[#12234b] md:text-3xl">إيداع رصيد الإعلانات</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">اختر طريقة الدفع، حدد المبلغ، ثم أنشئ فاتورة تحتوي على عنوان الإيداع وMemo/Tag الخاص بالطلب.</p>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">أنشئ فاتورة، أرسل المبلغ، وسنتحقق من العملية تلقائيًا دون الحاجة إلى تأكيد يدوي.</p>
       </div>
 
       {!invoice ? (
         <div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]">
           <section className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-[var(--shadow-soft)] md:p-8">
-            <div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-[#edf3ff] text-[#1557ee]"><DollarSign className="h-5 w-5" /></div><div><h2 className="font-display text-lg font-bold text-[#12234b]">بيانات الإيداع</h2><p className="mt-1 text-xs text-slate-400">الشبكة المستخدمة: BNB Smart Chain (BEP20)</p></div></div>
+            <div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-[#edf3ff] text-[#1557ee]"><DollarSign className="h-5 w-5" /></div><div><h2 className="font-display text-lg font-bold text-[#12234b]">بيانات الإيداع</h2><p className="mt-1 text-xs text-slate-400">اختر Binance ID أو محفظة Web3</p></div></div>
             <div className="mt-7">
               <div className="mb-2 text-xs font-bold text-slate-700">طريقة الدفع</div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {([
-                  { value: 'binance', title: 'Binance', description: 'الدفع من حساب Binance', Icon: WalletCards },
-                  { value: 'web3', title: 'Web3 Wallet', description: 'MetaMask أو محفظة Web3', Icon: Wallet },
-                ] as Array<{ value: 'binance' | 'web3'; title: string; description: string; Icon: typeof Wallet }>).map(({ value, title, description, Icon }) => (
-                  <button type="button" key={value} onClick={() => setMethod(value)} className={`flex items-center gap-3 rounded-2xl border p-4 text-right transition ${method === value ? 'border-[#1557ee] bg-[#eff4ff] text-[#1557ee]' : 'border-slate-200 text-slate-600 hover:border-blue-200'}`}>
-                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-white"><Icon className="h-5 w-5" /></span>
-                    <span><span className="block text-sm font-bold">{title}</span><span className="mt-1 block text-[10px] text-slate-400">{description}</span></span>
+              <div className="grid grid-cols-2 gap-2">
+                  {([
+                   { value: 'binance', title: 'Binance ID', Icon: WalletCards },
+                   { value: 'web3', title: 'Web3 Wallet', Icon: Wallet },
+                 ] as Array<{ value: PaymentMethod; title: string; Icon: typeof Wallet }>).map(({ value, title, Icon }) => (
+                   <button type="button" key={value} data-testid={`button-deposit-method-${value}`} onClick={() => setMethod(value)} className={`flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2.5 text-right transition ${method === value ? 'border-[#1557ee] bg-[#eff4ff] text-[#1557ee]' : 'border-slate-200 text-slate-600 hover:border-blue-200'}`}>
+                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white"><Icon className="h-4 w-4" /></span>
+                     <span className="truncate whitespace-nowrap text-[11px] font-bold">{title}</span>
                     {method === value && <CheckCircle2 className="mr-auto h-4 w-4" />}
                   </button>
                 ))}
               </div>
             </div>
             <label className="mt-6 block text-xs font-bold text-slate-700">المبلغ المطلوب (USDT)<div className="relative mt-2"><input value={amount} onChange={(event) => setAmount(event.target.value)} type="number" min="1" step="0.01" placeholder="مثال: 50.00" data-testid="input-deposit-amount" className="w-full rounded-xl border border-slate-200 bg-[#fbfcff] px-4 py-3 pl-16 text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" /><span className="absolute left-4 top-3 rounded-md bg-[#eafbf8] px-2 py-1 text-[10px] font-bold text-[#159b89]">USDT</span></div></label>
-            <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-[11px] leading-5 text-amber-800"><div className="flex items-center gap-2 font-bold"><ShieldCheck className="h-4 w-4" /> تنبيه قبل التحويل</div><p className="mt-1">استخدم شبكة BEP20 فقط، وأرسل المبلغ نفسه الموضح في الفاتورة. لا ترسل عملة أخرى إلى العنوان.</p></div>
+            <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-[11px] leading-5 text-amber-800"><div className="flex items-center gap-2 font-bold"><ShieldCheck className="h-4 w-4" /> تنبيه قبل التحويل</div><p className="mt-1">{method === 'binance' ? 'أرسل المبلغ إلى Binance ID الظاهر في الفاتورة، وليس إلى عنوان محفظة.' : 'استخدم شبكة BEP20 فقط، وأرسل المبلغ نفسه الموضح في الفاتورة.'}</p></div>
             <button type="button" data-testid="button-create-invoice" onClick={createInvoice} disabled={!validAmount} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1557ee] py-3.5 text-sm font-bold text-white transition hover:bg-[#0f48d0] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"><FileText className="h-4 w-4" /> إنشاء فاتورة الإيداع</button>
           </section>
           <section className="rounded-[24px] bg-[#0e2452] p-6 text-white shadow-[0_15px_34px_rgba(14,36,82,.16)] md:p-8">
             <div className="flex items-center justify-between"><span className="text-xs font-bold text-blue-100">الرصيد الحالي</span><WalletCards className="h-5 w-5 text-cyan-300" /></div>
             <div className="mt-7 text-4xl font-bold tracking-tight">${advertiserBalance.toFixed(2)}</div>
-            <p className="mt-2 text-xs leading-5 text-blue-100/65">الرصيد الذي يمكنك استخدامه لتمويل إعلاناتك. الإيداعات الجديدة تظهر بعد تأكيد المعاملة.</p>
+            <p className="mt-2 text-xs leading-5 text-blue-100/65">الرصيد الذي يمكنك استخدامه لتمويل إعلاناتك. ستظهر الإيداعات بعد التحقق التلقائي.</p>
             <div className="mt-8 border-t border-white/10 pt-5"><div className="text-[10px] font-bold text-blue-100/60">معلومات الشبكة</div><div className="mt-3 flex items-center justify-between text-xs"><span className="text-blue-100/70">الشبكة</span><span className="font-bold text-cyan-300">BNB Smart Chain</span></div><div className="mt-3 flex items-center justify-between text-xs"><span className="text-blue-100/70">العملة</span><span className="font-bold text-cyan-300">USDT (BEP20)</span></div></div>
           </section>
         </div>
       ) : (
-        <section className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-[var(--shadow-soft)] md:p-8">
-          <div className="flex flex-col justify-between gap-4 border-b border-slate-100 pb-6 sm:flex-row sm:items-center"><div><div className="flex items-center gap-2 text-xs font-bold text-[#159b89]"><CheckCircle2 className="h-4 w-4" /> فاتورة جاهزة للتحويل</div><h2 className="mt-2 font-display text-xl font-bold text-[#12234b]">أرسل {numericAmount.toFixed(2)} USDT إلى العنوان التالي</h2><p className="mt-1 text-xs text-slate-400">طريقة الدفع: {method === 'binance' ? 'Binance' : 'Web3 Wallet'} · الشبكة: BEP20</p></div><div className="grid h-16 w-16 place-items-center rounded-xl bg-[#f4f8ff] text-[#1557ee]"><QrCode className="h-9 w-9" /></div></div>
+        <section className="animate-rise rounded-[24px] border border-slate-200 bg-white p-6 shadow-[var(--shadow-soft)] md:p-8">
+          <div className="flex flex-col justify-between gap-4 border-b border-slate-100 pb-6 sm:flex-row sm:items-center"><div><div className={`flex items-center gap-2 text-xs font-bold ${invoiceStatus === 'completed' ? 'text-[#159b89]' : invoiceStatus === 'expired' ? 'text-rose-500' : 'text-amber-600'}`}><span className={`h-2 w-2 rounded-full ${invoiceStatus === 'completed' ? 'bg-[#159b89]' : invoiceStatus === 'expired' ? 'bg-rose-500' : 'animate-pulse bg-amber-500'}`} /> {statusLabel}</div><h2 className="mt-2 font-display text-xl font-bold text-[#12234b]">{invoiceHeading}</h2><p className="mt-1 text-xs text-slate-400">طريقة الدفع: {methodLabel(invoice.method)} · {invoice.method === 'binance' ? 'تحويل مباشر' : 'شبكة BEP20'}</p></div><div className="grid h-16 w-16 place-items-center rounded-xl bg-[#f4f8ff] text-[#1557ee]"><QrCode className="h-9 w-9" /></div></div>
           <div className="mt-7 grid gap-5 lg:grid-cols-[1fr_260px]">
             <div className="space-y-4">
-              <div className="rounded-2xl border border-blue-100 bg-[#f4f8ff] p-4"><div className="mb-2 text-[11px] font-bold text-slate-500">عنوان الإيداع (BEP20)</div><div className="flex items-center gap-2"><code dir="ltr" className="min-w-0 flex-1 break-all text-xs font-bold text-[#12234b]">{depositAddress}</code><button type="button" data-testid="button-copy-deposit-address" onClick={() => copyValue(depositAddress, 'address')} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee]">{copied === 'address' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div></div>
-              <div className="rounded-2xl border border-blue-100 bg-[#f4f8ff] p-4"><div className="mb-2 text-[11px] font-bold text-slate-500">Memo / Tag</div><div className="flex items-center gap-2"><code dir="ltr" className="flex-1 text-sm font-bold tracking-wider text-[#12234b]">{depositMemo}</code><button type="button" data-testid="button-copy-deposit-memo" onClick={() => copyValue(depositMemo, 'memo')} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee]">{copied === 'memo' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div></div>
-              <div className="grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-[#f7f9fd] p-4"><div className="text-[10px] text-slate-400">المبلغ</div><div className="mt-1 text-lg font-bold text-[#12234b]">{numericAmount.toFixed(2)} USDT</div></div><div className="rounded-xl bg-[#f7f9fd] p-4"><div className="text-[10px] text-slate-400">الشبكة</div><div className="mt-1 text-sm font-bold text-[#12234b]">BEP20</div></div><div className="rounded-xl bg-[#f7f9fd] p-4"><div className="text-[10px] text-slate-400">الحالة</div><div className="mt-1 text-sm font-bold text-amber-600">بانتظار التحويل</div></div></div>
-              {message && <div className="rounded-xl bg-[#eafbf8] p-3 text-xs font-bold text-[#159b89]">{message}</div>}
+              <div className="rounded-2xl border border-blue-100 bg-[#f4f8ff] p-4"><div className="mb-2 text-[11px] font-bold text-slate-500">{invoice.method === 'binance' ? 'معرّف Binance للإيداع' : 'عنوان الإيداع (BEP20)'}</div><div className="flex items-center gap-2"><code dir="ltr" className="min-w-0 flex-1 break-all text-xs font-bold text-[#12234b]">{invoice.destination}</code><button type="button" data-testid="button-copy-deposit-destination" onClick={() => copyValue(invoice.destination, 'destination')} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee]">{copied === 'destination' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div></div>
+               <div className="rounded-2xl border border-cyan-100 bg-[#effcfd] p-4"><div className="mb-2 text-[11px] font-bold text-slate-500">Memo / Tag فريد لهذه العملية</div><div className="flex items-center gap-2"><code dir="ltr" className="flex-1 text-sm font-bold tracking-wider text-[#12234b]">{invoice.memoTag}</code><button type="button" data-testid="button-copy-deposit-memo" onClick={() => copyValue(invoice.memoTag, 'memo')} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee]">{copied === 'memo' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div><p className="mt-2 text-[10px] font-semibold leading-5 text-slate-600">أرسل هذا الرمز في خانة الملاحظات (Memo / Tag) عند تنفيذ التحويل.</p></div>
+              <div className="rounded-xl bg-[#f7f9fd] p-4"><div className="text-[10px] text-slate-400">المعرّف الداخلي للفاتورة</div><code dir="ltr" className="mt-1 block truncate text-xs font-bold text-[#12234b]">{invoice.id}</code></div>
+              <div className="grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-[#f7f9fd] p-4"><div className="text-[10px] text-slate-400">المبلغ</div><div className="mt-1 text-lg font-bold text-[#12234b]">{invoice.amount.toFixed(2)} USDT</div></div><div className="rounded-xl bg-[#f7f9fd] p-4"><div className="text-[10px] text-slate-400">طريقة الدفع</div><div className="mt-1 text-sm font-bold text-[#12234b]">{methodLabel(invoice.method)}</div></div><div className="rounded-xl bg-[#f7f9fd] p-4"><div className="text-[10px] text-slate-400">الوقت المتبقي</div><div className={`mt-1 text-sm font-bold ${invoiceStatus === 'pending' ? 'text-amber-600' : 'text-[#159b89]'}`}>{invoiceStatus === 'pending' ? formatRemaining(remainingSeconds) : invoiceStatus === 'completed' ? 'تمت العملية' : 'منتهية'}</div></div></div>
+              <div className={`rounded-2xl border p-4 ${invoiceStatus === 'pending' ? 'border-amber-100 bg-amber-50' : invoiceStatus === 'completed' ? 'border-emerald-100 bg-[#eafbf8]' : 'border-rose-100 bg-rose-50'}`}><div className={`flex items-center gap-2 text-xs font-bold ${invoiceStatus === 'pending' ? 'text-amber-700' : invoiceStatus === 'completed' ? 'text-[#159b89]' : 'text-rose-600'}`}><Timer className="h-4 w-4" /> {invoiceStatus === 'pending' ? `يتم تحديث الحالة تلقائيًا كل ثانيتين · تنتهي الفاتورة خلال ${formatRemaining(remainingSeconds)}` : invoiceStatus === 'completed' ? 'تم العثور على التحويل وتأكيد الإيداع تلقائيًا.' : 'انتهت الفاتورة قبل وصول التحويل.'}</div><p className="mt-1 text-[11px] leading-5 text-slate-500">{invoiceStatus === 'pending' ? 'لا تغلق الصفحة بعد إرسال المبلغ. لا تحتاج إلى الضغط على أي زر للتأكيد.' : 'يمكنك الرجوع إلى صفحة الإيداع لإنشاء فاتورة جديدة.'}</p></div>
             </div>
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-[#fbfcff] p-5 text-center"><div className="grid h-36 w-36 place-items-center rounded-xl border-4 border-white bg-[#eef3ff] text-[#1557ee] shadow-sm"><QrCode className="h-24 w-24" /></div><p className="mt-4 text-[10px] leading-5 text-slate-400">امسح الرمز من محفظتك<br />ثم أرسل المبلغ المحدد.</p></div>
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-[#fbfcff] p-5 text-center"><div className="grid h-36 w-36 place-items-center rounded-xl border-4 border-white bg-[#eef3ff] text-[#1557ee] shadow-sm"><QrCode className="h-24 w-24" /></div><p className="mt-4 text-[10px] leading-5 text-slate-400">{invoice.method === 'binance' ? 'حوّل من حساب Binance إلى المعرّف الظاهر.' : 'امسح الرمز من محفظتك ثم أرسل المبلغ المحدد.'}</p></div>
           </div>
-          <div className="mt-7 flex flex-col justify-between gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:items-center"><button type="button" onClick={() => setInvoice(false)} className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 py-3 text-xs font-bold text-slate-600"><RefreshCw className="h-4 w-4" /> تعديل المبلغ</button><button type="button" data-testid="button-confirm-deposit" onClick={markPaid} className="flex items-center justify-center gap-2 rounded-xl bg-[#1557ee] px-6 py-3 text-sm font-bold text-white"><CheckCircle2 className="h-4 w-4" /> أرسلت التحويل، تأكيد الإيداع</button></div>
+          {invoiceStatus !== 'pending' && <div className="mt-7 flex justify-end border-t border-slate-100 pt-6"><button type="button" onClick={() => setInvoice(null)} className="flex items-center justify-center gap-2 rounded-xl bg-[#1557ee] px-5 py-3 text-xs font-bold text-white"><RefreshCw className="h-4 w-4" /> إنشاء فاتورة جديدة</button></div>}
         </section>
       )}
     </main>
@@ -974,33 +1228,89 @@ function WithdrawPage({
   onWithdraw,
 }: {
   viewerBalance: number;
-  onWithdraw: (amount: number, address: string) => void;
+  onWithdraw: (record: WithdrawRecord) => void;
 }) {
   const [amount, setAmount] = useState('');
-  const [address, setAddress] = useState('');
+  const [method, setMethod] = useState<PaymentMethod>('binance');
+  const [destination, setDestination] = useState('');
   const [message, setMessage] = useState('');
   const numericAmount = Number(amount);
-  const validAddress = /^0x[a-fA-F0-9]{40}$/.test(address.trim());
-  const valid = Number.isFinite(numericAmount) && numericAmount >= 1 && numericAmount <= viewerBalance && validAddress;
+  const validAddress = /^0x[a-fA-F0-9]{40}$/.test(destination.trim());
+  const validBinanceId = /^\d{3,20}$/.test(destination.trim());
+  const validDestination = method === 'binance' ? validBinanceId : validAddress;
+  const valid = Number.isFinite(numericAmount) && numericAmount >= 1 && numericAmount <= viewerBalance && validDestination;
 
   const submit = () => {
     if (!valid) return;
-    onWithdraw(numericAmount, address.trim());
-    setMessage(`تم إنشاء طلب السحب بقيمة ${numericAmount.toFixed(4)} USDT. الحالة: قيد المراجعة.`);
+    const transactionId = createUniqueIdentifier('WDR');
+    onWithdraw({
+      id: transactionId,
+      amount: numericAmount,
+      method,
+      destination: destination.trim(),
+      memoTag: createMemoTag(),
+      createdAt: formatHistoryDate(),
+      status: 'قيد المعالجة',
+    });
+    setMessage(`تم إنشاء طلب السحب بقيمة ${numericAmount.toFixed(4)} USDT. الحالة: قيد المعالجة.`);
     setAmount('');
-    setAddress('');
+    setDestination('');
   };
 
   return (
     <main className="mx-auto w-full max-w-[980px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
-      <div className="mb-7"><div className="text-xs font-semibold text-[#1557ee]">مساحة الربح / السحب</div><h1 className="mt-2 font-display text-2xl font-bold text-[#12234b] md:text-3xl">سحب الأرباح</h1><p className="mt-2 text-sm leading-6 text-slate-500">أدخل محفظتك التي تستقبل USDT على شبكة BNB Smart Chain (BEP20)، ثم أرسل الطلب للمراجعة.</p></div>
+      <div className="mb-7"><div className="text-xs font-semibold text-[#1557ee]">مساحة الربح / السحب</div><h1 className="mt-2 font-display text-2xl font-bold text-[#12234b] md:text-3xl">سحب الأرباح</h1><p className="mt-2 text-sm leading-6 text-slate-500">اختر Binance ID أو محفظة Web3 لاستلام أرباحك، ثم أرسل الطلب للمراجعة.</p></div>
       <div className="grid gap-5 lg:grid-cols-[.8fr_1.2fr]">
-        <section className="rounded-[24px] bg-[#0e2452] p-6 text-white shadow-[0_15px_34px_rgba(14,36,82,.16)] md:p-8"><div className="flex items-center justify-between"><span className="text-xs font-bold text-blue-100">الرصيد المتاح</span><WalletCards className="h-5 w-5 text-cyan-300" /></div><div className="mt-7 text-4xl font-bold tracking-tight">{formatUsd(viewerBalance)}</div><p className="mt-2 text-xs leading-5 text-blue-100/65">الحد الأدنى للسحب 1 USDT. يتم خصم الرصيد عند إرسال الطلب للمراجعة.</p><div className="mt-8 border-t border-white/10 pt-5"><div className="flex items-center gap-2 text-xs font-bold text-cyan-300"><ShieldCheck className="h-4 w-4" /> تحويل إلى USDT BEP20</div><p className="mt-2 text-[11px] leading-5 text-blue-100/60">تأكد من أن عنوانك يبدأ بـ 0x وأنه يدعم شبكة BNB Smart Chain.</p></div></section>
-        <section className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-[var(--shadow-soft)] md:p-8"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-[#eafbf8] text-[#159b89]"><ArrowUpLeft className="h-5 w-5" /></div><div><h2 className="font-display text-lg font-bold text-[#12234b]">بيانات محفظة الاستلام</h2><p className="mt-1 text-xs text-slate-400">أنت تحدد المحفظة والمبلغ المطلوب.</p></div></div><label className="mt-7 block text-xs font-bold text-slate-700">عنوان محفظة USDT (BEP20)<div className="relative mt-2"><Clipboard className="absolute right-4 top-3.5 h-4 w-4 text-slate-400" /><input value={address} onChange={(event) => setAddress(event.target.value)} dir="ltr" placeholder="0x..." data-testid="input-withdraw-address" className="w-full rounded-xl border border-slate-200 bg-[#fbfcff] py-3 pl-4 pr-11 text-left text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" /></div>{address && !validAddress && <span className="mt-2 block text-[10px] font-medium text-rose-500">أدخل عنوان BEP20 صحيحاً مكوناً من 42 رمزاً.</span>}</label><label className="mt-5 block text-xs font-bold text-slate-700">المبلغ (USDT)<div className="relative mt-2"><input value={amount} onChange={(event) => setAmount(event.target.value)} type="number" min="1" max={viewerBalance} step="0.0001" placeholder={`المتاح: ${viewerBalance.toFixed(4)}`} data-testid="input-withdraw-amount" className="w-full rounded-xl border border-slate-200 bg-[#fbfcff] px-4 py-3 pl-16 text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" /><span className="absolute left-4 top-3 rounded-md bg-[#eafbf8] px-2 py-1 text-[10px] font-bold text-[#159b89]">USDT</span></div></label><div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-[11px] leading-5 text-amber-800"><div className="flex items-center gap-2 font-bold"><ShieldCheck className="h-4 w-4" /> راجع البيانات قبل الإرسال</div><p className="mt-1">عمليات السحب لا يمكن إلغاؤها بعد معالجتها. استخدم شبكة BEP20 فقط.</p></div><button type="button" data-testid="button-submit-withdraw" onClick={submit} disabled={!valid} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1557ee] py-3.5 text-sm font-bold text-white transition hover:bg-[#0f48d0] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"><ArrowUpLeft className="h-4 w-4" /> إرسال طلب السحب</button>{message && <div className="mt-4 rounded-xl bg-[#eafbf8] p-3 text-center text-xs font-bold leading-5 text-[#159b89]">{message}</div>}</section>
+        <section className="rounded-[24px] bg-[#0e2452] p-6 text-white shadow-[0_15px_34px_rgba(14,36,82,.16)] md:p-8"><div className="flex items-center justify-between"><span className="text-xs font-bold text-blue-100">الرصيد المتاح</span><WalletCards className="h-5 w-5 text-cyan-300" /></div><div className="mt-7 text-4xl font-bold tracking-tight">{formatUsd(viewerBalance)}</div><p className="mt-2 text-xs leading-5 text-blue-100/65">الحد الأدنى للسحب 1 USDT. يتم خصم الرصيد عند إرسال الطلب للمراجعة.</p><div className="mt-8 border-t border-white/10 pt-5"><div className="flex items-center gap-2 text-xs font-bold text-cyan-300"><ShieldCheck className="h-4 w-4" /> تحويل آمن</div><p className="mt-2 text-[11px] leading-5 text-blue-100/60">{method === 'binance' ? 'أرسل الأرباح إلى Binance ID مباشرة دون استخدام عنوان محفظة.' : 'استخدم عنوانًا صحيحًا على شبكة BNB Smart Chain (BEP20).'}</p></div></section>
+        <section className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-[var(--shadow-soft)] md:p-8"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-[#eafbf8] text-[#159b89]"><ArrowUpLeft className="h-5 w-5" /></div><div><h2 className="font-display text-lg font-bold text-[#12234b]">بيانات الاستلام</h2><p className="mt-1 text-xs text-slate-400">يتم حفظ الطلب في سجل السحب بحالة قيد المعالجة.</p></div></div>
+           <div className="mt-7 grid grid-cols-2 gap-2">
+            {([
+              { value: 'binance', title: 'Binance ID', Icon: WalletCards },
+              { value: 'web3', title: 'Web3 Wallet', Icon: Wallet },
+            ] as Array<{ value: PaymentMethod; title: string; Icon: typeof Wallet }>).map(({ value, title, Icon }) => (
+              <button type="button" key={value} data-testid={`button-withdraw-method-${value}`} onClick={() => setMethod(value)} className={`flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2.5 text-right transition ${method === value ? 'border-[#1557ee] bg-[#eff4ff] text-[#1557ee]' : 'border-slate-200 text-slate-600 hover:border-blue-200'}`}><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white"><Icon className="h-4 w-4" /></span><span className="truncate whitespace-nowrap text-[11px] font-bold">{title}</span>{method === value && <CheckCircle2 className="mr-auto h-4 w-4" />}</button>
+            ))}
+          </div>
+          <label className="mt-6 block text-xs font-bold text-slate-700">{method === 'binance' ? 'معرّف Binance الرقمي' : 'عنوان محفظة USDT (BEP20)'}<div className="relative mt-2"><Clipboard className="absolute right-4 top-3.5 h-4 w-4 text-slate-400" /><input value={destination} onChange={(event) => setDestination(method === 'binance' ? event.target.value.replace(/\D/g, '') : event.target.value)} inputMode={method === 'binance' ? 'numeric' : 'text'} pattern={method === 'binance' ? '[0-9]*' : undefined} dir="ltr" placeholder={method === 'binance' ? 'مثال: 782946315' : '0x...'} data-testid={method === 'binance' ? 'input-withdraw-binance-id' : 'input-withdraw-address'} className="w-full rounded-xl border border-slate-200 bg-[#fbfcff] py-3 pl-4 pr-11 text-left text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" /></div>{destination && !validDestination && <span className="mt-2 block text-[10px] font-medium text-rose-500">{method === 'binance' ? 'أدخل Binance ID رقميًا فقط (3 إلى 20 رقمًا).' : 'أدخل عنوان BEP20 صحيحاً مكوناً من 42 رمزاً.'}</span>}</label>
+          <label className="mt-5 block text-xs font-bold text-slate-700">المبلغ (USDT)<div className="relative mt-2"><input value={amount} onChange={(event) => setAmount(event.target.value)} type="number" min="1" max={viewerBalance} step="0.0001" placeholder={`المتاح: ${viewerBalance.toFixed(4)}`} data-testid="input-withdraw-amount" className="w-full rounded-xl border border-slate-200 bg-[#fbfcff] px-4 py-3 pl-16 text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" /><span className="absolute left-4 top-3 rounded-md bg-[#eafbf8] px-2 py-1 text-[10px] font-bold text-[#159b89]">USDT</span></div></label>
+          <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-[11px] leading-5 text-amber-800"><div className="flex items-center gap-2 font-bold"><ShieldCheck className="h-4 w-4" /> راجع البيانات قبل الإرسال</div><p className="mt-1">ستظهر العملية في سجل السحب بحالة قيد المعالجة، ولا يمكن إلغاؤها بعد بدء التحويل.</p></div><button type="button" data-testid="button-submit-withdraw" onClick={submit} disabled={!valid} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1557ee] py-3.5 text-sm font-bold text-white transition hover:bg-[#0f48d0] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"><ArrowUpLeft className="h-4 w-4" /> إرسال طلب السحب</button>{message && <div className="mt-4 rounded-xl bg-[#eafbf8] p-3 text-center text-xs font-bold leading-5 text-[#159b89]">{message}</div>}</section>
       </div>
     </main>
   );
 }
+
+function DepositHistoryPage({ records }: { records: DepositRecord[] }) {
+  const completedTotal = records.filter((record) => record.status === 'تم').reduce((total, record) => total + record.amount, 0);
+  return (
+    <main className="mx-auto w-full max-w-[1080px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
+      <div className="mb-7"><div className="text-xs font-semibold text-[#1557ee]">إدارة الإعلانات / سجل الإيداع</div><h1 className="mt-2 font-display text-2xl font-bold text-[#12234b] md:text-3xl">سجل الإيداع</h1><p className="mt-2 text-sm leading-6 text-slate-500">كل فواتير تمويل الإعلانات في صفحة مستقلة، مع حالة كل عملية وطريقة الدفع المستخدمة.</p></div>
+      <div className="mb-5 grid gap-3 sm:grid-cols-3"><div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)]"><div className="text-[11px] text-slate-400">إجمالي العمليات</div><div className="mt-2 text-2xl font-bold text-[#12234b]">{records.length}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)]"><div className="text-[11px] text-slate-400">الإيداعات المكتملة</div><div className="mt-2 text-2xl font-bold text-[#159b89]">${completedTotal.toFixed(2)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)]"><div className="text-[11px] text-slate-400">قيد المراجعة</div><div className="mt-2 text-2xl font-bold text-amber-600">{records.filter((record) => record.status === 'قيد المعالجة').length}</div></div></div>
+      <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[var(--shadow-soft)]"><div className="border-b border-slate-100 px-5 py-5 md:px-7"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#edf3ff] text-[#1557ee]"><ArrowDownLeft className="h-5 w-5" /></span><div><h2 className="font-display text-lg font-bold text-[#12234b]">عمليات الإيداع</h2><p className="mt-1 text-xs text-slate-400">المبلغ، طريقة التحويل، والحالة الحالية</p></div></div></div><div className="divide-y divide-slate-100">{records.map((record) => <div key={record.id} data-testid={`row-deposit-${record.id}`} className="px-5 py-5 transition hover:bg-[#fbfcff] md:px-7"><div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-[#f4f8ff] text-[#1557ee]"><DollarSign className="h-4 w-4" /></div><div><div className="text-sm font-bold text-[#12234b]">إيداع {record.amount.toFixed(2)} USDT</div><div className="mt-1 text-[10px] text-slate-400">{record.createdAt}</div></div></div><div className="flex flex-wrap items-center gap-4 text-xs"><div><div className="text-[10px] text-slate-400">الطريقة</div><div className="mt-1 font-bold text-slate-600">{methodLabel(record.method)}</div></div><div className="max-w-[180px]"><div className="text-[10px] text-slate-400">الوجهة</div><code dir="ltr" className="mt-1 block truncate text-[11px] font-bold text-slate-600">{record.destination}</code></div><StatusBadge status={record.status} /></div></div><TransactionIdentifiers record={record} /></div>)}</div></section>
+    </main>
+  );
+}
+
+function WithdrawHistoryPage({ records }: { records: WithdrawRecord[] }) {
+  const completedTotal = records.filter((record) => record.status === 'تم').reduce((total, record) => total + record.amount, 0);
+  return (
+    <main className="mx-auto w-full max-w-[1080px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
+      <div className="mb-7"><div className="text-xs font-semibold text-[#1557ee]">مساحة الربح / سجل السحب</div><h1 className="mt-2 font-display text-2xl font-bold text-[#12234b] md:text-3xl">سجل السحب</h1><p className="mt-2 text-sm leading-6 text-slate-500">تابع جميع طلبات سحب أرباحك بشكل مستقل عن سجل الإيداع.</p></div>
+      <div className="mb-5 grid gap-3 sm:grid-cols-3"><div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)]"><div className="text-[11px] text-slate-400">إجمالي الطلبات</div><div className="mt-2 text-2xl font-bold text-[#12234b]">{records.length}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)]"><div className="text-[11px] text-slate-400">تم تحويله</div><div className="mt-2 text-2xl font-bold text-[#159b89]">${completedTotal.toFixed(2)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)]"><div className="text-[11px] text-slate-400">طلبات قيد المعالجة</div><div className="mt-2 text-2xl font-bold text-amber-600">{records.filter((record) => record.status === 'قيد المعالجة').length}</div></div></div>
+      <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[var(--shadow-soft)]"><div className="border-b border-slate-100 px-5 py-5 md:px-7"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#eafbf8] text-[#159b89]"><ArrowUpLeft className="h-5 w-5" /></span><div><h2 className="font-display text-lg font-bold text-[#12234b]">طلبات السحب</h2><p className="mt-1 text-xs text-slate-400">وجهة التحويل وحالة مراجعة كل طلب</p></div></div></div><div className="divide-y divide-slate-100">{records.map((record) => <div key={record.id} data-testid={`row-withdraw-${record.id}`} className="px-5 py-5 transition hover:bg-[#fbfcff] md:px-7"><div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-[#f1fcfa] text-[#159b89]"><ArrowUpLeft className="h-4 w-4" /></div><div><div className="text-sm font-bold text-[#12234b]">سحب {record.amount.toFixed(4)} USDT</div><div className="mt-1 text-[10px] text-slate-400">{record.createdAt}</div></div></div><div className="flex flex-wrap items-center gap-4 text-xs"><div><div className="text-[10px] text-slate-400">الطريقة</div><div className="mt-1 font-bold text-slate-600">{methodLabel(record.method)}</div></div><div className="max-w-[180px]"><div className="text-[10px] text-slate-400">الوجهة</div><code dir="ltr" className="mt-1 block truncate text-[11px] font-bold text-slate-600">{record.destination}</code></div><StatusBadge status={record.status} /></div></div><TransactionIdentifiers record={record} /></div>)}</div></section>
+    </main>
+  );
+}
+
+const initialDepositHistory: DepositRecord[] = [
+  { id: 'DEP-1042', amount: 120, method: 'binance', destination: depositBinanceId, memoTag: '62182212#1', blockchainTxId: createBlockchainTxId(), createdAt: 'اليوم، 10:12 ص', status: 'تم' },
+  { id: 'DEP-1037', amount: 75, method: 'web3', destination: depositAddress, memoTag: '62182212#2', createdAt: '18 سبتمبر، 04:36 م', status: 'تم الإلغاء' },
+];
+
+const initialWithdrawHistory: WithdrawRecord[] = [
+  { id: 'WDR-2081', amount: 4.25, method: 'binance', destination: '563820147', memoTag: '62182212#3', createdAt: 'أمس، 08:20 م', status: 'قيد المعالجة' },
+  { id: 'WDR-2054', amount: 2.8, method: 'web3', destination: '0x4a2F...9C10', memoTag: '62182212#4', blockchainTxId: createBlockchainTxId(), createdAt: '14 سبتمبر، 01:05 م', status: 'تم' },
+  { id: 'WDR-2022', amount: 1.5, method: 'binance', destination: '417903628', memoTag: '62182212#5', createdAt: '10 سبتمبر، 11:40 ص', status: 'مرفوض' },
+];
 
 function Home() {
   const [mode, setMode] = useState<'creator' | 'viewer'>('creator');
@@ -1013,29 +1323,128 @@ function Home() {
   const [mobileMenu, setMobileMenu] = useState(false);
   const [advertiserBalance, setAdvertiserBalance] = useState(250);
   const [viewerBalance, setViewerBalance] = useState(12.84);
+  const [depositHistory, setDepositHistory] = useState<DepositRecord[]>(initialDepositHistory);
+  const [withdrawHistory, setWithdrawHistory] = useState<WithdrawRecord[]>(initialWithdrawHistory);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [watchSession, setWatchSession] = useState<AdvertisementSession | null>(null);
+  const watchElapsedRef = useRef(0);
+  const watchSegmentStartedRef = useRef<number | null>(null);
+  const watchSessionRef = useRef<AdvertisementSession | null>(null);
+  const creditedVideosRef = useRef(new Set<number>());
+  const toastSequenceRef = useRef(0);
+
+  const saveWatchSession = (
+    video: Video,
+    elapsedMs = watchElapsedRef.current,
+    status: AdvertisementSessionStatus = elapsedMs >= video.duration * 1000 ? 'completed' : 'paused',
+    stoppedAt = Date.now(),
+  ) => {
+    const previousSession = watchSessionRef.current;
+    const nextSession: AdvertisementSession = {
+      id: previousSession?.videoId === video.id ? previousSession.id : createUniqueIdentifier('ADS'),
+      videoId: video.id,
+      elapsedMs: Math.min(elapsedMs, video.duration * 1000),
+      requiredMs: video.duration * 1000,
+      status,
+      lastStartedAt: previousSession?.lastStartedAt,
+      lastStoppedAt: status === 'active' ? previousSession?.lastStoppedAt : stoppedAt,
+      credited: creditedVideosRef.current.has(video.id),
+    };
+    watchSessionRef.current = nextSession;
+    setWatchSession((current) => current?.id === nextSession.id && current.status === nextSession.status ? current : nextSession);
+    try {
+      window.localStorage.setItem(`vidreward.watch.${video.id}`, JSON.stringify(nextSession));
+    } catch {
+      // Local storage may be unavailable in a restricted browser context.
+    }
+  };
+
+  const notify = (tone: ToastTone, title: string, message: string) => {
+    const id = ++toastSequenceRef.current;
+    setToasts((current) => [...current.slice(-2), { id, tone, title, message }]);
+    window.setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), 4500);
+  };
 
   useEffect(() => {
-    if (!isPlaying || !selectedVideo) return;
+    if (!isPlaying || !selectedVideo || watchSegmentStartedRef.current === null) return;
     const timer = window.setInterval(() => {
-      setProgress((current) => {
-        const next = current + 1;
-        if (next >= selectedVideo.duration) {
-          window.clearInterval(timer);
-          setIsPlaying(false);
-          return selectedVideo.duration;
-        }
-        return next;
-      });
-    }, 1000);
+      if (document.visibilityState !== 'visible' || watchSegmentStartedRef.current === null) return;
+      const elapsed = Math.min(
+        selectedVideo.duration * 1000,
+        watchElapsedRef.current + (Date.now() - watchSegmentStartedRef.current),
+      );
+      watchElapsedRef.current = elapsed;
+      setProgress(Math.floor(elapsed / 1000));
+      saveWatchSession(selectedVideo, elapsed, elapsed >= selectedVideo.duration * 1000 ? 'completed' : 'active');
+      if (elapsed >= selectedVideo.duration * 1000) {
+        watchSegmentStartedRef.current = null;
+        setIsPlaying(false);
+      }
+    }, 250);
     return () => window.clearInterval(timer);
+  }, [isPlaying, selectedVideo]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && isPlaying && selectedVideo && watchSegmentStartedRef.current !== null) {
+        const elapsed = Math.min(
+          selectedVideo.duration * 1000,
+          watchElapsedRef.current + (Date.now() - watchSegmentStartedRef.current),
+        );
+        watchElapsedRef.current = elapsed;
+        watchSegmentStartedRef.current = null;
+        setProgress(Math.floor(elapsed / 1000));
+        setIsPlaying(false);
+        saveWatchSession(selectedVideo, elapsed, elapsed >= selectedVideo.duration * 1000 ? 'completed' : 'paused');
+        if (elapsed < selectedVideo.duration * 1000) {
+          notify('warning', 'الإعلان غير مكتمل', 'توقفت المشاهدة قبل إكمال المدة المطلوبة، ولم تُحتسب المكافأة.');
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [isPlaying, selectedVideo]);
 
   const completed = Boolean(selectedVideo && progress >= selectedVideo.duration);
   const viewerCount = useMemo(() => videos.filter((video) => video.status === 'نشط').length, [videos]);
 
   const selectVideo = (video: Video) => {
+    let restoredElapsed = 0;
+    let restoredCredited = false;
+    let restoredSessionId = '';
+    let restoredStatus: AdvertisementSessionStatus = 'paused';
+    try {
+      const stored = window.localStorage.getItem(`vidreward.watch.${video.id}`);
+      if (stored) {
+        const parsed = JSON.parse(stored) as Partial<AdvertisementSession>;
+        if (parsed.videoId === video.id) {
+          restoredElapsed = Math.min(Number(parsed.elapsedMs) || 0, video.duration * 1000);
+          restoredCredited = Boolean(parsed.credited);
+          restoredSessionId = parsed.id ?? '';
+          restoredStatus = parsed.status === 'completed' ? 'completed' : 'paused';
+        }
+      }
+    } catch {
+      restoredElapsed = 0;
+    }
+    const nextSession: AdvertisementSession = {
+      id: restoredSessionId || createUniqueIdentifier('ADS'),
+      videoId: video.id,
+      elapsedMs: restoredElapsed,
+      requiredMs: video.duration * 1000,
+      status: restoredElapsed >= video.duration * 1000 ? 'completed' : restoredStatus,
+      credited: restoredCredited,
+    };
+    watchSessionRef.current = nextSession;
+    setWatchSession(nextSession);
+    if (restoredCredited) creditedVideosRef.current.add(video.id);
+    if (restoredElapsed > 0 && restoredElapsed < video.duration * 1000 && !restoredCredited) {
+      notify('warning', 'الإعلان غير مكتمل', `تمت استعادة الجلسة ${nextSession.id} دون مكافأة. أكمل المدة المطلوبة ثم أعد التحقق.`);
+    }
+    watchElapsedRef.current = restoredElapsed;
+    watchSegmentStartedRef.current = null;
     setSelectedVideo(video);
-    setProgress(0);
+    setProgress(Math.floor(restoredElapsed / 1000));
     setIsPlaying(false);
   };
 
@@ -1043,16 +1452,38 @@ function Home() {
     setVideos((current) => [{ ...video, id: Date.now(), views: '0', status: 'نشط', created: 'الآن', art: 'media-art' }, ...current]);
   };
 
-  const withdrawEarnings = (amount: number, _address: string) => {
-    setViewerBalance((current) => Number(Math.max(0, current - amount).toFixed(4)));
+  const withdrawEarnings = (record: WithdrawRecord) => {
+    setViewerBalance((current) => Number(Math.max(0, current - record.amount).toFixed(4)));
+    setWithdrawHistory((current) => [record, ...current]);
+    notify('success', 'تم إرسال طلب السحب', `أضيف الطلب ${record.id} إلى سجل السحب بحالة قيد المعالجة.`);
   };
 
-  const depositAdBalance = (amount: number) => {
-    setAdvertiserBalance((current) => Number((current + amount).toFixed(2)));
+  const requestDeposit = (record: DepositRecord) => {
+    setDepositHistory((current) => [record, ...current]);
+    notify('info', 'تم إنشاء الفاتورة', `المعرّف الداخلي ${record.id} · Memo / Tag ${record.memoTag}`);
+  };
+
+  const completeDeposit = (id: string) => {
+    const record = depositHistory.find((item) => item.id === id);
+    const blockchainTxId = record?.blockchainTxId ?? createBlockchainTxId();
+    setDepositHistory((current) => current.map((item) => item.id === id ? { ...item, status: 'تم', blockchainTxId } : item));
+    if (record) {
+      setAdvertiserBalance((current) => Number((current + record.amount).toFixed(2)));
+      notify('success', 'تم تأكيد الإيداع', `تمت إضافة ${record.amount.toFixed(2)} USDT إلى رصيد المعلن.`);
+    }
+  };
+
+  const expireDeposit = (id: string) => {
+    setDepositHistory((current) => current.map((record) => record.id === id ? { ...record, status: 'تم الإلغاء' } : record));
+    notify('warning', 'انتهت صلاحية الفاتورة', 'لم يصل تحويل مؤكد قبل انتهاء مدة الفاتورة.');
   };
 
   const creditViewer = (video: Video) => {
+    if (creditedVideosRef.current.has(video.id)) return;
+    creditedVideosRef.current.add(video.id);
+    saveWatchSession(video, video.duration * 1000);
     setViewerBalance((current) => Number((current + calculateViewerReward(video.cpm)).toFixed(4)));
+    notify('success', 'تمت إضافة المكافأة', `أضيفت ${video.reward} إلى رصيدك بعد إكمال المدة المطلوبة.`);
   };
 
   return (
@@ -1062,9 +1493,11 @@ function Home() {
         {mobileMenu && <button type="button" aria-label="إغلاق خلفية القائمة" data-testid="button-close-menu-overlay" onClick={() => setMobileMenu(false)} className="fixed inset-0 z-40 bg-[#061333]/30 backdrop-blur-sm lg:hidden" />}
         <div className="min-w-0 flex-1 overflow-hidden rounded-none bg-[#f7f9fc] lg:rounded-[26px] lg:border lg:border-slate-200/80 lg:bg-[#fbfcfe]">
           <Header mode={mode} screen={screen} onMenu={() => setMobileMenu(true)} onAdd={() => { setMode('creator'); setScreen('add'); }} />
-          {screen === 'add' && mode === 'creator' ? <AddVideo onBack={() => setScreen('campaigns')} onSubmit={addVideo} />
-            : screen === 'deposit' && mode === 'creator' ? <DepositPage advertiserBalance={advertiserBalance} onDeposit={depositAdBalance} />
-              : screen === 'withdraw' && mode === 'viewer' ? <WithdrawPage viewerBalance={viewerBalance} onWithdraw={withdrawEarnings} />
+          {screen === 'add' && mode === 'creator' ? <AddVideo onBack={() => setScreen('campaigns')} onSubmit={(video) => { addVideo(video); notify('success', 'تم نشر الإعلان', 'أصبح الفيديو نشطًا ويمكن للمشاهدين اكتشافه الآن.'); }} />
+            : screen === 'deposit' && mode === 'creator' ? <DepositPage advertiserBalance={advertiserBalance} onDepositRequested={requestDeposit} onDepositCompleted={completeDeposit} onDepositExpired={expireDeposit} />
+              : screen === 'deposit-history' && mode === 'creator' ? <DepositHistoryPage records={depositHistory} />
+                : screen === 'withdraw' && mode === 'viewer' ? <WithdrawPage viewerBalance={viewerBalance} onWithdraw={withdrawEarnings} />
+                  : screen === 'withdraw-history' && mode === 'viewer' ? <WithdrawHistoryPage records={withdrawHistory} />
                 : screen === 'campaigns' && mode === 'creator' ? <CampaignsPage videos={videos} tab={tab} onTab={setTab} onAdd={() => setScreen('add')} onWatch={selectVideo} />
                   : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} balance={viewerBalance} onWithdraw={() => setScreen('withdraw')} onSelect={selectVideo} />
                     : <CreatorOverview advertiserBalance={advertiserBalance} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
@@ -1074,19 +1507,50 @@ function Home() {
                 <>
                   <button type="button" data-testid="button-mobile-creator" onClick={() => setScreen('campaigns')} className={`flex flex-col items-center gap-1 px-5 py-1.5 text-[10px] font-bold ${screen === 'campaigns' ? 'text-[#1557ee]' : 'text-slate-400'}`}><LayoutDashboard className="h-5 w-5" /> إعلاناتي</button>
                   <button type="button" data-testid="button-mobile-add" onClick={() => setScreen('add')} className="grid h-11 w-11 -translate-y-4 place-items-center rounded-2xl bg-[#1557ee] text-white shadow-[0_8px_20px_rgba(21,87,238,.25)]"><Plus className="h-5 w-5" /></button>
-                  <button type="button" data-testid="button-mobile-ad-wallet" onClick={() => setScreen('deposit')} className={`flex flex-col items-center gap-1 px-5 py-1.5 text-[10px] font-bold ${screen === 'deposit' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> إيداع رصيد</button>
+                   <button type="button" data-testid="button-mobile-ad-wallet" onClick={() => setScreen('deposit')} className={`flex flex-col items-center gap-1 px-4 py-1.5 text-[10px] font-bold ${screen === 'deposit' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> إيداع رصيد</button>
+                   <button type="button" data-testid="button-mobile-deposit-history" onClick={() => setScreen('deposit-history')} className={`flex flex-col items-center gap-1 px-3 py-1.5 text-[10px] font-bold ${screen === 'deposit-history' ? 'text-[#1557ee]' : 'text-slate-400'}`}><History className="h-5 w-5" /> سجل الإيداع</button>
                 </>
               ) : (
                 <>
-                  <button type="button" data-testid="button-mobile-earn" onClick={() => setScreen('watch')} className={`flex flex-col items-center gap-1 px-7 py-1.5 text-[10px] font-bold ${screen === 'watch' ? 'text-[#1557ee]' : 'text-slate-400'}`}><Eye className="h-5 w-5" /> شاهد واربح</button>
-                  <button type="button" data-testid="button-mobile-earnings" onClick={() => setScreen('withdraw')} className={`flex flex-col items-center gap-1 px-7 py-1.5 text-[10px] font-bold ${screen === 'withdraw' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> سحب الأرباح</button>
+                   <button type="button" data-testid="button-mobile-earn" onClick={() => setScreen('watch')} className={`flex flex-col items-center gap-1 px-4 py-1.5 text-[10px] font-bold ${screen === 'watch' ? 'text-[#1557ee]' : 'text-slate-400'}`}><Eye className="h-5 w-5" /> شاهد واربح</button>
+                   <button type="button" data-testid="button-mobile-earnings" onClick={() => setScreen('withdraw')} className={`flex flex-col items-center gap-1 px-4 py-1.5 text-[10px] font-bold ${screen === 'withdraw' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> سحب الأرباح</button>
+                   <button type="button" data-testid="button-mobile-withdraw-history" onClick={() => setScreen('withdraw-history')} className={`flex flex-col items-center gap-1 px-4 py-1.5 text-[10px] font-bold ${screen === 'withdraw-history' ? 'text-[#1557ee]' : 'text-slate-400'}`}><History className="h-5 w-5" /> سجل السحب</button>
                 </>
               )}
             </div>
           </div>
         </div>
       </div>
-      {selectedVideo && <WatchPanel video={selectedVideo} progress={progress} isPlaying={isPlaying} completed={completed} onPlay={() => setIsPlaying(true)} onComplete={() => creditViewer(selectedVideo)} onClose={() => { setSelectedVideo(null); setIsPlaying(false); }} />}
+      {selectedVideo && <WatchPanel video={selectedVideo} progress={progress} isPlaying={isPlaying} completed={completed} session={watchSession} onPlay={() => {
+        if (!completed && document.visibilityState === 'visible') {
+          watchSegmentStartedRef.current = Date.now();
+          const currentSession = watchSessionRef.current ?? {
+            id: createUniqueIdentifier('ADS'),
+            videoId: selectedVideo.id,
+            elapsedMs: watchElapsedRef.current,
+            requiredMs: selectedVideo.duration * 1000,
+            status: 'paused' as AdvertisementSessionStatus,
+            credited: creditedVideosRef.current.has(selectedVideo.id),
+          };
+          watchSessionRef.current = { ...currentSession, status: 'active', lastStartedAt: Date.now() };
+          setWatchSession(watchSessionRef.current);
+          saveWatchSession(selectedVideo, watchElapsedRef.current, 'active');
+          setIsPlaying(true);
+        }
+      }} onComplete={() => creditViewer(selectedVideo)} onClose={() => {
+        if (watchSegmentStartedRef.current !== null) {
+          watchElapsedRef.current = Math.min(selectedVideo.duration * 1000, watchElapsedRef.current + (Date.now() - watchSegmentStartedRef.current));
+          watchSegmentStartedRef.current = null;
+          saveWatchSession(selectedVideo, watchElapsedRef.current, watchElapsedRef.current >= selectedVideo.duration * 1000 ? 'completed' : 'paused');
+          if (watchElapsedRef.current < selectedVideo.duration * 1000) {
+            notify('warning', 'Verification Required', 'لم تكتمل مشاهدة الإعلان، لذلك لم تُحتسب المكافأة.');
+          }
+        }
+        setSelectedVideo(null);
+        setIsPlaying(false);
+        setWatchSession(null);
+      }} />}
+      <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
       <span className="sr-only" data-testid="text-viewer-count">{viewerCount} فيديو متاح</span>
     </div>
   );
