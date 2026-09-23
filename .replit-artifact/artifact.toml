@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "VidReward"
+description = "واجهة عربية لإدارة إعلانات الفيديو ومشاهدة المحتوى مقابل المكافآت، مع صفحات منفصلة للإيداع عبر Binance أو Web3 وسحب الأرباح إلى محفظة USDT على شبكة BEP20."
+version = "1.0.0"
+id = "artifacts/vidreward"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19637
+
+[services.development]
+run = "pnpm --filter @workspace/vidreward run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/vidreward", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/vidreward/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19637"
+BASE_PATH = "/"
