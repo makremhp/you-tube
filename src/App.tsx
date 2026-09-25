@@ -622,9 +622,9 @@ function CampaignsPage({
       <section className="animate-rise flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#1557ee]"><span className="h-1.5 w-1.5 rounded-full bg-[#23bdc9]" /> الثلاثاء، ٢٤ ديسمبر ٢٠٢٤</div>
-          <h1 className="font-display text-[29px] font-bold leading-tight tracking-[-.04em] text-[#12234b] md:text-[36px]">
-            <span className="block">صباح الخير،</span>
-            <span className="mt-1 block text-[#1557ee]">{getGreetingName(telegramUser)}</span>
+          <h1 className="creator-greeting flex items-baseline gap-2 whitespace-nowrap font-display text-[25px] font-bold leading-tight tracking-[-.04em] text-[#12234b] sm:text-[29px] md:text-[36px]">
+            <span>صباح الخير،</span>
+            <span className="text-[#1557ee]">{getGreetingName(telegramUser)}</span>
           </h1>
           <p className="mt-2 text-sm text-slate-500">هذه لمحة سريعة عن أثر إعلاناتك اليوم.</p>
         </div>
@@ -772,9 +772,9 @@ function CreatorOverview({
       <section className="animate-rise flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#1557ee]"><span className="h-1.5 w-1.5 rounded-full bg-[#23bdc9]" /> الأربعاء، ٢٣ سبتمبر ٢٠٢٦</div>
-          <h1 className="font-display text-[29px] font-bold leading-tight tracking-[-.04em] text-[#12234b] md:text-[36px]">
-            <span className="block">صباح الخير،</span>
-            <span className="mt-1 block text-[#1557ee]">{getGreetingName(telegramUser)}</span>
+          <h1 className="creator-greeting flex items-baseline gap-2 whitespace-nowrap font-display text-[25px] font-bold leading-tight tracking-[-.04em] text-[#12234b] sm:text-[29px] md:text-[36px]">
+            <span>صباح الخير،</span>
+            <span className="text-[#1557ee]">{getGreetingName(telegramUser)}</span>
           </h1>
           <p className="mt-2 text-sm text-slate-500">ملخص أداء حملاتك ورصيدك في مكان واحد.</p>
         </div>
@@ -843,6 +843,7 @@ function ViewerView({
   insideTelegram,
   onOpenBrowser,
   completedVideoIds,
+  browserMode = false,
 }: {
   videos: Video[];
   onSelect: (video: Video) => void;
@@ -851,28 +852,32 @@ function ViewerView({
   insideTelegram: boolean;
   onOpenBrowser: (video: Video) => void;
   completedVideoIds: Set<number>;
+  browserMode?: boolean;
 }) {
   const activeVideos = videos.filter((video) => video.status === 'نشط' && !completedVideoIds.has(video.id));
   const totalVideoRewards = activeVideos.reduce((total, video) => total + calculateViewerReward(video.cpm), 0);
   return (
-    <main className="mx-auto w-full max-w-[1370px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
-      <section className="mb-5 grid grid-cols-2 gap-3 sm:gap-4">
-        <div className="rounded-[20px] border border-blue-100 bg-white p-4 shadow-[var(--shadow-soft)] sm:p-5">
-          <div className="flex items-center justify-between gap-2">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#edf3ff] text-[#1557ee]"><Film className="h-5 w-5" /></span>
-            <span className="rounded-full bg-[#f4f8ff] px-2.5 py-1 text-[9px] font-bold text-[#1557ee]">متاحة الآن</span>
+    <main className={`browser-watch-shell mx-auto w-full max-w-[1370px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12 ${browserMode ? 'browser-watch-page' : ''}`} dir="rtl">
+      {browserMode && (
+        <section className="browser-orientation mb-4 flex items-center gap-3 rounded-2xl border border-blue-100 bg-white px-3 py-2.5 text-right shadow-[var(--shadow-soft)]" aria-label="إرشادات المشاهدة">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-[#edf3ff] text-[#1557ee]"><PlaySquare className="h-3.5 w-3.5" /></span>
+          <div className="min-w-0">
+            <div className="truncate text-[11px] font-bold text-[#12234b]">أنت في صفحة المشاهدة</div>
+            <div className="mt-0.5 truncate text-[10px] text-slate-400">اختر فيديو لبدء جلسة مشاهدة موثقة</div>
           </div>
-          <div className="mt-4 text-[11px] font-semibold leading-5 text-slate-400 sm:text-xs">إجمالي الفيديوهات المتاحة</div>
-          <div className="mt-1 text-2xl font-bold tracking-tight text-[#12234b] sm:text-3xl">{activeVideos.length}</div>
+          <span className="mr-auto flex shrink-0 items-center gap-1 rounded-full bg-[#eafbf8] px-2 py-1 text-[9px] font-bold text-[#159b89]"><ShieldCheck className="h-3 w-3" /> آمنة</span>
+        </section>
+      )}
+      <section className="viewer-earnings-summary mb-5 grid h-10 grid-cols-2 gap-2 sm:gap-3" aria-label="ملخص أرباح المشاهدة">
+        <div data-testid="viewer-summary-available" className="flex h-10 min-w-0 items-center gap-2 rounded-xl border border-blue-100 bg-white px-2.5 shadow-[var(--shadow-soft)] sm:px-3">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-[#edf3ff] text-[#1557ee]"><Film className="h-3.5 w-3.5" /></span>
+          <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-slate-500 sm:text-[11px]">فيديوهات متاحة</span>
+          <strong className="shrink-0 text-sm font-bold tabular-nums text-[#12234b]" aria-label={`${activeVideos.length} فيديو متاح`}>{activeVideos.length}</strong>
         </div>
-        <div className="rounded-[20px] border border-emerald-100 bg-gradient-to-br from-white to-[#f2fbf9] p-4 shadow-[var(--shadow-soft)] sm:p-5">
-          <div className="flex items-center justify-between gap-2">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#eafbf8] text-[#159b89]"><DollarSign className="h-5 w-5" /></span>
-            <span className="rounded-full bg-white px-2.5 py-1 text-[9px] font-bold text-[#159b89]">USD</span>
-          </div>
-          <div className="mt-4 text-[11px] font-semibold leading-5 text-slate-400 sm:text-xs">إجمالي مكافآت الفيديوهات</div>
-          <div className="mt-1 text-2xl font-bold tracking-tight text-[#159b89] sm:text-3xl">{formatUsd(totalVideoRewards)}</div>
-          <div className="mt-1 text-[9px] text-slate-400">عند إكمال كل فيديو مرة واحدة</div>
+        <div data-testid="viewer-summary-rewards" className="flex h-10 min-w-0 items-center gap-2 rounded-xl border border-emerald-100 bg-[#f6fcfb] px-2.5 shadow-[var(--shadow-soft)] sm:px-3">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-[#eafbf8] text-[#159b89]"><DollarSign className="h-3.5 w-3.5" /></span>
+          <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-slate-500 sm:text-[11px]">إجمالي المكافآت</span>
+          <strong className="shrink-0 text-[13px] font-bold tabular-nums text-[#159b89]" aria-label={`${formatUsd(totalVideoRewards)} إجمالي المكافآت`}>{formatUsd(totalVideoRewards)}</strong>
         </div>
       </section>
       <section className="mb-5 flex flex-col gap-4 rounded-[22px] border border-blue-100 bg-white p-5 shadow-[var(--shadow-soft)] sm:flex-row sm:items-center sm:justify-between md:p-6">
@@ -926,7 +931,7 @@ function ViewerView({
           <div className="text-sm font-bold text-[#12234b]">لا توجد فيديوهات جديدة الآن</div>
           <p className="mt-2 text-xs text-slate-400">ستظهر هنا الفيديوهات التي لم تشاهدها بعد.</p>
         </div>
-      ) : <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      ) : <div className="browser-watch-list mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {activeVideos.map((video, index) => (
           <button type="button" key={video.id} data-testid={`card-reward-${video.id}`} onClick={() => onSelect(video)} className="group overflow-hidden rounded-[20px] border border-slate-200 bg-white text-right shadow-[var(--shadow-soft)] transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-[var(--shadow-lift)]">
             <VideoArtwork video={video} />
@@ -980,8 +985,8 @@ function WatchPanel({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-[#061333]/45 p-0 backdrop-blur-sm sm:items-center sm:p-5" dir="rtl">
-      <div className="max-h-[94vh] w-full max-w-[920px] overflow-y-auto rounded-t-[26px] bg-white shadow-2xl sm:rounded-[26px]">
+    <div className="watch-modal-backdrop fixed inset-0 z-[60] flex items-end justify-center bg-[#061333]/45 p-0 backdrop-blur-sm sm:items-center sm:p-5" dir="rtl">
+      <div className="watch-modal-card max-h-[94vh] w-full max-w-[920px] overflow-y-auto rounded-t-[26px] bg-white shadow-2xl sm:rounded-[26px]">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 md:px-7">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-xs font-bold text-[#1557ee]"><Sparkles className="h-4 w-4" /> جلسة مشاهدة موثقة</div>
@@ -1222,6 +1227,93 @@ function TransactionIdentifiers({ record }: { record: DepositRecord | WithdrawRe
   );
 }
 
+function CompactInvoiceValue({
+  label,
+  value,
+  tone = 'text-[#12234b]',
+  action,
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex h-[60px] min-w-0 items-center gap-3 rounded-[16px] border border-slate-100 bg-[#fbfcff] px-3.5 transition hover:border-blue-100 hover:bg-[#f7faff]">
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[9px] font-bold tracking-wide text-slate-400">{label}</div>
+        <code dir="ltr" className={`mt-1 block truncate text-[11px] font-bold ${tone}`} title={value}>{value}</code>
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function HistoryStat({
+  label,
+  value,
+  tone = 'text-[#12234b]',
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+}) {
+  return (
+    <div className="flex h-[60px] items-center justify-between rounded-[16px] border border-slate-200 bg-white px-4 shadow-[var(--shadow-soft)]">
+      <span className="text-[10px] font-semibold text-slate-400">{label}</span>
+      <strong className={`text-lg font-bold tracking-tight ${tone}`}>{value}</strong>
+    </div>
+  );
+}
+
+function CompactHistoryRow({
+  record,
+  kind,
+}: {
+  record: DepositRecord | WithdrawRecord;
+  kind: 'deposit' | 'withdraw';
+}) {
+  const isDeposit = kind === 'deposit';
+  const amount = isDeposit ? record.amount.toFixed(2) : record.amount.toFixed(4);
+  const iconTone = isDeposit ? 'bg-[#edf3ff] text-[#1557ee]' : 'bg-[#eafbf8] text-[#159b89]';
+
+  return (
+    <div className="overflow-x-auto border-t border-slate-100 first:border-t-0">
+      <div
+        data-testid={`row-${kind}-${record.id}`}
+        className="grid h-[60px] min-w-[720px] grid-cols-[1.45fr_.9fr_1.25fr_1.25fr_auto] items-center gap-4 px-5 transition hover:bg-[#fbfcff] md:px-6"
+      >
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-[10px] ${iconTone}`}>
+            {isDeposit ? <ArrowDownLeft className="h-3.5 w-3.5" /> : <ArrowUpLeft className="h-3.5 w-3.5" />}
+          </span>
+          <div className="min-w-0">
+            <div className="truncate text-[11px] font-bold text-[#12234b]">{isDeposit ? 'إيداع' : 'سحب'} {amount} USDT</div>
+            <div className="mt-0.5 truncate text-[9px] text-slate-400">{record.createdAt}</div>
+          </div>
+        </div>
+        <div className="min-w-0">
+          <div className="text-[9px] font-semibold text-slate-400">الطريقة</div>
+          <div className="mt-0.5 truncate text-[10px] font-bold text-slate-600">{methodLabel(record.method)}</div>
+        </div>
+        <div className="min-w-0">
+          <div className="text-[9px] font-semibold text-slate-400">الوجهة</div>
+          <code dir="ltr" className="mt-0.5 block truncate text-[10px] font-bold text-slate-600" title={record.destination}>{record.destination}</code>
+        </div>
+        <div className="min-w-0">
+          <div className="text-[9px] font-semibold text-slate-400">المعرّف / Memo</div>
+          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+            <code dir="ltr" className="truncate text-[10px] font-bold text-[#1557ee]" title={`${record.id} · ${record.memoTag}`}>{record.id}</code>
+            <span className="shrink-0 text-[9px] text-slate-300">·</span>
+            <code dir="ltr" className="truncate text-[10px] font-bold text-[#159b89]" title={record.memoTag}>{record.memoTag}</code>
+          </div>
+        </div>
+        <StatusBadge status={record.status} />
+      </div>
+    </div>
+  );
+}
+
 function DepositPage({
   advertiserBalance,
   telegramUser,
@@ -1360,18 +1452,47 @@ function DepositPage({
           </section>
         </div>
       ) : (
-        <section className="animate-rise rounded-[24px] border border-slate-200 bg-white p-6 shadow-[var(--shadow-soft)] md:p-8">
-          <div className="flex flex-col justify-between gap-4 border-b border-slate-100 pb-6 sm:flex-row sm:items-center"><div><div className={`flex items-center gap-2 text-xs font-bold ${invoiceStatus === 'completed' ? 'text-[#159b89]' : invoiceStatus === 'expired' ? 'text-rose-500' : 'text-amber-600'}`}><span className={`h-2 w-2 rounded-full ${invoiceStatus === 'completed' ? 'bg-[#159b89]' : invoiceStatus === 'expired' ? 'bg-rose-500' : 'animate-pulse bg-amber-500'}`} /> {statusLabel}</div><h2 className="mt-2 font-display text-xl font-bold text-[#12234b]">{invoiceHeading}</h2><p className="mt-1 text-xs text-slate-400">طريقة الدفع: {methodLabel(invoice.method)} · {invoice.method === 'binance' ? 'تحويل مباشر' : 'شبكة BEP20'}</p></div><div className="grid h-16 w-16 place-items-center rounded-xl bg-[#f4f8ff] text-[#1557ee]"><QrCode className="h-9 w-9" /></div></div>
-          <div className="mt-7 grid gap-5 lg:grid-cols-[1fr_260px]">
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-blue-100 bg-[#f4f8ff] p-4"><div className="mb-2 text-[11px] font-bold text-slate-500">{invoice.method === 'binance' ? 'معرّف Binance للإيداع' : 'عنوان الإيداع (BEP20)'}</div><div className="flex items-center gap-2"><code dir="ltr" className="min-w-0 flex-1 break-all text-xs font-bold text-[#12234b]">{invoice.destination}</code><button type="button" data-testid="button-copy-deposit-destination" onClick={() => copyValue(invoice.destination, 'destination')} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee]">{copied === 'destination' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div></div>
-               <div className="rounded-2xl border border-cyan-100 bg-[#effcfd] p-4"><div className="mb-2 text-[11px] font-bold text-slate-500">Memo / Tag فريد لهذه العملية</div><div className="flex items-center gap-2"><code dir="ltr" className="flex-1 text-sm font-bold tracking-wider text-[#12234b]">{invoice.memoTag}</code><button type="button" data-testid="button-copy-deposit-memo" onClick={() => copyValue(invoice.memoTag, 'memo')} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee]">{copied === 'memo' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div><p className="mt-2 text-[10px] font-semibold leading-5 text-slate-600">أرسل هذا الرمز في خانة الملاحظات (Memo / Tag) عند تنفيذ التحويل.</p></div>
-              <div className="rounded-xl bg-[#f7f9fd] p-4"><div className="text-[10px] text-slate-400">المعرّف الداخلي للفاتورة</div><code dir="ltr" className="mt-1 block truncate text-xs font-bold text-[#12234b]">{invoice.id}</code></div>
-              {invoice.telegramUserId !== null && <div className="rounded-xl border border-blue-100 bg-[#f4f8ff] p-4"><div className="text-[10px] text-slate-400">معرّف Telegram المرتبط بالفاتورة</div><code dir="ltr" className="mt-1 block text-xs font-bold text-[#1557ee]">{invoice.telegramUserId}</code></div>}
-              <div className="grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-[#f7f9fd] p-4"><div className="text-[10px] text-slate-400">المبلغ</div><div className="mt-1 text-lg font-bold text-[#12234b]">{invoice.amount.toFixed(2)} USDT</div></div><div className="rounded-xl bg-[#f7f9fd] p-4"><div className="text-[10px] text-slate-400">طريقة الدفع</div><div className="mt-1 text-sm font-bold text-[#12234b]">{methodLabel(invoice.method)}</div></div><div className="rounded-xl bg-[#f7f9fd] p-4"><div className="text-[10px] text-slate-400">الوقت المتبقي</div><div className={`mt-1 text-sm font-bold ${invoiceStatus === 'pending' ? 'text-amber-600' : 'text-[#159b89]'}`}>{invoiceStatus === 'pending' ? formatRemaining(remainingSeconds) : invoiceStatus === 'completed' ? 'تمت العملية' : 'منتهية'}</div></div></div>
-              <div className={`rounded-2xl border p-4 ${invoiceStatus === 'pending' ? 'border-amber-100 bg-amber-50' : invoiceStatus === 'completed' ? 'border-emerald-100 bg-[#eafbf8]' : 'border-rose-100 bg-rose-50'}`}><div className={`flex items-center gap-2 text-xs font-bold ${invoiceStatus === 'pending' ? 'text-amber-700' : invoiceStatus === 'completed' ? 'text-[#159b89]' : 'text-rose-600'}`}><Timer className="h-4 w-4" /> {invoiceStatus === 'pending' ? `يتم تحديث الحالة تلقائيًا كل ثانيتين · تنتهي الفاتورة خلال ${formatRemaining(remainingSeconds)}` : invoiceStatus === 'completed' ? 'تم العثور على التحويل وتأكيد الإيداع تلقائيًا.' : 'انتهت الفاتورة قبل وصول التحويل.'}</div><p className="mt-1 text-[11px] leading-5 text-slate-500">{invoiceStatus === 'pending' ? 'لا تغلق الصفحة بعد إرسال المبلغ. لا تحتاج إلى الضغط على أي زر للتأكيد.' : 'يمكنك الرجوع إلى صفحة الإيداع لإنشاء فاتورة جديدة.'}</p></div>
+        <section className="animate-rise rounded-[24px] border border-slate-200 bg-white p-4 shadow-[var(--shadow-soft)] sm:p-5 md:p-6">
+          <div className="grid min-h-[60px] gap-3 rounded-[18px] border border-slate-100 bg-[#fbfcff] p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div className="min-w-0">
+              <div className={`flex items-center gap-2 text-[10px] font-bold ${invoiceStatus === 'completed' ? 'text-[#159b89]' : invoiceStatus === 'expired' ? 'text-rose-500' : 'text-amber-600'}`}><span className={`h-1.5 w-1.5 rounded-full ${invoiceStatus === 'completed' ? 'bg-[#159b89]' : invoiceStatus === 'expired' ? 'bg-rose-500' : 'animate-pulse bg-amber-500'}`} /> {statusLabel}</div>
+              <h2 className="mt-1 truncate font-display text-sm font-bold text-[#12234b]">{invoiceHeading}</h2>
             </div>
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-[#fbfcff] p-5 text-center"><div className="grid h-36 w-36 place-items-center rounded-xl border-4 border-white bg-[#eef3ff] text-[#1557ee] shadow-sm"><QrCode className="h-24 w-24" /></div><p className="mt-4 text-[10px] leading-5 text-slate-400">{invoice.method === 'binance' ? 'حوّل من حساب Binance إلى المعرّف الظاهر.' : 'امسح الرمز من محفظتك ثم أرسل المبلغ المحدد.'}</p></div>
+            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500"><span className="rounded-lg bg-[#edf3ff] px-2 py-1 text-[#1557ee]">{methodLabel(invoice.method)}</span><span className="rounded-lg bg-[#eafbf8] px-2 py-1 text-[#159b89]">{invoice.amount.toFixed(2)} USDT</span></div>
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_220px]">
+            <div className="grid gap-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <CompactInvoiceValue
+                  label={invoice.method === 'binance' ? 'معرّف Binance للإيداع' : 'عنوان الإيداع (BEP20)'}
+                  value={invoice.destination}
+                  action={<button type="button" data-testid="button-copy-deposit-destination" onClick={() => copyValue(invoice.destination, 'destination')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee] shadow-sm transition hover:bg-[#edf3ff]" aria-label="نسخ وجهة الإيداع">{copied === 'destination' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</button>}
+                />
+                <CompactInvoiceValue
+                  label="Memo / Tag فريد لهذه العملية"
+                  value={invoice.memoTag}
+                  tone="text-[#159b89]"
+                  action={<button type="button" data-testid="button-copy-deposit-memo" onClick={() => copyValue(invoice.memoTag, 'memo')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee] shadow-sm transition hover:bg-[#edf3ff]" aria-label="نسخ Memo Tag">{copied === 'memo' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</button>}
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <CompactInvoiceValue label="المعرّف الداخلي للفاتورة" value={invoice.id} />
+                {invoice.telegramUserId !== null && <CompactInvoiceValue label="معرّف Telegram المرتبط" value={String(invoice.telegramUserId)} tone="text-[#1557ee]" />}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <CompactInvoiceValue label="المبلغ" value={`${invoice.amount.toFixed(2)} USDT`} />
+                <CompactInvoiceValue label="طريقة الدفع" value={methodLabel(invoice.method)} />
+                <CompactInvoiceValue label="الوقت المتبقي" value={invoiceStatus === 'pending' ? formatRemaining(remainingSeconds) : invoiceStatus === 'completed' ? 'تمت العملية' : 'منتهية'} tone={invoiceStatus === 'pending' ? 'text-amber-600' : 'text-[#159b89]'} />
+              </div>
+              <div className={`flex min-h-[60px] items-center gap-2 rounded-[16px] border px-3.5 ${invoiceStatus === 'pending' ? 'border-amber-100 bg-amber-50 text-amber-700' : invoiceStatus === 'completed' ? 'border-emerald-100 bg-[#eafbf8] text-[#159b89]' : 'border-rose-100 bg-rose-50 text-rose-600'}`}>
+                <Timer className="h-4 w-4 shrink-0" />
+                <p className="truncate text-[10px] font-bold">{invoiceStatus === 'pending' ? `تحديث تلقائي كل ثانيتين · تنتهي خلال ${formatRemaining(remainingSeconds)}` : invoiceStatus === 'completed' ? 'تم العثور على التحويل وتأكيد الإيداع تلقائيًا.' : 'انتهت الفاتورة قبل وصول التحويل.'}</p>
+              </div>
+            </div>
+            <div className="flex h-[60px] items-center gap-3 rounded-[16px] border border-dashed border-slate-200 bg-[#fbfcff] px-3">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border-2 border-white bg-[#eef3ff] text-[#1557ee] shadow-sm"><QrCode className="h-6 w-6" /></div>
+              <p className="text-[10px] font-semibold leading-4 text-slate-400">{invoice.method === 'binance' ? 'حوّل إلى معرّف Binance الظاهر.' : 'استخدم شبكة BEP20 وأرسل المبلغ المحدد.'}</p>
+            </div>
           </div>
           {invoiceStatus !== 'pending' && <div className="mt-7 flex justify-end border-t border-slate-100 pt-6"><button type="button" onClick={() => setInvoice(null)} className="flex items-center justify-center gap-2 rounded-xl bg-[#1557ee] px-5 py-3 text-xs font-bold text-white"><RefreshCw className="h-4 w-4" /> إنشاء فاتورة جديدة</button></div>}
         </section>
@@ -1440,22 +1561,36 @@ function WithdrawPage({
 
 function DepositHistoryPage({ records }: { records: DepositRecord[] }) {
   const completedTotal = records.filter((record) => record.status === 'تم').reduce((total, record) => total + record.amount, 0);
+  const pendingCount = records.filter((record) => record.status === 'قيد المعالجة').length;
   return (
     <main className="mx-auto w-full max-w-[1080px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
-      <div className="mb-7"><div className="text-xs font-semibold text-[#1557ee]">إدارة الإعلانات / سجل الإيداع</div><h1 className="mt-2 font-display text-2xl font-bold text-[#12234b] md:text-3xl">سجل الإيداع</h1><p className="mt-2 text-sm leading-6 text-slate-500">كل فواتير تمويل الإعلانات في صفحة مستقلة، مع حالة كل عملية وطريقة الدفع المستخدمة.</p></div>
-      <div className="mb-5 grid gap-3 sm:grid-cols-3"><div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)]"><div className="text-[11px] text-slate-400">إجمالي العمليات</div><div className="mt-2 text-2xl font-bold text-[#12234b]">{records.length}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)]"><div className="text-[11px] text-slate-400">الإيداعات المكتملة</div><div className="mt-2 text-2xl font-bold text-[#159b89]">${completedTotal.toFixed(2)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)]"><div className="text-[11px] text-slate-400">قيد المراجعة</div><div className="mt-2 text-2xl font-bold text-amber-600">{records.filter((record) => record.status === 'قيد المعالجة').length}</div></div></div>
-      <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[var(--shadow-soft)]"><div className="border-b border-slate-100 px-5 py-5 md:px-7"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#edf3ff] text-[#1557ee]"><ArrowDownLeft className="h-5 w-5" /></span><div><h2 className="font-display text-lg font-bold text-[#12234b]">عمليات الإيداع</h2><p className="mt-1 text-xs text-slate-400">المبلغ، طريقة التحويل، والحالة الحالية</p></div></div></div><div className="divide-y divide-slate-100">{records.map((record) => <div key={record.id} data-testid={`row-deposit-${record.id}`} className="px-5 py-5 transition hover:bg-[#fbfcff] md:px-7"><div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-[#f4f8ff] text-[#1557ee]"><DollarSign className="h-4 w-4" /></div><div><div className="text-sm font-bold text-[#12234b]">إيداع {record.amount.toFixed(2)} USDT</div><div className="mt-1 text-[10px] text-slate-400">{record.createdAt}</div></div></div><div className="flex flex-wrap items-center gap-4 text-xs"><div><div className="text-[10px] text-slate-400">الطريقة</div><div className="mt-1 font-bold text-slate-600">{methodLabel(record.method)}</div></div><div className="max-w-[180px]"><div className="text-[10px] text-slate-400">الوجهة</div><code dir="ltr" className="mt-1 block truncate text-[11px] font-bold text-slate-600">{record.destination}</code></div><StatusBadge status={record.status} /></div></div><TransactionIdentifiers record={record} /></div>)}</div></section>
+      <div className="mb-6"><div className="text-[10px] font-bold tracking-wide text-[#1557ee]">إدارة الإعلانات / سجل الإيداع</div><h1 className="mt-1 font-display text-2xl font-bold tracking-tight text-[#12234b] md:text-3xl">سجل الإيداع</h1><p className="mt-1.5 text-xs leading-5 text-slate-500">تابع عمليات تمويل الإعلانات بسرعة ووضوح.</p></div>
+      <div className="mb-4 grid gap-2.5 sm:grid-cols-3"><HistoryStat label="إجمالي العمليات" value={String(records.length)} /><HistoryStat label="الإيداعات المكتملة" value={`$${completedTotal.toFixed(2)}`} tone="text-[#159b89]" /><HistoryStat label="قيد المراجعة" value={String(pendingCount)} tone="text-amber-600" /></div>
+      <section className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[var(--shadow-soft)]">
+        <div className="flex h-[60px] items-center justify-between border-b border-slate-100 px-5 md:px-6">
+          <div className="flex min-w-0 items-center gap-2.5"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-[#edf3ff] text-[#1557ee]"><ArrowDownLeft className="h-3.5 w-3.5" /></span><div className="min-w-0"><h2 className="truncate text-sm font-bold text-[#12234b]">عمليات الإيداع</h2><p className="mt-0.5 truncate text-[9px] text-slate-400">المبلغ · الطريقة · الوجهة · الحالة</p></div></div>
+          <span className="rounded-lg bg-[#f4f8ff] px-2 py-1 text-[9px] font-bold text-[#1557ee]">{records.length} عمليات</span>
+        </div>
+        {records.length > 0 ? records.map((record) => <CompactHistoryRow key={record.id} record={record} kind="deposit" />) : <div className="flex h-[60px] items-center justify-center text-[10px] text-slate-400">لا توجد عمليات إيداع بعد.</div>}
+      </section>
     </main>
   );
 }
 
 function WithdrawHistoryPage({ records }: { records: WithdrawRecord[] }) {
   const completedTotal = records.filter((record) => record.status === 'تم').reduce((total, record) => total + record.amount, 0);
+  const pendingCount = records.filter((record) => record.status === 'قيد المعالجة').length;
   return (
     <main className="mx-auto w-full max-w-[1080px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
-      <div className="mb-7"><div className="text-xs font-semibold text-[#1557ee]">مساحة الربح / سجل السحب</div><h1 className="mt-2 font-display text-2xl font-bold text-[#12234b] md:text-3xl">سجل السحب</h1><p className="mt-2 text-sm leading-6 text-slate-500">تابع جميع طلبات سحب أرباحك بشكل مستقل عن سجل الإيداع.</p></div>
-      <div className="mb-5 grid gap-3 sm:grid-cols-3"><div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)]"><div className="text-[11px] text-slate-400">إجمالي الطلبات</div><div className="mt-2 text-2xl font-bold text-[#12234b]">{records.length}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)]"><div className="text-[11px] text-slate-400">تم تحويله</div><div className="mt-2 text-2xl font-bold text-[#159b89]">${completedTotal.toFixed(2)}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)]"><div className="text-[11px] text-slate-400">طلبات قيد المعالجة</div><div className="mt-2 text-2xl font-bold text-amber-600">{records.filter((record) => record.status === 'قيد المعالجة').length}</div></div></div>
-      <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[var(--shadow-soft)]"><div className="border-b border-slate-100 px-5 py-5 md:px-7"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#eafbf8] text-[#159b89]"><ArrowUpLeft className="h-5 w-5" /></span><div><h2 className="font-display text-lg font-bold text-[#12234b]">طلبات السحب</h2><p className="mt-1 text-xs text-slate-400">وجهة التحويل وحالة مراجعة كل طلب</p></div></div></div><div className="divide-y divide-slate-100">{records.map((record) => <div key={record.id} data-testid={`row-withdraw-${record.id}`} className="px-5 py-5 transition hover:bg-[#fbfcff] md:px-7"><div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-[#f1fcfa] text-[#159b89]"><ArrowUpLeft className="h-4 w-4" /></div><div><div className="text-sm font-bold text-[#12234b]">سحب {record.amount.toFixed(4)} USDT</div><div className="mt-1 text-[10px] text-slate-400">{record.createdAt}</div></div></div><div className="flex flex-wrap items-center gap-4 text-xs"><div><div className="text-[10px] text-slate-400">الطريقة</div><div className="mt-1 font-bold text-slate-600">{methodLabel(record.method)}</div></div><div className="max-w-[180px]"><div className="text-[10px] text-slate-400">الوجهة</div><code dir="ltr" className="mt-1 block truncate text-[11px] font-bold text-slate-600">{record.destination}</code></div><StatusBadge status={record.status} /></div></div><TransactionIdentifiers record={record} /></div>)}</div></section>
+      <div className="mb-6"><div className="text-[10px] font-bold tracking-wide text-[#1557ee]">مساحة الربح / سجل السحب</div><h1 className="mt-1 font-display text-2xl font-bold tracking-tight text-[#12234b] md:text-3xl">سجل السحب</h1><p className="mt-1.5 text-xs leading-5 text-slate-500">كل طلبات سحب الأرباح في عرض سريع ومنظم.</p></div>
+      <div className="mb-4 grid gap-2.5 sm:grid-cols-3"><HistoryStat label="إجمالي الطلبات" value={String(records.length)} /><HistoryStat label="تم تحويله" value={`$${completedTotal.toFixed(4)}`} tone="text-[#159b89]" /><HistoryStat label="قيد المعالجة" value={String(pendingCount)} tone="text-amber-600" /></div>
+      <section className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[var(--shadow-soft)]">
+        <div className="flex h-[60px] items-center justify-between border-b border-slate-100 px-5 md:px-6">
+          <div className="flex min-w-0 items-center gap-2.5"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-[#eafbf8] text-[#159b89]"><ArrowUpLeft className="h-3.5 w-3.5" /></span><div className="min-w-0"><h2 className="truncate text-sm font-bold text-[#12234b]">طلبات السحب</h2><p className="mt-0.5 truncate text-[9px] text-slate-400">المبلغ · الطريقة · الوجهة · الحالة</p></div></div>
+          <span className="rounded-lg bg-[#eafbf8] px-2 py-1 text-[9px] font-bold text-[#159b89]">{records.length} طلبات</span>
+        </div>
+        {records.length > 0 ? records.map((record) => <CompactHistoryRow key={record.id} record={record} kind="withdraw" />) : <div className="flex h-[60px] items-center justify-center text-[10px] text-slate-400">لا توجد طلبات سحب بعد.</div>}
+      </section>
     </main>
   );
 }
@@ -1690,7 +1825,7 @@ function Home() {
                 : screen === 'withdraw' && mode === 'viewer' ? <WithdrawPage viewerBalance={viewerBalance} telegramUser={telegramUser} onWithdraw={withdrawEarnings} />
                   : screen === 'withdraw-history' && mode === 'viewer' ? <WithdrawHistoryPage records={withdrawHistory} />
                 : screen === 'campaigns' && mode === 'creator' ? <CampaignsPage videos={videos} telegramUser={telegramUser} tab={tab} onTab={setTab} onAdd={() => setScreen('add')} onWatch={selectVideo} />
-                : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} balance={viewerBalance} onWithdraw={() => setScreen('withdraw')} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} />
+                : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} balance={viewerBalance} onWithdraw={() => setScreen('withdraw')} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
                   : <CreatorOverview advertiserBalance={advertiserBalance} telegramUser={telegramUser} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
           {!browserEarningPage && <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 p-2 backdrop-blur lg:hidden">
             <div className="mx-auto flex max-w-md justify-around">
@@ -1757,9 +1892,9 @@ function ExternalWatchPage() {
   }
 
   return (
-    <main className="min-h-[100dvh] bg-[#071632] px-4 py-6 text-white sm:px-8 sm:py-10" dir="rtl">
+    <main className="browser-watch-shell browser-watch-page min-h-[100dvh] bg-[#071632] px-4 py-6 text-white sm:px-8 sm:py-10" dir="rtl">
       <div className="mx-auto w-full max-w-5xl">
-        <header className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/[.04] px-4 py-4 sm:px-6">
+        <header className="browser-orientation mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/[.04] px-4 py-4 sm:px-6">
           <div className="flex items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#1557ee]"><Play className="h-4 w-4 fill-current" /></span>
             <div><div className="font-display text-base font-bold">VidReward · المشاهدة</div><div className="mt-1 text-[10px] text-blue-100/60">صفحة فيديو مستقلة للمتصفح</div></div>
@@ -1771,9 +1906,9 @@ function ExternalWatchPage() {
             </div>
           )}
         </header>
-        <section className="overflow-hidden rounded-[24px] border border-white/10 bg-[#0d2041] shadow-2xl">
+        <section className="browser-video-card overflow-hidden rounded-[24px] border border-white/10 bg-[#0d2041] shadow-2xl">
           {validVideoId ? (
-            <div className="aspect-video w-full bg-black">
+            <div className="browser-video-stage aspect-video w-full bg-black">
               <iframe
                 title={title}
                 src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1`}
@@ -1784,13 +1919,13 @@ function ExternalWatchPage() {
               />
             </div>
           ) : (
-            <div className="flex aspect-video flex-col items-center justify-center px-6 text-center">
+            <div className="browser-video-stage flex aspect-video flex-col items-center justify-center px-6 text-center">
               <PlaySquare className="h-12 w-12 text-cyan-300" />
               <h1 className="mt-4 text-lg font-bold">تعذّر العثور على فيديو YouTube</h1>
               <p className="mt-2 text-sm leading-6 text-blue-100/60">ارجع إلى VidReward واختر فيديو YouTube نشطًا ثم افتحه في المتصفح.</p>
             </div>
           )}
-          <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-7">
+          <div className="browser-video-details flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-7">
             <div className="min-w-0">
               <h1 className="text-lg font-bold leading-7">{title}</h1>
               <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-blue-100/60">

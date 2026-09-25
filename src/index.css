@@ -182,3 +182,66 @@ input[type='number']::-webkit-outer-spin-button {
   background-image: radial-gradient(rgba(24, 91, 255, .17) 1px, transparent 1px);
   background-size: 13px 13px;
 }
+
+/* The browser watch surface uses a quieter transition language than the dashboard.
+   Keeping each movement to transform and opacity makes the hand-off feel immediate
+   without competing with the video. */
+.browser-watch-page {
+  animation: browser-screen-in .42s cubic-bezier(.22, .75, .22, 1) both;
+}
+.browser-orientation {
+  animation: browser-orientation-in .36s cubic-bezier(.22, .75, .22, 1) .04s both;
+}
+.browser-watch-page .viewer-earnings-summary {
+  animation: browser-list-in .4s cubic-bezier(.22, .75, .22, 1) .08s both;
+}
+.browser-watch-list > * {
+  animation: browser-list-in .42s cubic-bezier(.22, .75, .22, 1) both;
+}
+.browser-watch-list > :nth-child(2) { animation-delay: .06s; }
+.browser-watch-list > :nth-child(3) { animation-delay: .12s; }
+.browser-watch-list > :nth-child(4) { animation-delay: .18s; }
+.browser-watch-list > :nth-child(5) { animation-delay: .24s; }
+.browser-watch-list > :nth-child(6) { animation-delay: .3s; }
+.browser-video-card {
+  animation: browser-video-in .48s cubic-bezier(.22, .75, .22, 1) both;
+}
+.watch-modal-backdrop {
+  animation: watch-backdrop-in .2s ease-out both;
+}
+.watch-modal-card {
+  animation: watch-modal-in .34s cubic-bezier(.22, .75, .22, 1) both;
+}
+
+@keyframes browser-screen-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes browser-orientation-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes browser-list-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes browser-video-in {
+  from { opacity: 0; transform: translateY(14px) scale(.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes watch-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes watch-modal-in {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (min-width: 640px) {
+  .watch-modal-card { animation-name: watch-modal-in-desktop; }
+}
+@keyframes watch-modal-in-desktop {
+  from { opacity: 0; transform: translateY(10px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
