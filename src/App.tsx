@@ -22,7 +22,6 @@ import {
   History,
   LayoutDashboard,
   Link2,
-  Loader2,
   Menu,
   MoreHorizontal,
   Play,
@@ -75,6 +74,27 @@ function getTelegramUser(): TelegramUser | null {
 
 function getShortName(name?: string) {
   return Array.from((name ?? '').trim()).slice(0, 5).join('') || 'زائر';
+}
+
+function getUserDisplayName(user: TelegramUser | null, fallback = 'محمد العتيبي') {
+  if (user?.username) return `@${user.username.replace(/^@/, '')}`;
+  if (user) return [user.first_name, user.last_name].filter(Boolean).join(' ');
+  return fallback;
+}
+
+function getCompletedVideoIds() {
+  const completedIds = new Set<number>();
+  try {
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (!key?.startsWith('vidreward.watch.')) continue;
+      const session = JSON.parse(window.localStorage.getItem(key) ?? 'null') as Partial<AdvertisementSession> | null;
+      if (session?.credited && Number.isSafeInteger(session.videoId)) completedIds.add(Number(session.videoId));
+    }
+  } catch {
+    // Local storage may be unavailable or contain an invalid session.
+  }
+  return completedIds;
 }
 
 function UserAvatar({ user, className = '' }: { user: TelegramUser | null; className?: string }) {
@@ -265,6 +285,7 @@ function createBrowserWatchUrl(video: Video, user: TelegramUser | null) {
         id: user.id,
         first_name: user.first_name,
         last_name: user.last_name,
+        username: user.username,
         photo_url: user.photo_url,
       }),
     }).toString();
@@ -561,12 +582,14 @@ function VideoArtwork({ video, compact = false }: { video: Video; compact?: bool
 
 function CampaignsPage({
   videos,
+  telegramUser,
   tab,
   onTab,
   onAdd,
   onWatch,
 }: {
   videos: Video[];
+  telegramUser: TelegramUser | null;
   tab: 'all' | 'active' | 'drafts';
   onTab: (tab: 'all' | 'active' | 'drafts') => void;
   onAdd: () => void;
@@ -579,7 +602,10 @@ function CampaignsPage({
       <section className="animate-rise flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#1557ee]"><span className="h-1.5 w-1.5 rounded-full bg-[#23bdc9]" /> الثلاثاء، ٢٤ ديسمبر ٢٠٢٤</div>
-          <h1 className="font-display text-[29px] font-bold tracking-[-.04em] text-[#12234b] md:text-[36px]">صباح الخير، محمد <span className="text-[#1557ee]">.</span></h1>
+          <h1 className="font-display text-[29px] font-bold leading-tight tracking-[-.04em] text-[#12234b] md:text-[36px]">
+            <span className="block">صباح الخير،</span>
+            <span className="mt-1 block text-[#1557ee]" dir={telegramUser?.username ? 'ltr' : 'rtl'}>{getUserDisplayName(telegramUser)}.</span>
+          </h1>
           <p className="mt-2 text-sm text-slate-500">هذه لمحة سريعة عن أثر إعلاناتك اليوم.</p>
         </div>
         <button type="button" data-testid="button-add-video-main" onClick={onAdd} className="flex items-center justify-center gap-2 rounded-xl bg-[#1557ee] px-5 py-3 text-sm font-bold text-white shadow-[0_9px_22px_rgba(21,87,238,.2)] transition hover:-translate-y-0.5 hover:bg-[#0f48d0]">
@@ -726,7 +752,10 @@ function CreatorOverview({
       <section className="animate-rise flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#1557ee]"><span className="h-1.5 w-1.5 rounded-full bg-[#23bdc9]" /> الأربعاء، ٢٣ سبتمبر ٢٠٢٦</div>
-          <h1 className="font-display text-[29px] font-bold tracking-[-.04em] text-[#12234b] md:text-[36px]">صباح الخير، {telegramUser ? getShortName(telegramUser.first_name) : 'محمد'}<span className="text-[#1557ee]">:</span></h1>
+          <h1 className="font-display text-[29px] font-bold leading-tight tracking-[-.04em] text-[#12234b] md:text-[36px]">
+            <span className="block">صباح الخير،</span>
+            <span className="mt-1 block text-[#1557ee]" dir={telegramUser?.username ? 'ltr' : 'rtl'}>{getUserDisplayName(telegramUser, 'محمد')}.</span>
+          </h1>
           <p className="mt-2 text-sm text-slate-500">ملخص أداء حملاتك ورصيدك في مكان واحد.</p>
         </div>
         <button type="button" data-testid="button-add-video-main" onClick={onAdd} className="flex items-center justify-center gap-2 rounded-xl bg-[#1557ee] px-5 py-3 text-sm font-bold text-white shadow-[0_9px_22px_rgba(21,87,238,.2)] transition hover:-translate-y-0.5 hover:bg-[#0f48d0]">
@@ -793,6 +822,7 @@ function ViewerView({
   onWithdraw,
   insideTelegram,
   onOpenBrowser,
+  completedVideoIds,
 }: {
   videos: Video[];
   onSelect: (video: Video) => void;
@@ -800,8 +830,9 @@ function ViewerView({
   onWithdraw: () => void;
   insideTelegram: boolean;
   onOpenBrowser: (video: Video) => void;
+  completedVideoIds: Set<number>;
 }) {
-  const activeVideos = videos.filter((video) => video.status === 'نشط');
+  const activeVideos = videos.filter((video) => video.status === 'نشط' && !completedVideoIds.has(video.id));
   const totalVideoRewards = activeVideos.reduce((total, video) => total + calculateViewerReward(video.cpm), 0);
   return (
     <main className="mx-auto w-full max-w-[1370px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
@@ -846,7 +877,7 @@ function ViewerView({
               <ExternalLink className="h-4 w-4" /> اذهب للمتصفح للمشاهدة والربح
             </button>
           ) : (
-            <p className="mt-7 rounded-xl bg-slate-50 px-5 py-3 text-sm font-semibold text-slate-500">لا توجد فيديوهات نشطة حاليًا.</p>
+            <p className="mt-7 rounded-xl bg-slate-50 px-5 py-3 text-sm font-semibold text-slate-500">لا توجد فيديوهات جديدة للمشاهدة حاليًا.</p>
           )}
           <p className="mt-4 text-[10px] leading-5 text-slate-400">ستفتح صفحة مشاهدة مستقلة تعرض الفيديو المختار فقط.</p>
         </section>
@@ -867,10 +898,15 @@ function ViewerView({
         <div className="absolute bottom-8 left-8 hidden h-32 w-32 rounded-full border border-cyan-200/15 md:block"><div className="m-6 h-20 w-20 rounded-full border border-cyan-200/15" /></div>
       </section>
       <div className="mt-8 flex items-end justify-between">
-          <div><h2 className="font-display text-xl font-bold text-[#12234b]">اختر إعلاناً وابدأ</h2><p className="mt-1 text-xs text-slate-400">كل مشاهدة مكتملة تضيف إلى رصيدك</p></div>
+          <div><h2 className="font-display text-xl font-bold text-[#12234b]">الفيديوهات المتاحة</h2><p className="mt-1 text-xs text-slate-400">كل مشاهدة مكتملة تضيف إلى رصيدك</p></div>
         <span className="hidden rounded-full bg-[#eafbf8] px-3 py-1.5 text-[10px] font-bold text-[#159b89] sm:block">{activeVideos.length} فيديو متاح الآن</span>
       </div>
-      <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {activeVideos.length === 0 ? (
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center shadow-[var(--shadow-soft)]">
+          <div className="text-sm font-bold text-[#12234b]">لا توجد فيديوهات جديدة الآن</div>
+          <p className="mt-2 text-xs text-slate-400">ستظهر هنا الفيديوهات التي لم تشاهدها بعد.</p>
+        </div>
+      ) : <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {activeVideos.map((video, index) => (
           <button type="button" key={video.id} data-testid={`card-reward-${video.id}`} onClick={() => onSelect(video)} className="group overflow-hidden rounded-[20px] border border-slate-200 bg-white text-right shadow-[var(--shadow-soft)] transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-[var(--shadow-lift)]">
             <VideoArtwork video={video} />
@@ -887,7 +923,7 @@ function ViewerView({
             </div>
           </button>
         ))}
-      </div>
+      </div>}
         </>
       )}
     </main>
@@ -900,7 +936,7 @@ function WatchPanel({
   isPlaying,
   completed,
   session,
-  onPlay,
+  onOpenVideo,
   onComplete,
   onClose,
 }: {
@@ -909,22 +945,16 @@ function WatchPanel({
   isPlaying: boolean;
   completed: boolean;
   session: AdvertisementSession | null;
-  onPlay: () => void;
+  onOpenVideo: () => void;
   onComplete: () => void;
   onClose: () => void;
 }) {
   const [hasOpenedVideo, setHasOpenedVideo] = useState(false);
-  const [credited, setCredited] = useState(false);
+  const [rewardClaimed, setRewardClaimed] = useState(Boolean(session?.credited));
   const percent = Math.min(100, (progress / video.duration) * 100);
 
-  useEffect(() => {
-    if (completed && !credited) {
-      setCredited(true);
-      onComplete();
-    }
-  }, [completed, credited, onComplete]);
-
   const openVideo = () => {
+    onOpenVideo();
     window.open(video.link, '_blank', 'noopener,noreferrer');
     setHasOpenedVideo(true);
   };
@@ -935,7 +965,6 @@ function WatchPanel({
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 md:px-7">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-xs font-bold text-[#1557ee]"><Sparkles className="h-4 w-4" /> جلسة مشاهدة موثقة</div>
-            <code dir="ltr" className="mt-1 block truncate text-[9px] font-bold text-slate-400">Session ID: {session?.id ?? 'سيُنشأ عند البدء'}</code>
           </div>
           <IconButton label="إغلاق المشاهدة" onClick={onClose}><X className="h-4 w-4" /></IconButton>
         </div>
@@ -961,7 +990,7 @@ function WatchPanel({
             </div>
           </div>
           <div className="border-t border-slate-100 bg-[#fbfcff] p-5 md:border-r md:border-t-0 md:p-7">
-            {completed ? (
+            {rewardClaimed || session?.credited ? (
               <div className="flex h-full min-h-[270px] flex-col items-center justify-center text-center">
                 <div className="grid h-16 w-16 place-items-center rounded-full bg-[#eafbf8] text-[#159b89]"><Check className="h-8 w-8" /></div>
                 <h3 className="mt-5 text-xl font-bold text-[#12234b]">أحسنت، تمت المشاهدة</h3>
@@ -978,13 +1007,13 @@ function WatchPanel({
                 </div>
                 <div className="mt-5 space-y-3">
                   <div className="flex items-center justify-between text-xs"><span className="text-slate-500">المكافأة المتوقعة</span><span className="font-bold text-[#159b89]">+ {video.reward}</span></div>
-                   <div className="flex items-center justify-between text-xs"><span className="text-slate-500">حالة الجلسة</span><span className={`font-bold ${isPlaying ? 'text-[#1557ee]' : session?.status === 'paused' ? 'text-amber-600' : hasOpenedVideo ? 'text-[#159b89]' : 'text-slate-400'}`}>{isPlaying ? 'جارٍ التحقق' : session?.status === 'paused' ? 'غير مكتملة — عد للتحقق' : hasOpenedVideo ? 'تم فتح الفيديو' : 'افتح الفيديو أولاً'}</span></div>
+                   <div className="flex items-center justify-between text-xs"><span className="text-slate-500">حالة المشاهدة</span><span className={`font-bold ${isPlaying ? 'text-[#1557ee]' : completed ? 'text-[#159b89]' : hasOpenedVideo ? 'text-amber-600' : 'text-slate-400'}`}>{isPlaying ? 'الفيديو مفتوح — الوقت يُحتسب' : completed ? 'اكتملت المدة — جاهز للتحقق' : hasOpenedVideo ? 'المدة غير مكتملة' : 'افتح الفيديو أولاً'}</span></div>
                 </div>
-                 {session?.status === 'paused' && progress < video.duration && <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 p-3 text-[10px] leading-5 text-amber-700">لم تكتمل هذه الجلسة بعد. لا تُحتسب المكافأة حتى يسجل النظام {video.duration} ثانية مشاهدة فعلية.</div>}
-                <button type="button" data-testid="button-start-watch" onClick={onPlay} disabled={isPlaying || !hasOpenedVideo} className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1557ee] py-3.5 text-sm font-bold text-white shadow-[0_10px_20px_rgba(21,87,238,.2)] transition hover:bg-[#0f48d0] disabled:cursor-default disabled:opacity-60">
-                  {isPlaying ? <><Loader2 className="h-4 w-4 animate-spin" /> جارٍ التحقق من المشاهدة...</> : <><Check className="h-4 w-4" /> تحقق من إتمام المشاهدة</>}
+                 {!completed && hasOpenedVideo && !isPlaying && <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 p-3 text-[10px] leading-5 text-amber-700">لم تكتمل المدة بعد. ارجع إلى الفيديو وأكمل الوقت المطلوب؛ لن تُصرف المكافأة قبل إكماله.</div>}
+                <button type="button" data-testid="button-start-watch" onClick={() => { if (completed && !isPlaying) { onComplete(); setRewardClaimed(true); } }} disabled={isPlaying || !hasOpenedVideo || !completed} className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1557ee] py-3.5 text-sm font-bold text-white shadow-[0_10px_20px_rgba(21,87,238,.2)] transition hover:bg-[#0f48d0] disabled:cursor-not-allowed disabled:opacity-60">
+                  <Check className="h-4 w-4" /> {completed ? 'تحقق واستلم المكافأة' : 'تحقق بعد إكمال مدة المشاهدة'}
                 </button>
-                <div className="mt-5 flex items-center gap-2 text-[10px] leading-5 text-slate-400"><ShieldCheck className="h-4 w-4 shrink-0 text-[#159b89]" /> تتوقف الجلسة عند مغادرة الصفحة، ولا تُحتسب المكافأة إلا بعد وقت مشاهدة فعلي.</div>
+                <div className="mt-5 flex items-center gap-2 text-[10px] leading-5 text-slate-400"><ShieldCheck className="h-4 w-4 shrink-0 text-[#159b89]" /> يُحتسب الوقت أثناء وجود التطبيق بالخلفية، وتُصرف المكافأة بعد العودة والتحقق.</div>
               </>
             )}
           </div>
@@ -997,9 +1026,11 @@ function WatchPanel({
 function AddVideo({
   onBack,
   onSubmit,
+  telegramUser,
 }: {
   onBack: () => void;
   onSubmit: (video: Omit<Video, 'id' | 'views' | 'status' | 'created' | 'art'>) => void;
+  telegramUser: TelegramUser | null;
 }) {
   const [title, setTitle] = useState('');
   const [link, setLink] = useState('');
@@ -1007,6 +1038,7 @@ function AddVideo({
   const [submitted, setSubmitted] = useState(false);
   const selected = durationOptions.find((option) => option.seconds === duration) ?? durationOptions[1];
   const embedUrl = getEmbedUrl(link);
+  const publisherName = getUserDisplayName(telegramUser);
   const valid = title.trim().length > 2 && link.trim().length > 5;
 
   const submit = () => {
@@ -1015,7 +1047,7 @@ function AddVideo({
       title: title.trim(),
       link: link.trim(),
       duration,
-      creator: 'محمد العتيبي',
+      creator: publisherName,
       cpm: Number(selected.cpm),
       reward: formatUsd(calculateViewerReward(Number(selected.cpm))),
     });
@@ -1058,7 +1090,7 @@ function AddVideo({
           <div className="flex items-center justify-between"><div><h2 className="font-display text-lg font-bold text-[#12234b]">المعاينة المباشرة</h2><p className="mt-1 text-xs text-slate-400">هكذا سيظهر الفيديو للمشاهدين.</p></div><span className="flex items-center gap-1 rounded-full bg-[#eafbf8] px-2.5 py-1 text-[10px] font-bold text-[#159b89]"><span className="h-1.5 w-1.5 rounded-full bg-current" /> مباشر</span></div>
           <div className="mt-5 overflow-hidden rounded-2xl bg-[#0e2452]">
             <div className="aspect-video">{embedUrl ? <iframe title="معاينة الفيديو" src={embedUrl} className="h-full w-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /> : <div className="media-art relative grid h-full place-items-center"><div className="text-center text-white/80"><div className="mx-auto grid h-12 w-12 place-items-center rounded-full border border-white/30 bg-white/15"><Play className="h-5 w-5 fill-current" /></div><p className="mt-3 text-[11px]">ستظهر المعاينة هنا</p></div></div>}</div>
-            <div className="border-t border-white/10 bg-[#0b1e47] p-4"><h3 className="truncate text-sm font-bold text-white">{title || 'عنوان الفيديو سيظهر هنا'}</h3><div className="mt-2 flex items-center justify-between text-[10px] text-blue-100/60"><span>محمد العتيبي</span><span className="flex items-center gap-1"><Clock3 className="h-3 w-3" /> {duration} ثانية</span></div></div>
+            <div className="border-t border-white/10 bg-[#0b1e47] p-4"><h3 className="truncate text-sm font-bold text-white">{title || 'عنوان الفيديو سيظهر هنا'}</h3><div className="mt-2 flex items-center justify-between text-[10px] text-blue-100/60"><span dir={telegramUser?.username ? 'ltr' : 'rtl'}>{publisherName}</span><span className="flex items-center gap-1"><Clock3 className="h-3 w-3" /> {duration} ثانية</span></div></div>
           </div>
           <div className="mt-5 rounded-xl border border-dashed border-slate-200 p-4 text-[11px] leading-6 text-slate-400"><div className="mb-1 flex items-center gap-2 font-bold text-slate-600"><PlaySquare className="h-4 w-4 text-[#f04444]" /> روابط مدعومة</div>يمكنك استخدام روابط YouTube أو أي رابط فيديو مباشر قابل للتشغيل.</div>
         </section>
@@ -1425,6 +1457,7 @@ function Home() {
   const [telegramUser, setTelegramUser] = useState<TelegramUser | null>(() => getTelegramUser());
   const [insideTelegram, setInsideTelegram] = useState(() => Boolean(window.Telegram?.WebApp?.initData));
   const [videos, setVideos] = useState<Video[]>(initialVideos);
+  const [completedVideoIds, setCompletedVideoIds] = useState<Set<number>>(() => getCompletedVideoIds());
   const [tab, setTab] = useState<'all' | 'active' | 'drafts'>('all');
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [progress, setProgress] = useState(0);
@@ -1438,6 +1471,7 @@ function Home() {
   const [watchSession, setWatchSession] = useState<AdvertisementSession | null>(null);
   const watchElapsedRef = useRef(0);
   const watchSegmentStartedRef = useRef<number | null>(null);
+  const externalWatchPendingRef = useRef(false);
   const watchSessionRef = useRef<AdvertisementSession | null>(null);
   const creditedVideosRef = useRef(new Set<number>());
   const toastSequenceRef = useRef(0);
@@ -1485,33 +1519,34 @@ function Home() {
   };
 
   useEffect(() => {
-    if (!isPlaying || !selectedVideo || watchSegmentStartedRef.current === null) return;
-    const timer = window.setInterval(() => {
-      if (document.visibilityState !== 'visible' || watchSegmentStartedRef.current === null) return;
-      const elapsed = Math.min(
-        selectedVideo.duration * 1000,
-        watchElapsedRef.current + (Date.now() - watchSegmentStartedRef.current),
-      );
-      watchElapsedRef.current = elapsed;
-      setProgress(Math.floor(elapsed / 1000));
-      saveWatchSession(selectedVideo, elapsed, elapsed >= selectedVideo.duration * 1000 ? 'completed' : 'active');
-      if (elapsed >= selectedVideo.duration * 1000) {
-        watchSegmentStartedRef.current = null;
-        setIsPlaying(false);
-      }
-    }, 250);
-    return () => window.clearInterval(timer);
-  }, [isPlaying, selectedVideo]);
-
-  useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden' && isPlaying && selectedVideo && watchSegmentStartedRef.current !== null) {
+      if (document.visibilityState === 'hidden') {
+        if (
+          externalWatchPendingRef.current &&
+          selectedVideo &&
+          watchSegmentStartedRef.current === null &&
+          !creditedVideosRef.current.has(selectedVideo.id)
+        ) {
+          const startedAt = Date.now();
+          watchSegmentStartedRef.current = startedAt;
+          setIsPlaying(true);
+          const currentSession = watchSessionRef.current;
+          if (currentSession?.videoId === selectedVideo.id) {
+            watchSessionRef.current = { ...currentSession, status: 'active', lastStartedAt: startedAt };
+          }
+          saveWatchSession(selectedVideo, watchElapsedRef.current, 'active');
+        }
+        return;
+      }
+
+      if (document.visibilityState === 'visible' && selectedVideo && watchSegmentStartedRef.current !== null) {
         const elapsed = Math.min(
           selectedVideo.duration * 1000,
           watchElapsedRef.current + (Date.now() - watchSegmentStartedRef.current),
         );
         watchElapsedRef.current = elapsed;
         watchSegmentStartedRef.current = null;
+        externalWatchPendingRef.current = false;
         setProgress(Math.floor(elapsed / 1000));
         setIsPlaying(false);
         saveWatchSession(selectedVideo, elapsed, elapsed >= selectedVideo.duration * 1000 ? 'completed' : 'paused');
@@ -1521,8 +1556,12 @@ function Home() {
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [isPlaying, selectedVideo]);
+    window.addEventListener('focus', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
+  }, [selectedVideo]);
 
   const completed = Boolean(selectedVideo && progress >= selectedVideo.duration);
   const viewerCount = useMemo(() => videos.filter((video) => video.status === 'نشط').length, [videos]);
@@ -1557,8 +1596,9 @@ function Home() {
     watchSessionRef.current = nextSession;
     setWatchSession(nextSession);
     if (restoredCredited) creditedVideosRef.current.add(video.id);
+    externalWatchPendingRef.current = false;
     if (restoredElapsed > 0 && restoredElapsed < video.duration * 1000 && !restoredCredited) {
-      notify('warning', 'الإعلان غير مكتمل', `تمت استعادة الجلسة ${nextSession.id} دون مكافأة. أكمل المدة المطلوبة ثم أعد التحقق.`);
+      notify('warning', 'الإعلان غير مكتمل', 'تمت استعادة تقدم المشاهدة دون مكافأة. أكمل المدة المطلوبة ثم تحقق.');
     }
     watchElapsedRef.current = restoredElapsed;
     watchSegmentStartedRef.current = null;
@@ -1600,7 +1640,8 @@ function Home() {
   const creditViewer = (video: Video) => {
     if (creditedVideosRef.current.has(video.id)) return;
     creditedVideosRef.current.add(video.id);
-    saveWatchSession(video, video.duration * 1000);
+    setCompletedVideoIds((current) => new Set(current).add(video.id));
+    saveWatchSession(video, video.duration * 1000, 'completed');
     setViewerBalance((current) => Number((current + calculateViewerReward(video.cpm)).toFixed(4)));
     notify('success', 'تمت إضافة المكافأة', `أضيفت ${video.reward} إلى رصيدك بعد إكمال المدة المطلوبة.`);
   };
@@ -1622,13 +1663,13 @@ function Home() {
         {mobileMenu && <button type="button" aria-label="إغلاق خلفية القائمة" data-testid="button-close-menu-overlay" onClick={() => setMobileMenu(false)} className="fixed inset-0 z-40 bg-[#061333]/30 backdrop-blur-sm lg:hidden" />}
         <div className="min-w-0 flex-1 overflow-hidden rounded-none bg-[#f7f9fc] lg:rounded-[26px] lg:border lg:border-slate-200/80 lg:bg-[#fbfcfe]">
           <Header mode={mode} screen={screen} telegramUser={telegramUser} onMenu={() => setMobileMenu(true)} onAdd={() => { setMode('creator'); setScreen('add'); }} />
-          {screen === 'add' && mode === 'creator' ? <AddVideo onBack={() => setScreen('campaigns')} onSubmit={(video) => { addVideo(video); notify('success', 'تم نشر الإعلان', 'أصبح الفيديو نشطًا ويمكن للمشاهدين اكتشافه الآن.'); }} />
+          {screen === 'add' && mode === 'creator' ? <AddVideo telegramUser={telegramUser} onBack={() => setScreen('campaigns')} onSubmit={(video) => { addVideo(video); notify('success', 'تم نشر الإعلان', 'أصبح الفيديو نشطًا ويمكن للمشاهدين اكتشافه الآن.'); }} />
             : screen === 'deposit' && mode === 'creator' ? <DepositPage advertiserBalance={advertiserBalance} telegramUser={telegramUser} onDepositRequested={requestDeposit} onDepositCompleted={completeDeposit} onDepositExpired={expireDeposit} />
               : screen === 'deposit-history' && mode === 'creator' ? <DepositHistoryPage records={depositHistory} />
                 : screen === 'withdraw' && mode === 'viewer' ? <WithdrawPage viewerBalance={viewerBalance} telegramUser={telegramUser} onWithdraw={withdrawEarnings} />
                   : screen === 'withdraw-history' && mode === 'viewer' ? <WithdrawHistoryPage records={withdrawHistory} />
-                : screen === 'campaigns' && mode === 'creator' ? <CampaignsPage videos={videos} tab={tab} onTab={setTab} onAdd={() => setScreen('add')} onWatch={selectVideo} />
-                : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} balance={viewerBalance} onWithdraw={() => setScreen('withdraw')} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} />
+                : screen === 'campaigns' && mode === 'creator' ? <CampaignsPage videos={videos} telegramUser={telegramUser} tab={tab} onTab={setTab} onAdd={() => setScreen('add')} onWatch={selectVideo} />
+                : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} balance={viewerBalance} onWithdraw={() => setScreen('withdraw')} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} />
                   : <CreatorOverview advertiserBalance={advertiserBalance} telegramUser={telegramUser} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
           <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 p-2 backdrop-blur lg:hidden">
             <div className="mx-auto flex max-w-md justify-around">
@@ -1650,31 +1691,10 @@ function Home() {
           </div>
         </div>
       </div>
-      {selectedVideo && <WatchPanel video={selectedVideo} progress={progress} isPlaying={isPlaying} completed={completed} session={watchSession} onPlay={() => {
-        if (!completed && document.visibilityState === 'visible') {
-          watchSegmentStartedRef.current = Date.now();
-          const currentSession = watchSessionRef.current ?? {
-            id: createUniqueIdentifier('ADS'),
-            videoId: selectedVideo.id,
-            elapsedMs: watchElapsedRef.current,
-            requiredMs: selectedVideo.duration * 1000,
-            status: 'paused' as AdvertisementSessionStatus,
-            credited: creditedVideosRef.current.has(selectedVideo.id),
-          };
-          watchSessionRef.current = { ...currentSession, status: 'active', lastStartedAt: Date.now() };
-          setWatchSession(watchSessionRef.current);
-          saveWatchSession(selectedVideo, watchElapsedRef.current, 'active');
-          setIsPlaying(true);
-        }
+      {selectedVideo && <WatchPanel video={selectedVideo} progress={progress} isPlaying={isPlaying} completed={completed} session={watchSession} onOpenVideo={() => {
+        if (!creditedVideosRef.current.has(selectedVideo.id)) externalWatchPendingRef.current = true;
       }} onComplete={() => creditViewer(selectedVideo)} onClose={() => {
-        if (watchSegmentStartedRef.current !== null) {
-          watchElapsedRef.current = Math.min(selectedVideo.duration * 1000, watchElapsedRef.current + (Date.now() - watchSegmentStartedRef.current));
-          watchSegmentStartedRef.current = null;
-          saveWatchSession(selectedVideo, watchElapsedRef.current, watchElapsedRef.current >= selectedVideo.duration * 1000 ? 'completed' : 'paused');
-          if (watchElapsedRef.current < selectedVideo.duration * 1000) {
-            notify('warning', 'Verification Required', 'لم تكتمل مشاهدة الإعلان، لذلك لم تُحتسب المكافأة.');
-          }
-        }
+        externalWatchPendingRef.current = false;
         setSelectedVideo(null);
         setIsPlaying(false);
         setWatchSession(null);
@@ -1706,6 +1726,7 @@ function ExternalWatchPage() {
           id: Number(parsed.id),
           first_name: parsed.first_name.slice(0, 80),
           last_name: typeof parsed.last_name === 'string' ? parsed.last_name.slice(0, 80) : undefined,
+          username: typeof parsed.username === 'string' ? parsed.username.replace(/^@/, '').slice(0, 64) : undefined,
           photo_url: photoUrl,
         };
       }
@@ -1725,7 +1746,7 @@ function ExternalWatchPage() {
           {telegramUser && (
             <div className="flex min-w-0 items-center gap-2.5 rounded-xl bg-white/[.06] px-3 py-2">
               <UserAvatar user={telegramUser} className="ring-0" />
-              <div className="min-w-0"><div className="truncate text-xs font-bold">{telegramUser.first_name} {telegramUser.last_name ?? ''}</div><div className="mt-0.5 text-[10px] text-blue-100/60" dir="ltr">ID: {telegramUser.id}</div></div>
+              <div className="min-w-0"><div className="truncate text-xs font-bold">{telegramUser.first_name} {telegramUser.last_name ?? ''}</div>{telegramUser.username && <div className="mt-0.5 truncate text-[10px] text-cyan-200" dir="ltr">@{telegramUser.username}</div>}<div className="mt-0.5 text-[10px] text-blue-100/60" dir="ltr">ID: {telegramUser.id}</div></div>
             </div>
           )}
         </header>
