@@ -1266,6 +1266,40 @@ function HistoryStat({
   );
 }
 
+function CompactCopyableIdentifier({
+  label,
+  value,
+  tone = 'text-[#12234b]',
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      // Clipboard access can be unavailable in an embedded preview.
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  };
+
+  return (
+    <div className="min-w-0">
+      <div className="truncate text-[9px] font-semibold text-slate-400">{label}</div>
+      <div className="mt-0.5 flex min-w-0 items-center gap-1">
+        <code dir="ltr" className={`min-w-0 flex-1 truncate text-[10px] font-bold ${tone}`} title={value}>{value}</code>
+        <button type="button" onClick={copy} className="grid h-5 w-5 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-[#edf3ff] hover:text-[#1557ee]" aria-label={`نسخ ${label}`}>
+          {copied ? <Check className="h-2.5 w-2.5 text-[#159b89]" /> : <Copy className="h-2.5 w-2.5" />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CompactHistoryRow({
   record,
   kind,
@@ -1278,11 +1312,8 @@ function CompactHistoryRow({
   const iconTone = isDeposit ? 'bg-[#edf3ff] text-[#1557ee]' : 'bg-[#eafbf8] text-[#159b89]';
 
   return (
-    <div className="overflow-x-auto border-t border-slate-100 first:border-t-0">
-      <div
-        data-testid={`row-${kind}-${record.id}`}
-        className="grid h-[60px] min-w-[720px] grid-cols-[1.45fr_.9fr_1.25fr_1.25fr_auto] items-center gap-4 px-5 transition hover:bg-[#fbfcff] md:px-6"
-      >
+    <div data-testid={`row-${kind}-${record.id}`} className="overflow-x-hidden border-t border-slate-100 first:border-t-0 md:overflow-x-auto">
+      <div className="hidden h-[60px] min-w-[1180px] grid-cols-[1.25fr_.9fr_.8fr_1.15fr_1.1fr_1.2fr_auto_1.5fr] items-center gap-4 px-5 transition hover:bg-[#fbfcff] md:grid md:px-6">
         <div className="flex min-w-0 items-center gap-2.5">
           <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-[10px] ${iconTone}`}>
             {isDeposit ? <ArrowDownLeft className="h-3.5 w-3.5" /> : <ArrowUpLeft className="h-3.5 w-3.5" />}
@@ -1297,18 +1328,48 @@ function CompactHistoryRow({
           <div className="mt-0.5 truncate text-[10px] font-bold text-slate-600">{methodLabel(record.method)}</div>
         </div>
         <div className="min-w-0">
-          <div className="text-[9px] font-semibold text-slate-400">الوجهة</div>
+          <div className="text-[9px] font-semibold text-slate-400">نوع Memo</div>
+          <div className="mt-0.5 truncate text-[10px] font-bold text-slate-600">Memo / Tag</div>
+        </div>
+        <CompactCopyableIdentifier label="Memo / Tag" value={record.memoTag} tone="text-[#159b89]" />
+        <CompactCopyableIdentifier label="رقم العملية" value={record.id} tone="text-[#1557ee]" />
+        <div className="min-w-0">
+          <div className="truncate text-[9px] font-semibold text-slate-400">{record.method === 'binance' ? 'الوجهة · Binance ID' : 'الوجهة'}</div>
           <code dir="ltr" className="mt-0.5 block truncate text-[10px] font-bold text-slate-600" title={record.destination}>{record.destination}</code>
         </div>
-        <div className="min-w-0">
-          <div className="text-[9px] font-semibold text-slate-400">المعرّف / Memo</div>
-          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-            <code dir="ltr" className="truncate text-[10px] font-bold text-[#1557ee]" title={`${record.id} · ${record.memoTag}`}>{record.id}</code>
-            <span className="shrink-0 text-[9px] text-slate-300">·</span>
-            <code dir="ltr" className="truncate text-[10px] font-bold text-[#159b89]" title={record.memoTag}>{record.memoTag}</code>
-          </div>
-        </div>
         <StatusBadge status={record.status} />
+        <CompactCopyableIdentifier label="TXID الشبكة" value={record.blockchainTxId ?? 'بعد التأكيد'} tone="text-[#253961]" />
+      </div>
+      <div className="grid gap-3 px-4 py-3 md:hidden">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-[10px] ${iconTone}`}>
+              {isDeposit ? <ArrowDownLeft className="h-3.5 w-3.5" /> : <ArrowUpLeft className="h-3.5 w-3.5" />}
+            </span>
+            <div className="min-w-0">
+              <div className="truncate text-[11px] font-bold text-[#12234b]">{isDeposit ? 'إيداع' : 'سحب'} {amount} USDT</div>
+              <div className="mt-0.5 truncate text-[9px] text-slate-400">{record.createdAt}</div>
+            </div>
+          </div>
+          <StatusBadge status={record.status} />
+        </div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-[14px] bg-[#fbfcff] px-3 py-2.5">
+          <div className="min-w-0">
+            <div className="text-[9px] font-semibold text-slate-400">الطريقة</div>
+            <div className="mt-0.5 truncate text-[10px] font-bold text-slate-600">{methodLabel(record.method)}</div>
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-[9px] font-semibold text-slate-400">{record.method === 'binance' ? 'الوجهة · Binance ID' : 'الوجهة'}</div>
+            <code dir="ltr" className="mt-0.5 block truncate text-[10px] font-bold text-slate-600" title={record.destination}>{record.destination}</code>
+          </div>
+          <div className="min-w-0">
+            <div className="text-[9px] font-semibold text-slate-400">نوع Memo</div>
+            <div className="mt-0.5 truncate text-[10px] font-bold text-slate-600">Memo / Tag</div>
+          </div>
+          <CompactCopyableIdentifier label="Memo / Tag" value={record.memoTag} tone="text-[#159b89]" />
+          <CompactCopyableIdentifier label="رقم العملية" value={record.id} tone="text-[#1557ee]" />
+          <CompactCopyableIdentifier label="TXID الشبكة" value={record.blockchainTxId ?? 'بعد التأكيد'} tone="text-[#253961]" />
+        </div>
       </div>
     </div>
   );
@@ -1468,16 +1529,15 @@ function DepositPage({
                   value={invoice.destination}
                   action={<button type="button" data-testid="button-copy-deposit-destination" onClick={() => copyValue(invoice.destination, 'destination')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee] shadow-sm transition hover:bg-[#edf3ff]" aria-label="نسخ وجهة الإيداع">{copied === 'destination' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</button>}
                 />
-                <CompactInvoiceValue
-                  label="Memo / Tag فريد لهذه العملية"
-                  value={invoice.memoTag}
-                  tone="text-[#159b89]"
-                  action={<button type="button" data-testid="button-copy-deposit-memo" onClick={() => copyValue(invoice.memoTag, 'memo')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee] shadow-sm transition hover:bg-[#edf3ff]" aria-label="نسخ Memo Tag">{copied === 'memo' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</button>}
-                />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <CompactInvoiceValue label="المعرّف الداخلي للفاتورة" value={invoice.id} />
-                {invoice.telegramUserId !== null && <CompactInvoiceValue label="معرّف Telegram المرتبط" value={String(invoice.telegramUserId)} tone="text-[#1557ee]" />}
+                <div className="min-w-0">
+                  <CompactInvoiceValue
+                    label="Memo / Tag فريد لهذه العملية"
+                    value={invoice.memoTag}
+                    tone="text-[#159b89]"
+                    action={<button type="button" data-testid="button-copy-deposit-memo" onClick={() => copyValue(invoice.memoTag, 'memo')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee] shadow-sm transition hover:bg-[#edf3ff]" aria-label="نسخ Memo Tag">{copied === 'memo' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</button>}
+                  />
+                  <p className="mt-1 px-1 text-[9px] font-semibold leading-4 text-slate-400">الصق هذا الرمز في خانة الملاحظات عند إرسال الإيداع.</p>
+                </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
                 <CompactInvoiceValue label="المبلغ" value={`${invoice.amount.toFixed(2)} USDT`} />
