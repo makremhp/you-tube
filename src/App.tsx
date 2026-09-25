@@ -29,7 +29,6 @@ import {
   Plus,
   QrCode,
   RefreshCw,
-  Search,
   Settings2,
   ShieldCheck,
   Sparkles,
@@ -462,7 +461,6 @@ function Header({
   onMenu: () => void;
   onAdd: () => void;
 }) {
-  const [searchOpen, setSearchOpen] = useState(false);
   const pageTitle = screen === 'deposit'
     ? 'إيداع رصيد'
     : screen === 'withdraw'
@@ -497,19 +495,6 @@ function Header({
             <Plus className="h-4 w-4" /> إضافة إعلان
           </button>
         )}
-        <div className="relative">
-          <IconButton label="البحث" onClick={() => setSearchOpen((current) => !current)}><Search className="h-4 w-4" /></IconButton>
-          {searchOpen && (
-            <div className="absolute left-0 top-12 z-40 w-[min(80vw,280px)] rounded-2xl border border-slate-200 bg-white p-3 text-right shadow-[var(--shadow-lift)]" dir="rtl">
-              <div className="mb-2 text-[10px] font-bold text-slate-500">ابحث في مساحة VidReward</div>
-              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-[#fbfcff] px-3 py-2.5">
-                <Search className="h-3.5 w-3.5 text-slate-400" />
-                <input autoFocus data-testid="input-global-search" placeholder="عنوان إعلان أو سجل..." className="min-w-0 flex-1 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-300" onKeyDown={(event) => { if (event.key === 'Escape') setSearchOpen(false); }} />
-              </div>
-              <p className="mt-2 text-[10px] leading-5 text-slate-400">اكتب للعثور على ما تحتاجه بسرعة.</p>
-            </div>
-          )}
-        </div>
         <div className="hidden h-9 w-px bg-slate-200 sm:block" />
         <UserAvatar user={telegramUser} />
       </div>
@@ -806,7 +791,6 @@ function ViewerView({
   onSelect,
   balance,
   onWithdraw,
-  telegramUser,
   insideTelegram,
   onOpenBrowser,
 }: {
@@ -814,23 +798,31 @@ function ViewerView({
   onSelect: (video: Video) => void;
   balance: number;
   onWithdraw: () => void;
-  telegramUser: TelegramUser | null;
   insideTelegram: boolean;
   onOpenBrowser: (video: Video) => void;
 }) {
   const activeVideos = videos.filter((video) => video.status === 'نشط');
+  const totalVideoRewards = activeVideos.reduce((total, video) => total + calculateViewerReward(video.cpm), 0);
   return (
     <main className="mx-auto w-full max-w-[1370px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
-      <section className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-blue-100 bg-white px-5 py-4 shadow-[var(--shadow-soft)]">
-        <div>
-          <h1 className="font-display text-xl font-bold text-[#12234b]">صباح الخير، {getShortName(telegramUser?.first_name)}<span className="text-[#1557ee]">:</span></h1>
-          {telegramUser ? (
-            <p className="mt-1 text-[11px] text-slate-400" dir="ltr">Telegram ID: {telegramUser.id}</p>
-          ) : (
-            <p className="mt-1 text-[11px] text-slate-400">أهلاً بك في مساحة المشاهدة والربح</p>
-          )}
+      <section className="mb-5 grid grid-cols-2 gap-3 sm:gap-4">
+        <div className="rounded-[20px] border border-blue-100 bg-white p-4 shadow-[var(--shadow-soft)] sm:p-5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#edf3ff] text-[#1557ee]"><Film className="h-5 w-5" /></span>
+            <span className="rounded-full bg-[#f4f8ff] px-2.5 py-1 text-[9px] font-bold text-[#1557ee]">متاحة الآن</span>
+          </div>
+          <div className="mt-4 text-[11px] font-semibold leading-5 text-slate-400 sm:text-xs">إجمالي الفيديوهات المتاحة</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight text-[#12234b] sm:text-3xl">{activeVideos.length}</div>
         </div>
-        {telegramUser && <span className="max-w-full truncate rounded-full bg-[#f4f8ff] px-3 py-2 text-[10px] font-semibold text-[#1557ee]">حساب Telegram مرتبط</span>}
+        <div className="rounded-[20px] border border-emerald-100 bg-gradient-to-br from-white to-[#f2fbf9] p-4 shadow-[var(--shadow-soft)] sm:p-5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#eafbf8] text-[#159b89]"><DollarSign className="h-5 w-5" /></span>
+            <span className="rounded-full bg-white px-2.5 py-1 text-[9px] font-bold text-[#159b89]">USD</span>
+          </div>
+          <div className="mt-4 text-[11px] font-semibold leading-5 text-slate-400 sm:text-xs">إجمالي مكافآت الفيديوهات</div>
+          <div className="mt-1 text-2xl font-bold tracking-tight text-[#159b89] sm:text-3xl">{formatUsd(totalVideoRewards)}</div>
+          <div className="mt-1 text-[9px] text-slate-400">عند إكمال كل فيديو مرة واحدة</div>
+        </div>
       </section>
       <section className="mb-5 flex flex-col gap-4 rounded-[22px] border border-blue-100 bg-white p-5 shadow-[var(--shadow-soft)] sm:flex-row sm:items-center sm:justify-between md:p-6">
         <div className="flex items-center gap-4">
@@ -1636,7 +1628,7 @@ function Home() {
                 : screen === 'withdraw' && mode === 'viewer' ? <WithdrawPage viewerBalance={viewerBalance} telegramUser={telegramUser} onWithdraw={withdrawEarnings} />
                   : screen === 'withdraw-history' && mode === 'viewer' ? <WithdrawHistoryPage records={withdrawHistory} />
                 : screen === 'campaigns' && mode === 'creator' ? <CampaignsPage videos={videos} tab={tab} onTab={setTab} onAdd={() => setScreen('add')} onWatch={selectVideo} />
-                : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} balance={viewerBalance} onWithdraw={() => setScreen('withdraw')} onSelect={selectVideo} telegramUser={telegramUser} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} />
+                : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} balance={viewerBalance} onWithdraw={() => setScreen('withdraw')} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} />
                   : <CreatorOverview advertiserBalance={advertiserBalance} telegramUser={telegramUser} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
           <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 p-2 backdrop-blur lg:hidden">
             <div className="mx-auto flex max-w-md justify-around">
