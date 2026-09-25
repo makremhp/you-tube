@@ -72,6 +72,27 @@ function getTelegramUser(): TelegramUser | null {
   return window.Telegram?.WebApp?.initDataUnsafe?.user ?? null;
 }
 
+function getTelegramUserFromHash(): TelegramUser | null {
+  try {
+    const serializedUser = new URLSearchParams(window.location.hash.slice(1)).get('telegram');
+    if (!serializedUser) return null;
+    const parsed = JSON.parse(serializedUser) as Partial<TelegramUser>;
+    const photoUrl = typeof parsed.photo_url === 'string' && /^https?:\/\//i.test(parsed.photo_url)
+      ? parsed.photo_url
+      : undefined;
+    if (!Number.isSafeInteger(parsed.id) || Number(parsed.id) <= 0 || typeof parsed.first_name !== 'string') return null;
+    return {
+      id: Number(parsed.id),
+      first_name: parsed.first_name.slice(0, 80),
+      last_name: typeof parsed.last_name === 'string' ? parsed.last_name.slice(0, 80) : undefined,
+      username: typeof parsed.username === 'string' ? parsed.username.replace(/^@/, '').slice(0, 64) : undefined,
+      photo_url: photoUrl,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function getShortName(name?: string) {
   return Array.from((name ?? '').trim()).slice(0, 5).join('') || 'زائر';
 }
@@ -273,15 +294,10 @@ function getVideoThumbnail(url: string) {
   return videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '';
 }
 
-function createBrowserWatchUrl(video: Video, user: TelegramUser | null) {
+function createBrowserWatchUrl(user: TelegramUser | null) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-  const url = new URL(`${basePath}/watch`, window.location.origin);
-  const videoId = getYoutubeVideoId(video.link);
-  if (videoId) url.searchParams.set('v', videoId);
-  url.searchParams.set('title', video.title);
-  url.searchParams.set('creator', video.creator);
-  url.searchParams.set('duration', String(video.duration));
-  url.searchParams.set('reward', video.reward);
+  const url = new URL(`${basePath}/`, window.location.origin);
+  url.searchParams.set('view', 'earn');
   if (user) {
     // The fragment is not sent to the web server; it carries display-only profile context.
     url.hash = new URLSearchParams({
@@ -1456,10 +1472,11 @@ const initialWithdrawHistory: WithdrawRecord[] = [
 ];
 
 function Home() {
-  const [mode, setMode] = useState<'creator' | 'viewer'>('creator');
-  const [screen, setScreen] = useState<AppScreen>('overview');
-  const [telegramUser, setTelegramUser] = useState<TelegramUser | null>(() => getTelegramUser());
-  const [insideTelegram, setInsideTelegram] = useState(() => Boolean(window.Telegram?.WebApp?.initData));
+  const [browserEarningPage] = useState(() => new URLSearchParams(window.location.search).get('view') === 'earn');
+  const [mode, setMode] = useState<'creator' | 'viewer'>(() => browserEarningPage ? 'viewer' : 'creator');
+  const [screen, setScreen] = useState<AppScreen>(() => browserEarningPage ? 'watch' : 'overview');
+  const [telegramUser, setTelegramUser] = useState<TelegramUser | null>(() => getTelegramUser() ?? getTelegramUserFromHash());
+  const [insideTelegram, setInsideTelegram] = useState(() => !browserEarningPage && Boolean(window.Telegram?.WebApp?.initData));
   const [videos, setVideos] = useState<Video[]>(initialVideos);
   const [completedVideoIds, setCompletedVideoIds] = useState<Set<number>>(() => getCompletedVideoIds());
   const [tab, setTab] = useState<'all' | 'active' | 'drafts'>('all');
@@ -1482,13 +1499,13 @@ function Home() {
 
   useEffect(() => {
     const webApp = window.Telegram?.WebApp;
-    if (webApp?.initData) {
+    if (webApp?.initData && !browserEarningPage) {
       webApp.ready();
       webApp.expand();
       setTelegramUser(webApp.initDataUnsafe?.user ?? null);
       setInsideTelegram(true);
     }
-  }, []);
+  }, [browserEarningPage]);
 
   const saveWatchSession = (
     video: Video,
@@ -1650,8 +1667,8 @@ function Home() {
     notify('success', 'تمت إضافة المكافأة', `أضيفت ${video.reward} إلى رصيدك بعد إكمال المدة المطلوبة.`);
   };
 
-  const openWatchInBrowser = (video: Video) => {
-    const url = createBrowserWatchUrl(video, telegramUser);
+  const openWatchInBrowser = (_video: Video) => {
+    const url = createBrowserWatchUrl(telegramUser);
     const webApp = window.Telegram?.WebApp;
     if (webApp?.openLink) {
       webApp.openLink(url, { try_instant_view: false });
@@ -1662,11 +1679,11 @@ function Home() {
 
   return (
     <div className="min-h-[100dvh] bg-[#f7f9fc] text-[#12234b]">
-      <div className="flex min-h-[100dvh] lg:gap-5 lg:p-5">
-        <Sidebar mode={mode} screen={screen} telegramUser={telegramUser} onModeChange={(nextMode) => { setMode(nextMode); setScreen(nextMode === 'creator' ? 'overview' : 'watch'); }} onNavigate={setScreen} onAdd={() => { setMode('creator'); setScreen('add'); }} open={mobileMenu} onClose={() => setMobileMenu(false)} />
-        {mobileMenu && <button type="button" aria-label="إغلاق خلفية القائمة" data-testid="button-close-menu-overlay" onClick={() => setMobileMenu(false)} className="fixed inset-0 z-40 bg-[#061333]/30 backdrop-blur-sm lg:hidden" />}
-        <div className="min-w-0 flex-1 overflow-hidden rounded-none bg-[#f7f9fc] lg:rounded-[26px] lg:border lg:border-slate-200/80 lg:bg-[#fbfcfe]">
-          <Header mode={mode} screen={screen} telegramUser={telegramUser} onMenu={() => setMobileMenu(true)} onAdd={() => { setMode('creator'); setScreen('add'); }} />
+      <div className={`flex min-h-[100dvh] ${browserEarningPage ? '' : 'lg:gap-5 lg:p-5'}`}>
+        {!browserEarningPage && <Sidebar mode={mode} screen={screen} telegramUser={telegramUser} onModeChange={(nextMode) => { setMode(nextMode); setScreen(nextMode === 'creator' ? 'overview' : 'watch'); }} onNavigate={setScreen} onAdd={() => { setMode('creator'); setScreen('add'); }} open={mobileMenu} onClose={() => setMobileMenu(false)} />}
+        {!browserEarningPage && mobileMenu && <button type="button" aria-label="إغلاق خلفية القائمة" data-testid="button-close-menu-overlay" onClick={() => setMobileMenu(false)} className="fixed inset-0 z-40 bg-[#061333]/30 backdrop-blur-sm lg:hidden" />}
+        <div className={`min-w-0 flex-1 ${browserEarningPage ? '' : 'overflow-hidden rounded-none bg-[#f7f9fc] lg:rounded-[26px] lg:border lg:border-slate-200/80 lg:bg-[#fbfcfe]'}`}>
+          {!browserEarningPage && <Header mode={mode} screen={screen} telegramUser={telegramUser} onMenu={() => setMobileMenu(true)} onAdd={() => { setMode('creator'); setScreen('add'); }} />}
           {screen === 'add' && mode === 'creator' ? <AddVideo telegramUser={telegramUser} onBack={() => setScreen('campaigns')} onSubmit={(video) => { addVideo(video); notify('success', 'تم نشر الإعلان', 'أصبح الفيديو نشطًا ويمكن للمشاهدين اكتشافه الآن.'); }} />
             : screen === 'deposit' && mode === 'creator' ? <DepositPage advertiserBalance={advertiserBalance} telegramUser={telegramUser} onDepositRequested={requestDeposit} onDepositCompleted={completeDeposit} onDepositExpired={expireDeposit} />
               : screen === 'deposit-history' && mode === 'creator' ? <DepositHistoryPage records={depositHistory} />
@@ -1675,7 +1692,7 @@ function Home() {
                 : screen === 'campaigns' && mode === 'creator' ? <CampaignsPage videos={videos} telegramUser={telegramUser} tab={tab} onTab={setTab} onAdd={() => setScreen('add')} onWatch={selectVideo} />
                 : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} balance={viewerBalance} onWithdraw={() => setScreen('withdraw')} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} />
                   : <CreatorOverview advertiserBalance={advertiserBalance} telegramUser={telegramUser} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
-          <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 p-2 backdrop-blur lg:hidden">
+          {!browserEarningPage && <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 p-2 backdrop-blur lg:hidden">
             <div className="mx-auto flex max-w-md justify-around">
               {mode === 'creator' ? (
                 <>
@@ -1692,7 +1709,7 @@ function Home() {
                 </>
               )}
             </div>
-          </div>
+          </div>}
         </div>
       </div>
       {selectedVideo && <WatchPanel video={selectedVideo} progress={progress} isPlaying={isPlaying} completed={completed} session={watchSession} onOpenVideo={() => {
