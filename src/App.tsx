@@ -82,6 +82,10 @@ function getUserDisplayName(user: TelegramUser | null, fallback = 'محمد ال
   return fallback;
 }
 
+function getGreetingName(user: TelegramUser | null, fallback = 'محمد') {
+  return user?.first_name?.trim() || fallback;
+}
+
 function getCompletedVideoIds() {
   const completedIds = new Set<number>();
   try {
@@ -604,7 +608,7 @@ function CampaignsPage({
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#1557ee]"><span className="h-1.5 w-1.5 rounded-full bg-[#23bdc9]" /> الثلاثاء، ٢٤ ديسمبر ٢٠٢٤</div>
           <h1 className="font-display text-[29px] font-bold leading-tight tracking-[-.04em] text-[#12234b] md:text-[36px]">
             <span className="block">صباح الخير،</span>
-            <span className="mt-1 block text-[#1557ee]" dir={telegramUser?.username ? 'ltr' : 'rtl'}>{getUserDisplayName(telegramUser)}.</span>
+            <span className="mt-1 block text-[#1557ee]">{getGreetingName(telegramUser)}</span>
           </h1>
           <p className="mt-2 text-sm text-slate-500">هذه لمحة سريعة عن أثر إعلاناتك اليوم.</p>
         </div>
@@ -754,7 +758,7 @@ function CreatorOverview({
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#1557ee]"><span className="h-1.5 w-1.5 rounded-full bg-[#23bdc9]" /> الأربعاء، ٢٣ سبتمبر ٢٠٢٦</div>
           <h1 className="font-display text-[29px] font-bold leading-tight tracking-[-.04em] text-[#12234b] md:text-[36px]">
             <span className="block">صباح الخير،</span>
-            <span className="mt-1 block text-[#1557ee]" dir={telegramUser?.username ? 'ltr' : 'rtl'}>{getUserDisplayName(telegramUser, 'محمد')}.</span>
+            <span className="mt-1 block text-[#1557ee]">{getGreetingName(telegramUser)}</span>
           </h1>
           <p className="mt-2 text-sm text-slate-500">ملخص أداء حملاتك ورصيدك في مكان واحد.</p>
         </div>
