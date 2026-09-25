@@ -48,6 +48,51 @@ import { Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
 
 const queryClient = new QueryClient();
 
+type TelegramUser = {
+  id: number;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+};
+
+type TelegramWebApp = {
+  initData: string;
+  initDataUnsafe?: { user?: TelegramUser };
+  ready: () => void;
+  expand: () => void;
+  openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
+};
+
+declare global {
+  interface Window {
+    Telegram?: { WebApp?: TelegramWebApp };
+  }
+}
+
+function getTelegramUser(): TelegramUser | null {
+  return window.Telegram?.WebApp?.initDataUnsafe?.user ?? null;
+}
+
+function getShortName(name?: string) {
+  return Array.from((name ?? '').trim()).slice(0, 5).join('') || 'زائر';
+}
+
+function UserAvatar({ user, className = '' }: { user: TelegramUser | null; className?: string }) {
+  const initials = getShortName(user?.first_name).slice(0, 1);
+  return (
+    <div
+      className={`grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-[#0e2452] text-xs font-bold text-white ring-2 ring-white ${className}`}
+      title={user ? `${user.first_name} · Telegram ID: ${user.id}` : 'حساب المستخدم'}
+      aria-label={user ? `حساب ${user.first_name}` : 'حساب المستخدم'}
+    >
+      {user?.photo_url ? (
+        <img src={user.photo_url} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+      ) : initials}
+    </div>
+  );
+}
+
 type Video = {
   id: number;
   title: string;
@@ -205,6 +250,29 @@ function getVideoThumbnail(url: string) {
   return videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '';
 }
 
+function createBrowserWatchUrl(video: Video, user: TelegramUser | null) {
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+  const url = new URL(`${basePath}/watch`, window.location.origin);
+  const videoId = getYoutubeVideoId(video.link);
+  if (videoId) url.searchParams.set('v', videoId);
+  url.searchParams.set('title', video.title);
+  url.searchParams.set('creator', video.creator);
+  url.searchParams.set('duration', String(video.duration));
+  url.searchParams.set('reward', video.reward);
+  if (user) {
+    // The fragment is not sent to the web server; it carries display-only profile context.
+    url.hash = new URLSearchParams({
+      telegram: JSON.stringify({
+        id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        photo_url: user.photo_url,
+      }),
+    }).toString();
+  }
+  return url.toString();
+}
+
 function IconButton({
   label,
   children,
@@ -247,6 +315,7 @@ function BrandMark() {
 function Sidebar({
   mode,
   screen,
+  telegramUser,
   onModeChange,
   onNavigate,
   onAdd,
@@ -255,6 +324,7 @@ function Sidebar({
 }: {
   mode: 'creator' | 'viewer';
   screen: AppScreen;
+  telegramUser: TelegramUser | null;
   onModeChange: (mode: 'creator' | 'viewer') => void;
   onNavigate: (screen: AppScreen) => void;
   onAdd: () => void;
@@ -337,10 +407,10 @@ function Sidebar({
           </button>
         </div>
         <div className="flex items-center gap-3 border-t border-slate-100 pt-4">
-          <div className="grid h-9 w-9 place-items-center rounded-full bg-[#dbe8ff] text-xs font-bold text-[#1557ee]">م</div>
+          <UserAvatar user={telegramUser} className="bg-[#dbe8ff] text-[#1557ee] ring-0" />
           <div className="min-w-0">
-            <div className="truncate text-xs font-bold text-slate-800">محمد العتيبي</div>
-            <div className="mt-0.5 text-[10px] text-slate-400">حساب منشئ</div>
+            <div className="truncate text-xs font-bold text-slate-800">{telegramUser ? [telegramUser.first_name, telegramUser.last_name].filter(Boolean).join(' ') : 'محمد العتيبي'}</div>
+            <div className="mt-0.5 truncate text-[10px] text-slate-400">{telegramUser ? `Telegram ID: ${telegramUser.id}` : 'حساب منشئ'}</div>
           </div>
           <Settings2 className="mr-auto h-4 w-4 text-slate-400" />
         </div>
@@ -382,11 +452,13 @@ function ToastViewport({ toasts, onDismiss }: { toasts: ToastMessage[]; onDismis
 function Header({
   mode,
   screen,
+  telegramUser,
   onMenu,
   onAdd,
 }: {
   mode: 'creator' | 'viewer';
   screen: AppScreen;
+  telegramUser: TelegramUser | null;
   onMenu: () => void;
   onAdd: () => void;
 }) {
@@ -439,7 +511,7 @@ function Header({
           )}
         </div>
         <div className="hidden h-9 w-px bg-slate-200 sm:block" />
-        <div className="grid h-9 w-9 place-items-center rounded-full bg-[#0e2452] text-xs font-bold text-white">م</div>
+        <UserAvatar user={telegramUser} />
       </div>
     </header>
   );
@@ -655,10 +727,12 @@ function CampaignsPage({
 
 function CreatorOverview({
   advertiserBalance,
+  telegramUser,
   onAdd,
   onDeposit,
 }: {
   advertiserBalance: number;
+  telegramUser: TelegramUser | null;
   onAdd: () => void;
   onDeposit: () => void;
 }) {
@@ -667,7 +741,7 @@ function CreatorOverview({
       <section className="animate-rise flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#1557ee]"><span className="h-1.5 w-1.5 rounded-full bg-[#23bdc9]" /> الأربعاء، ٢٣ سبتمبر ٢٠٢٦</div>
-          <h1 className="font-display text-[29px] font-bold tracking-[-.04em] text-[#12234b] md:text-[36px]">صباح الخير، محمد <span className="text-[#1557ee]">.</span></h1>
+          <h1 className="font-display text-[29px] font-bold tracking-[-.04em] text-[#12234b] md:text-[36px]">صباح الخير، {telegramUser ? getShortName(telegramUser.first_name) : 'محمد'}<span className="text-[#1557ee]">:</span></h1>
           <p className="mt-2 text-sm text-slate-500">ملخص أداء حملاتك ورصيدك في مكان واحد.</p>
         </div>
         <button type="button" data-testid="button-add-video-main" onClick={onAdd} className="flex items-center justify-center gap-2 rounded-xl bg-[#1557ee] px-5 py-3 text-sm font-bold text-white shadow-[0_9px_22px_rgba(21,87,238,.2)] transition hover:-translate-y-0.5 hover:bg-[#0f48d0]">
@@ -732,15 +806,32 @@ function ViewerView({
   onSelect,
   balance,
   onWithdraw,
+  telegramUser,
+  insideTelegram,
+  onOpenBrowser,
 }: {
   videos: Video[];
   onSelect: (video: Video) => void;
   balance: number;
   onWithdraw: () => void;
+  telegramUser: TelegramUser | null;
+  insideTelegram: boolean;
+  onOpenBrowser: (video: Video) => void;
 }) {
   const activeVideos = videos.filter((video) => video.status === 'نشط');
   return (
     <main className="mx-auto w-full max-w-[1370px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
+      <section className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-blue-100 bg-white px-5 py-4 shadow-[var(--shadow-soft)]">
+        <div>
+          <h1 className="font-display text-xl font-bold text-[#12234b]">صباح الخير، {getShortName(telegramUser?.first_name)}<span className="text-[#1557ee]">:</span></h1>
+          {telegramUser ? (
+            <p className="mt-1 text-[11px] text-slate-400" dir="ltr">Telegram ID: {telegramUser.id}</p>
+          ) : (
+            <p className="mt-1 text-[11px] text-slate-400">أهلاً بك في مساحة المشاهدة والربح</p>
+          )}
+        </div>
+        {telegramUser && <span className="max-w-full truncate rounded-full bg-[#f4f8ff] px-3 py-2 text-[10px] font-semibold text-[#1557ee]">حساب Telegram مرتبط</span>}
+      </section>
       <section className="mb-5 flex flex-col gap-4 rounded-[22px] border border-blue-100 bg-white p-5 shadow-[var(--shadow-soft)] sm:flex-row sm:items-center sm:justify-between md:p-6">
         <div className="flex items-center gap-4">
           <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#eafbf8] text-[#159b89]"><WalletCards className="h-6 w-6" /></div>
@@ -753,6 +844,22 @@ function ViewerView({
           <WalletCards className="h-4 w-4" /> سحب الأرباح
         </button>
       </section>
+      {insideTelegram ? (
+        <section className="animate-rise mx-auto mt-8 flex min-h-[340px] max-w-3xl flex-col items-center justify-center rounded-[26px] border border-blue-100 bg-white px-6 py-10 text-center shadow-[var(--shadow-soft)] md:px-10">
+          <div className="grid h-16 w-16 place-items-center rounded-2xl bg-[#edf3ff] text-[#1557ee]"><PlaySquare className="h-8 w-8" /></div>
+          <h2 className="mt-5 font-display text-2xl font-bold text-[#12234b]">شاهد واربح من المتصفح</h2>
+          <p className="mt-3 max-w-md text-sm leading-7 text-slate-500">مشغلات YouTube لا تظهر داخل Telegram. افتح صفحة المشاهدة في المتصفح لمشاهدة الفيديوهات مباشرةً دون قوائم التطبيق.</p>
+          {activeVideos[0] ? (
+            <button type="button" data-testid="button-open-browser-watch" onClick={() => onOpenBrowser(activeVideos[0])} className="mt-7 flex items-center justify-center gap-2 rounded-xl bg-[#1557ee] px-6 py-4 text-sm font-bold text-white shadow-[0_10px_20px_rgba(21,87,238,.2)] transition hover:-translate-y-0.5 hover:bg-[#0f48d0]">
+              <ExternalLink className="h-4 w-4" /> اذهب للمتصفح للمشاهدة والربح
+            </button>
+          ) : (
+            <p className="mt-7 rounded-xl bg-slate-50 px-5 py-3 text-sm font-semibold text-slate-500">لا توجد فيديوهات نشطة حاليًا.</p>
+          )}
+          <p className="mt-4 text-[10px] leading-5 text-slate-400">ستفتح صفحة مشاهدة مستقلة تعرض الفيديو المختار فقط.</p>
+        </section>
+      ) : (
+        <>
       <section className="animate-rise relative overflow-hidden rounded-[26px] bg-[#0e2452] px-6 py-8 text-white md:px-10 md:py-10">
         <div className="grid-dots absolute inset-0 opacity-20" />
         <div className="absolute -left-10 -top-16 h-56 w-56 rounded-full border border-cyan-200/15" />
@@ -789,6 +896,8 @@ function ViewerView({
           </button>
         ))}
       </div>
+        </>
+      )}
     </main>
   );
 }
@@ -986,7 +1095,7 @@ function createUniqueIdentifier(prefix: string, size = 10) {
   return identifier;
 }
 
-function createMemoTag() {
+function createMemoTag(telegramUserId?: number) {
   let sequence = nextMemoSequence;
   try {
     const storedSequence = Number(window.localStorage.getItem(memoSequenceStorageKey));
@@ -996,7 +1105,7 @@ function createMemoTag() {
     // Local storage may be unavailable in a restricted browser context.
   }
   nextMemoSequence = sequence + 1;
-  return `${demoUserId}#${sequence}`;
+  return `${telegramUserId ?? demoUserId}#${sequence}`;
 }
 
 function createBlockchainTxId() {
@@ -1071,18 +1180,20 @@ function TransactionIdentifiers({ record }: { record: DepositRecord | WithdrawRe
 
 function DepositPage({
   advertiserBalance,
+  telegramUser,
   onDepositRequested,
   onDepositCompleted,
   onDepositExpired,
 }: {
   advertiserBalance: number;
+  telegramUser: TelegramUser | null;
   onDepositRequested: (record: DepositRecord) => void;
   onDepositCompleted: (id: string) => void;
   onDepositExpired: (id: string) => void;
 }) {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('binance');
-  const [invoice, setInvoice] = useState<{ id: string; amount: number; method: PaymentMethod; destination: string; memoTag: string; expiresAt: number } | null>(null);
+  const [invoice, setInvoice] = useState<{ id: string; amount: number; method: PaymentMethod; destination: string; memoTag: string; telegramUserId: number | null; expiresAt: number } | null>(null);
   const [invoiceStatus, setInvoiceStatus] = useState<'pending' | 'completed' | 'expired'>('pending');
   const [remainingSeconds, setRemainingSeconds] = useState(invoiceLifetime);
   const [pollCount, setPollCount] = useState(0);
@@ -1107,7 +1218,8 @@ function DepositPage({
       amount: numericAmount,
       method,
       destination,
-      memoTag: createMemoTag(),
+      memoTag: createMemoTag(telegramUser?.id),
+      telegramUserId: telegramUser?.id ?? null,
       expiresAt: createdAt + invoiceLifetime * 1000,
     };
     setInvoice(nextInvoice);
@@ -1211,6 +1323,7 @@ function DepositPage({
               <div className="rounded-2xl border border-blue-100 bg-[#f4f8ff] p-4"><div className="mb-2 text-[11px] font-bold text-slate-500">{invoice.method === 'binance' ? 'معرّف Binance للإيداع' : 'عنوان الإيداع (BEP20)'}</div><div className="flex items-center gap-2"><code dir="ltr" className="min-w-0 flex-1 break-all text-xs font-bold text-[#12234b]">{invoice.destination}</code><button type="button" data-testid="button-copy-deposit-destination" onClick={() => copyValue(invoice.destination, 'destination')} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee]">{copied === 'destination' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div></div>
                <div className="rounded-2xl border border-cyan-100 bg-[#effcfd] p-4"><div className="mb-2 text-[11px] font-bold text-slate-500">Memo / Tag فريد لهذه العملية</div><div className="flex items-center gap-2"><code dir="ltr" className="flex-1 text-sm font-bold tracking-wider text-[#12234b]">{invoice.memoTag}</code><button type="button" data-testid="button-copy-deposit-memo" onClick={() => copyValue(invoice.memoTag, 'memo')} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee]">{copied === 'memo' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button></div><p className="mt-2 text-[10px] font-semibold leading-5 text-slate-600">أرسل هذا الرمز في خانة الملاحظات (Memo / Tag) عند تنفيذ التحويل.</p></div>
               <div className="rounded-xl bg-[#f7f9fd] p-4"><div className="text-[10px] text-slate-400">المعرّف الداخلي للفاتورة</div><code dir="ltr" className="mt-1 block truncate text-xs font-bold text-[#12234b]">{invoice.id}</code></div>
+              {invoice.telegramUserId !== null && <div className="rounded-xl border border-blue-100 bg-[#f4f8ff] p-4"><div className="text-[10px] text-slate-400">معرّف Telegram المرتبط بالفاتورة</div><code dir="ltr" className="mt-1 block text-xs font-bold text-[#1557ee]">{invoice.telegramUserId}</code></div>}
               <div className="grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-[#f7f9fd] p-4"><div className="text-[10px] text-slate-400">المبلغ</div><div className="mt-1 text-lg font-bold text-[#12234b]">{invoice.amount.toFixed(2)} USDT</div></div><div className="rounded-xl bg-[#f7f9fd] p-4"><div className="text-[10px] text-slate-400">طريقة الدفع</div><div className="mt-1 text-sm font-bold text-[#12234b]">{methodLabel(invoice.method)}</div></div><div className="rounded-xl bg-[#f7f9fd] p-4"><div className="text-[10px] text-slate-400">الوقت المتبقي</div><div className={`mt-1 text-sm font-bold ${invoiceStatus === 'pending' ? 'text-amber-600' : 'text-[#159b89]'}`}>{invoiceStatus === 'pending' ? formatRemaining(remainingSeconds) : invoiceStatus === 'completed' ? 'تمت العملية' : 'منتهية'}</div></div></div>
               <div className={`rounded-2xl border p-4 ${invoiceStatus === 'pending' ? 'border-amber-100 bg-amber-50' : invoiceStatus === 'completed' ? 'border-emerald-100 bg-[#eafbf8]' : 'border-rose-100 bg-rose-50'}`}><div className={`flex items-center gap-2 text-xs font-bold ${invoiceStatus === 'pending' ? 'text-amber-700' : invoiceStatus === 'completed' ? 'text-[#159b89]' : 'text-rose-600'}`}><Timer className="h-4 w-4" /> {invoiceStatus === 'pending' ? `يتم تحديث الحالة تلقائيًا كل ثانيتين · تنتهي الفاتورة خلال ${formatRemaining(remainingSeconds)}` : invoiceStatus === 'completed' ? 'تم العثور على التحويل وتأكيد الإيداع تلقائيًا.' : 'انتهت الفاتورة قبل وصول التحويل.'}</div><p className="mt-1 text-[11px] leading-5 text-slate-500">{invoiceStatus === 'pending' ? 'لا تغلق الصفحة بعد إرسال المبلغ. لا تحتاج إلى الضغط على أي زر للتأكيد.' : 'يمكنك الرجوع إلى صفحة الإيداع لإنشاء فاتورة جديدة.'}</p></div>
             </div>
@@ -1225,9 +1338,11 @@ function DepositPage({
 
 function WithdrawPage({
   viewerBalance,
+  telegramUser,
   onWithdraw,
 }: {
   viewerBalance: number;
+  telegramUser: TelegramUser | null;
   onWithdraw: (record: WithdrawRecord) => void;
 }) {
   const [amount, setAmount] = useState('');
@@ -1248,7 +1363,7 @@ function WithdrawPage({
       amount: numericAmount,
       method,
       destination: destination.trim(),
-      memoTag: createMemoTag(),
+      memoTag: createMemoTag(telegramUser?.id),
       createdAt: formatHistoryDate(),
       status: 'قيد المعالجة',
     });
@@ -1315,6 +1430,8 @@ const initialWithdrawHistory: WithdrawRecord[] = [
 function Home() {
   const [mode, setMode] = useState<'creator' | 'viewer'>('creator');
   const [screen, setScreen] = useState<AppScreen>('overview');
+  const [telegramUser, setTelegramUser] = useState<TelegramUser | null>(() => getTelegramUser());
+  const [insideTelegram, setInsideTelegram] = useState(() => Boolean(window.Telegram?.WebApp?.initData));
   const [videos, setVideos] = useState<Video[]>(initialVideos);
   const [tab, setTab] = useState<'all' | 'active' | 'drafts'>('all');
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
@@ -1332,6 +1449,16 @@ function Home() {
   const watchSessionRef = useRef<AdvertisementSession | null>(null);
   const creditedVideosRef = useRef(new Set<number>());
   const toastSequenceRef = useRef(0);
+
+  useEffect(() => {
+    const webApp = window.Telegram?.WebApp;
+    if (webApp?.initData) {
+      webApp.ready();
+      webApp.expand();
+      setTelegramUser(webApp.initDataUnsafe?.user ?? null);
+      setInsideTelegram(true);
+    }
+  }, []);
 
   const saveWatchSession = (
     video: Video,
@@ -1486,21 +1613,31 @@ function Home() {
     notify('success', 'تمت إضافة المكافأة', `أضيفت ${video.reward} إلى رصيدك بعد إكمال المدة المطلوبة.`);
   };
 
+  const openWatchInBrowser = (video: Video) => {
+    const url = createBrowserWatchUrl(video, telegramUser);
+    const webApp = window.Telegram?.WebApp;
+    if (webApp?.openLink) {
+      webApp.openLink(url, { try_instant_view: false });
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   return (
     <div className="min-h-[100dvh] bg-[#f7f9fc] text-[#12234b]">
       <div className="flex min-h-[100dvh] lg:gap-5 lg:p-5">
-        <Sidebar mode={mode} screen={screen} onModeChange={(nextMode) => { setMode(nextMode); setScreen(nextMode === 'creator' ? 'overview' : 'watch'); }} onNavigate={setScreen} onAdd={() => { setMode('creator'); setScreen('add'); }} open={mobileMenu} onClose={() => setMobileMenu(false)} />
+        <Sidebar mode={mode} screen={screen} telegramUser={telegramUser} onModeChange={(nextMode) => { setMode(nextMode); setScreen(nextMode === 'creator' ? 'overview' : 'watch'); }} onNavigate={setScreen} onAdd={() => { setMode('creator'); setScreen('add'); }} open={mobileMenu} onClose={() => setMobileMenu(false)} />
         {mobileMenu && <button type="button" aria-label="إغلاق خلفية القائمة" data-testid="button-close-menu-overlay" onClick={() => setMobileMenu(false)} className="fixed inset-0 z-40 bg-[#061333]/30 backdrop-blur-sm lg:hidden" />}
         <div className="min-w-0 flex-1 overflow-hidden rounded-none bg-[#f7f9fc] lg:rounded-[26px] lg:border lg:border-slate-200/80 lg:bg-[#fbfcfe]">
-          <Header mode={mode} screen={screen} onMenu={() => setMobileMenu(true)} onAdd={() => { setMode('creator'); setScreen('add'); }} />
+          <Header mode={mode} screen={screen} telegramUser={telegramUser} onMenu={() => setMobileMenu(true)} onAdd={() => { setMode('creator'); setScreen('add'); }} />
           {screen === 'add' && mode === 'creator' ? <AddVideo onBack={() => setScreen('campaigns')} onSubmit={(video) => { addVideo(video); notify('success', 'تم نشر الإعلان', 'أصبح الفيديو نشطًا ويمكن للمشاهدين اكتشافه الآن.'); }} />
-            : screen === 'deposit' && mode === 'creator' ? <DepositPage advertiserBalance={advertiserBalance} onDepositRequested={requestDeposit} onDepositCompleted={completeDeposit} onDepositExpired={expireDeposit} />
+            : screen === 'deposit' && mode === 'creator' ? <DepositPage advertiserBalance={advertiserBalance} telegramUser={telegramUser} onDepositRequested={requestDeposit} onDepositCompleted={completeDeposit} onDepositExpired={expireDeposit} />
               : screen === 'deposit-history' && mode === 'creator' ? <DepositHistoryPage records={depositHistory} />
-                : screen === 'withdraw' && mode === 'viewer' ? <WithdrawPage viewerBalance={viewerBalance} onWithdraw={withdrawEarnings} />
+                : screen === 'withdraw' && mode === 'viewer' ? <WithdrawPage viewerBalance={viewerBalance} telegramUser={telegramUser} onWithdraw={withdrawEarnings} />
                   : screen === 'withdraw-history' && mode === 'viewer' ? <WithdrawHistoryPage records={withdrawHistory} />
                 : screen === 'campaigns' && mode === 'creator' ? <CampaignsPage videos={videos} tab={tab} onTab={setTab} onAdd={() => setScreen('add')} onWatch={selectVideo} />
-                  : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} balance={viewerBalance} onWithdraw={() => setScreen('withdraw')} onSelect={selectVideo} />
-                    : <CreatorOverview advertiserBalance={advertiserBalance} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
+                : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} balance={viewerBalance} onWithdraw={() => setScreen('withdraw')} onSelect={selectVideo} telegramUser={telegramUser} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} />
+                  : <CreatorOverview advertiserBalance={advertiserBalance} telegramUser={telegramUser} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
           <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 p-2 backdrop-blur lg:hidden">
             <div className="mx-auto flex max-w-md justify-around">
               {mode === 'creator' ? (
@@ -1556,10 +1693,96 @@ function Home() {
   );
 }
 
+function ExternalWatchPage() {
+  const params = new URLSearchParams(window.location.search);
+  const videoId = params.get('v') ?? '';
+  const validVideoId = /^[\w-]{11}$/.test(videoId);
+  const title = (params.get('title') ?? 'مشاهدة الفيديو').slice(0, 160);
+  const creator = (params.get('creator') ?? 'VidReward').slice(0, 100);
+  const duration = Math.max(1, Math.min(3600, Number(params.get('duration')) || 0));
+  const reward = (params.get('reward') ?? '').slice(0, 24);
+  let telegramUser: TelegramUser | null = null;
+  try {
+    const serializedUser = new URLSearchParams(window.location.hash.slice(1)).get('telegram');
+    if (serializedUser) {
+      const parsed = JSON.parse(serializedUser) as Partial<TelegramUser>;
+      const photoUrl = typeof parsed.photo_url === 'string' && /^https?:\/\//i.test(parsed.photo_url)
+        ? parsed.photo_url
+        : undefined;
+      if (Number.isSafeInteger(parsed.id) && Number(parsed.id) > 0 && typeof parsed.first_name === 'string') {
+        telegramUser = {
+          id: Number(parsed.id),
+          first_name: parsed.first_name.slice(0, 80),
+          last_name: typeof parsed.last_name === 'string' ? parsed.last_name.slice(0, 80) : undefined,
+          photo_url: photoUrl,
+        };
+      }
+    }
+  } catch {
+    telegramUser = null;
+  }
+
+  return (
+    <main className="min-h-[100dvh] bg-[#071632] px-4 py-6 text-white sm:px-8 sm:py-10" dir="rtl">
+      <div className="mx-auto w-full max-w-5xl">
+        <header className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/[.04] px-4 py-4 sm:px-6">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#1557ee]"><Play className="h-4 w-4 fill-current" /></span>
+            <div><div className="font-display text-base font-bold">VidReward · المشاهدة</div><div className="mt-1 text-[10px] text-blue-100/60">صفحة فيديو مستقلة للمتصفح</div></div>
+          </div>
+          {telegramUser && (
+            <div className="flex min-w-0 items-center gap-2.5 rounded-xl bg-white/[.06] px-3 py-2">
+              <UserAvatar user={telegramUser} className="ring-0" />
+              <div className="min-w-0"><div className="truncate text-xs font-bold">{telegramUser.first_name} {telegramUser.last_name ?? ''}</div><div className="mt-0.5 text-[10px] text-blue-100/60" dir="ltr">ID: {telegramUser.id}</div></div>
+            </div>
+          )}
+        </header>
+        <section className="overflow-hidden rounded-[24px] border border-white/10 bg-[#0d2041] shadow-2xl">
+          {validVideoId ? (
+            <div className="aspect-video w-full bg-black">
+              <iframe
+                title={title}
+                src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1`}
+                className="h-full w-full border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+              />
+            </div>
+          ) : (
+            <div className="flex aspect-video flex-col items-center justify-center px-6 text-center">
+              <PlaySquare className="h-12 w-12 text-cyan-300" />
+              <h1 className="mt-4 text-lg font-bold">تعذّر العثور على فيديو YouTube</h1>
+              <p className="mt-2 text-sm leading-6 text-blue-100/60">ارجع إلى VidReward واختر فيديو YouTube نشطًا ثم افتحه في المتصفح.</p>
+            </div>
+          )}
+          <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-7">
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold leading-7">{title}</h1>
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-blue-100/60">
+                <span>{creator}</span>
+                <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" /> {duration} ثانية</span>
+                {reward && <span className="font-bold text-cyan-300">المكافأة المعروضة: {reward}</span>}
+              </div>
+            </div>
+            {validVideoId && (
+              <a href={`https://www.youtube.com/watch?v=${videoId}`} target="_blank" rel="noreferrer" className="flex shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 px-4 py-3 text-xs font-bold text-white transition hover:bg-white/10">
+                <ExternalLink className="h-4 w-4" /> فتح في YouTube
+              </a>
+            )}
+          </div>
+        </section>
+        <p className="mx-auto mt-5 max-w-2xl text-center text-[11px] leading-6 text-blue-100/50">يمكنك مشاهدة هذا الفيديو هنا مباشرةً. بيانات Telegram المعروضة في الصفحة للتعريف فقط، ولا تُستخدم لتأكيد الهوية أو صرف الأرباح.</p>
+      </div>
+    </main>
+  );
+}
+
 function Router() {
   return (
     <RoutedErrorBoundary>
       <Switch>
+        <Route path="/watch" component={ExternalWatchPage} />
         <Route path="/" component={Home} />
         <Route component={NotFound} />
       </Switch>
