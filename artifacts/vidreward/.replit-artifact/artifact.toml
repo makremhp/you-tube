@@ -1,7 +1,7 @@
 kind = "web"
 previewPath = "/"
 title = "VidReward"
-description = "واجهة عربية لإدارة إعلانات الفيديو ومشاهدة المحتوى مقابل المكافآت، مع صفحات منفصلة للإيداع عبر Binance أو Web3 وسحب الأرباح إلى محفظة USDT على شبكة BEP20."
+description = "Arabic Telegram Mini App for video advertising campaigns, watch-and-earn rewards, Web3 deposits, and Telegram Stars deposits."
 version = "1.0.0"
 id = "artifacts/vidreward"
 router = "path"
