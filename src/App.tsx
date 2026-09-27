@@ -1553,22 +1553,22 @@ function DepositPage({
           </div>
           <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_220px]">
             <div className="grid gap-3">
-              <div className="grid gap-3 sm:grid-cols-2">
+               {invoice.method === 'web3' && <div className="grid gap-3 sm:grid-cols-2">
                  <CompactInvoiceValue
-                   label={invoice.method === 'stars' ? 'رابط دفع Telegram Stars' : 'عنوان الإيداع (BEP20)'}
-                  value={invoice.destination}
-                   action={invoice.method === 'stars' ? <button type="button" onClick={openStarsInvoice} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#1557ee] text-white shadow-sm transition hover:bg-[#0f48d0]" aria-label="فتح فاتورة Telegram Stars"><ExternalLink className="h-3.5 w-3.5" /></button> : <button type="button" data-testid="button-copy-deposit-destination" onClick={() => copyValue(invoice.destination, 'destination')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee] shadow-sm transition hover:bg-[#edf3ff]" aria-label="نسخ وجهة الإيداع">{copied === 'destination' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</button>}
-                />
-                <div className="min-w-0">
-                  <CompactInvoiceValue
-                    label="Memo / Tag فريد لهذه العملية"
-                    value={invoice.memoTag}
-                    tone="text-[#159b89]"
-                    action={<button type="button" data-testid="button-copy-deposit-memo" onClick={() => copyValue(invoice.memoTag, 'memo')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee] shadow-sm transition hover:bg-[#edf3ff]" aria-label="نسخ Memo Tag">{copied === 'memo' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</button>}
-                  />
-                  <p className="mt-1 px-1 text-[9px] font-semibold leading-4 text-slate-400">الصق هذا الرمز في خانة الملاحظات عند إرسال الإيداع.</p>
-                </div>
-              </div>
+                   label="عنوان الإيداع (BEP20)"
+                   value={invoice.destination}
+                   action={<button type="button" data-testid="button-copy-deposit-destination" onClick={() => copyValue(invoice.destination, 'destination')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee] shadow-sm transition hover:bg-[#edf3ff]" aria-label="نسخ وجهة الإيداع">{copied === 'destination' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</button>}
+                 />
+                 <div className="min-w-0">
+                   <CompactInvoiceValue
+                     label="Memo / Tag فريد لهذه العملية"
+                     value={invoice.memoTag}
+                     tone="text-[#159b89]"
+                     action={<button type="button" data-testid="button-copy-deposit-memo" onClick={() => copyValue(invoice.memoTag, 'memo')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee] shadow-sm transition hover:bg-[#edf3ff]" aria-label="نسخ Memo Tag">{copied === 'memo' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</button>}
+                   />
+                   <p className="mt-1 px-1 text-[9px] font-semibold leading-4 text-slate-400">الصق هذا الرمز في خانة الملاحظات عند إرسال الإيداع.</p>
+                 </div>
+               </div>}
               <div className="grid gap-3 sm:grid-cols-3">
                  <CompactInvoiceValue label="المبلغ" value={`${invoice.amount.toFixed(2)} ${invoice.method === 'stars' ? 'USD' : 'USDT'}`} />
                 <CompactInvoiceValue label="طريقة الدفع" value={methodLabel(invoice.method)} />
@@ -1582,9 +1582,14 @@ function DepositPage({
             </div>
             <div className="flex h-[60px] items-center gap-3 rounded-[16px] border border-dashed border-slate-200 bg-[#fbfcff] px-3">
               <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border-2 border-white bg-[#eef3ff] text-[#1557ee] shadow-sm"><QrCode className="h-6 w-6" /></div>
-               <p className="text-[10px] font-semibold leading-4 text-slate-400">{invoice.method === 'stars' ? 'افتح رابط الدفع وأكمل دفع النجوم داخل Telegram.' : 'استخدم شبكة BEP20 وأرسل المبلغ المحدد.'}</p>
+                <p className="text-[10px] font-semibold leading-4 text-slate-400">{invoice.method === 'stars' ? 'اضغط زر الدفع أسفل الفاتورة لإكمال الدفع داخل Telegram.' : 'استخدم شبكة BEP20 وأرسل المبلغ المحدد.'}</p>
             </div>
           </div>
+           {invoice.method === 'stars' && invoiceStatus === 'pending' && <button type="button" data-testid="button-pay-stars" onClick={openStarsInvoice} className="mt-5 flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-l from-[#1557ee] to-[#3d7cff] px-5 py-4 text-sm font-bold text-white shadow-[0_12px_24px_rgba(21,87,238,.22)] transition hover:-translate-y-0.5 hover:from-[#0f48d0] hover:to-[#2867ed]">
+             <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/15"><Star className="h-5 w-5 fill-current text-amber-300" /></span>
+             <span>ادفع بالنجوم</span>
+             <span className="rounded-lg bg-white/15 px-2 py-1 text-[10px] font-semibold">{invoice.stars?.toLocaleString('en-US')} نجمة</span>
+           </button>}
           {invoiceStatus !== 'pending' && <div className="mt-7 flex justify-end border-t border-slate-100 pt-6"><button type="button" onClick={() => setInvoice(null)} className="flex items-center justify-center gap-2 rounded-xl bg-[#1557ee] px-5 py-3 text-xs font-bold text-white"><RefreshCw className="h-4 w-4" /> إنشاء فاتورة جديدة</button></div>}
         </section>
       )}
