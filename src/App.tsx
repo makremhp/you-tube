@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useCreateTelegramStarsInvoice, useHealthCheck } from '@workspace/api-client-react';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -27,6 +26,7 @@ import {
   MoreHorizontal,
   Play,
   Plus,
+  QrCode,
   RefreshCw,
   Settings2,
   ShieldCheck,
@@ -160,13 +160,12 @@ const durationOptions = [
 
 type TransactionStatus = 'تم' | 'قيد المعالجة' | 'تم الإلغاء' | 'مرفوض';
 type PaymentMethod = 'binance' | 'web3';
-type DepositMethod = 'web3' | 'stars';
 type AppScreen = 'overview' | 'campaigns' | 'watch' | 'add' | 'deposit' | 'withdraw' | 'deposit-history' | 'withdraw-history';
 
 type DepositRecord = {
   id: string;
   amount: number;
-  method: DepositMethod;
+  method: PaymentMethod;
   destination: string;
   memoTag: string;
   blockchainTxId?: string;
@@ -295,15 +294,10 @@ function getVideoThumbnail(url: string) {
   return videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '';
 }
 
-function createBrowserWatchUrl(user: TelegramUser | null, video: Video) {
+function createBrowserWatchUrl(user: TelegramUser | null) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-  const url = new URL(`${basePath}/watch`, window.location.origin);
-  const videoId = getYoutubeVideoId(video.link);
-  if (videoId) url.searchParams.set('v', videoId);
-  url.searchParams.set('title', video.title);
-  url.searchParams.set('creator', video.creator);
-  url.searchParams.set('duration', String(video.duration));
-  url.searchParams.set('reward', video.reward);
+  const url = new URL(`${basePath}/`, window.location.origin);
+  url.searchParams.set('view', 'earn');
   if (user) {
     // The fragment is not sent to the web server; it carries display-only profile context.
     url.hash = new URLSearchParams({
@@ -362,7 +356,6 @@ function Sidebar({
   mode,
   screen,
   telegramUser,
-  healthStatus,
   onModeChange,
   onNavigate,
   onAdd,
@@ -372,7 +365,6 @@ function Sidebar({
   mode: 'creator' | 'viewer';
   screen: AppScreen;
   telegramUser: TelegramUser | null;
-  healthStatus?: 'loading' | 'online' | 'offline';
   onModeChange: (mode: 'creator' | 'viewer') => void;
   onNavigate: (screen: AppScreen) => void;
   onAdd: () => void;
@@ -453,13 +445,6 @@ function Sidebar({
            <button type="button" data-testid="button-sidebar-add" onClick={() => mode === 'creator' ? onAdd() : onNavigate('watch')} className="mt-4 flex items-center gap-1 text-xs font-bold text-cyan-300">
              {mode === 'creator' ? 'أضف إعلان الآن' : 'اذهب إلى المشاهدة'} <ArrowUpLeft className="h-3.5 w-3.5" />
           </button>
-        </div>
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-slate-100 bg-[#fbfcff] px-3 py-2.5 text-[10px] font-semibold text-slate-500">
-          <span className={`h-2 w-2 rounded-full ${healthStatus === 'online' ? 'bg-[#18ad93]' : healthStatus === 'offline' ? 'bg-rose-400' : 'animate-pulse bg-amber-400'}`} />
-          <span>حالة الخدمة</span>
-          <span className={`mr-auto ${healthStatus === 'online' ? 'text-[#159b89]' : healthStatus === 'offline' ? 'text-rose-500' : 'text-amber-600'}`}>
-            {healthStatus === 'online' ? 'متصل' : healthStatus === 'offline' ? 'غير متصل' : 'جارٍ التحقق'}
-          </span>
         </div>
         <div className="flex items-center gap-3 border-t border-slate-100 pt-4">
           <UserAvatar user={telegramUser} className="bg-[#dbe8ff] text-[#1557ee] ring-0" />
@@ -1141,6 +1126,7 @@ function AddVideo({
 
 const depositAddress = '0x71B4f6eA8D9c3A17F48E6b5D2A0C9e12B7F1a4C8';
 const depositBinanceId = '782946315';
+const invoiceLifetime = 15 * 60;
 const demoUserId = '62182212';
 const memoSequenceStorageKey = 'vidreward.memo-sequence';
 const generatedIdentifiers = new Set<string>();
@@ -1185,10 +1171,14 @@ function formatHistoryDate(date = new Date()) {
   }).format(date);
 }
 
-function methodLabel(method: PaymentMethod | DepositMethod) {
-  if (method === 'binance') return 'Binance ID';
-  if (method === 'stars') return 'Telegram Stars';
-  return 'Web3 Wallet';
+function formatRemaining(seconds: number) {
+  const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const remainingSeconds = (seconds % 60).toString().padStart(2, '0');
+  return `${minutes}:${remainingSeconds}`;
+}
+
+function methodLabel(method: PaymentMethod) {
+  return method === 'binance' ? 'Binance ID' : 'Web3 Wallet';
 }
 
 function StatusBadge({ status }: { status: TransactionStatus }) {
@@ -1389,252 +1379,182 @@ function DepositPage({
   advertiserBalance,
   telegramUser,
   onDepositRequested,
+  onDepositCompleted,
+  onDepositExpired,
 }: {
   advertiserBalance: number;
   telegramUser: TelegramUser | null;
   onDepositRequested: (record: DepositRecord) => void;
+  onDepositCompleted: (id: string) => void;
+  onDepositExpired: (id: string) => void;
 }) {
-  type Web3Invoice = {
-    kind: 'web3';
-    id: string;
-    amount: number;
-    method: 'web3';
-    destination: string;
-    memoTag: string;
-  };
-  type StarsInvoice = {
-    kind: 'stars';
-    id: string;
-    amount: 10;
-    method: 'stars';
-    invoiceLink: string;
-    payload: string;
-    amountStars: number;
-    creditUsd: number;
-    currency: string;
-  };
-
   const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState<DepositMethod>('web3');
-  const [invoice, setInvoice] = useState<Web3Invoice | StarsInvoice | null>(null);
+  const [method, setMethod] = useState<PaymentMethod>('binance');
+  const [invoice, setInvoice] = useState<{ id: string; amount: number; method: PaymentMethod; destination: string; memoTag: string; telegramUserId: number | null; expiresAt: number } | null>(null);
+  const [invoiceStatus, setInvoiceStatus] = useState<'pending' | 'completed' | 'expired'>('pending');
+  const [remainingSeconds, setRemainingSeconds] = useState(invoiceLifetime);
+  const [pollCount, setPollCount] = useState(0);
+  const [finalizedInvoiceId, setFinalizedInvoiceId] = useState('');
   const [copied, setCopied] = useState('');
-  const createInvoiceMutation = useCreateTelegramStarsInvoice();
-  const error = createInvoiceMutation.error as { error?: string; message?: string } | null;
-  const errorMessage = error?.error ?? error?.message ?? 'تعذّر إنشاء رابط الدفع. حاول مرة أخرى.';
   const numericAmount = Number(amount);
   const validAmount = Number.isFinite(numericAmount) && numericAmount >= 1;
-  const validStarsAmount = Math.abs(numericAmount - 10) < 0.0001;
 
   const copyValue = async (value: string, key: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-    } catch {
-      // Clipboard access can be unavailable in an embedded preview.
-    }
+    try { await navigator.clipboard.writeText(value); } catch { /* clipboard may be unavailable in preview */ }
     setCopied(key);
     window.setTimeout(() => setCopied(''), 1800);
   };
 
   const createInvoice = () => {
     if (!validAmount) return;
-
-    if (method === 'stars') {
-      if (!validStarsAmount) return;
-      createInvoiceMutation.mutate(
-        { data: { telegramUserId: telegramUser?.id ?? null } },
-        {
-          onSuccess: (createdInvoice) => {
-            const nextInvoice: StarsInvoice = {
-              kind: 'stars',
-              id: createUniqueIdentifier('DEP'),
-              amount: 10,
-              method: 'stars',
-              invoiceLink: createdInvoice.invoiceLink,
-              payload: createdInvoice.payload,
-              amountStars: createdInvoice.amountStars,
-              creditUsd: createdInvoice.creditUsd,
-              currency: createdInvoice.currency,
-            };
-            setInvoice(nextInvoice);
-            onDepositRequested({
-              id: nextInvoice.id,
-              amount: nextInvoice.amount,
-              method: nextInvoice.method,
-              destination: 'Telegram Stars · 1000 XTR',
-              memoTag: nextInvoice.payload,
-              createdAt: formatHistoryDate(),
-              status: 'قيد المعالجة',
-            });
-          },
-        },
-      );
-      return;
-    }
-
-    const nextInvoice: Web3Invoice = {
-      kind: 'web3',
-      id: createUniqueIdentifier('DEP'),
+    const createdAt = Date.now();
+    const destination = method === 'binance' ? depositBinanceId : depositAddress;
+    const transactionId = createUniqueIdentifier('DEP');
+    const nextInvoice = {
+      id: transactionId,
       amount: numericAmount,
-      method: 'web3',
-      destination: depositAddress,
+      method,
+      destination,
       memoTag: createMemoTag(telegramUser?.id),
+      telegramUserId: telegramUser?.id ?? null,
+      expiresAt: createdAt + invoiceLifetime * 1000,
     };
     setInvoice(nextInvoice);
+    setInvoiceStatus('pending');
+    setRemainingSeconds(invoiceLifetime);
+    setPollCount(0);
+    setFinalizedInvoiceId('');
     onDepositRequested({
       id: nextInvoice.id,
       amount: nextInvoice.amount,
       method: nextInvoice.method,
       destination: nextInvoice.destination,
       memoTag: nextInvoice.memoTag,
-      createdAt: formatHistoryDate(),
+      createdAt: formatHistoryDate(new Date(createdAt)),
       status: 'قيد المعالجة',
     });
   };
 
-  const openInvoice = () => {
-    if (invoice?.kind !== 'stars' || !invoice.invoiceLink) return;
-    const webApp = window.Telegram?.WebApp;
-    if (webApp?.openLink) {
-      webApp.openLink(invoice.invoiceLink, { try_instant_view: false });
-      return;
+  useEffect(() => {
+    if (!invoice || invoiceStatus !== 'pending') return;
+    const timer = window.setInterval(() => setPollCount((current) => Math.min(current + 1, 3)), 2000);
+    return () => window.clearInterval(timer);
+  }, [invoice, invoiceStatus]);
+
+  useEffect(() => {
+    if (!invoice || invoiceStatus !== 'pending' || pollCount < 3) return;
+    setInvoiceStatus('completed');
+  }, [invoice, invoiceStatus, pollCount]);
+
+  useEffect(() => {
+    if (!invoice || invoiceStatus !== 'pending') return;
+    const updateCountdown = () => {
+      const next = Math.max(0, Math.ceil((invoice.expiresAt - Date.now()) / 1000));
+      setRemainingSeconds(next);
+      if (next === 0) setInvoiceStatus('expired');
+    };
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(timer);
+  }, [invoice, invoiceStatus]);
+
+  useEffect(() => {
+    if (!invoice || finalizedInvoiceId === invoice.id) return;
+    if (invoiceStatus === 'completed') {
+      setFinalizedInvoiceId(invoice.id);
+      onDepositCompleted(invoice.id);
+    } else if (invoiceStatus === 'expired') {
+      setFinalizedInvoiceId(invoice.id);
+      onDepositExpired(invoice.id);
     }
-    window.open(invoice.invoiceLink, '_blank', 'noopener,noreferrer');
-  };
+  }, [invoice, invoiceStatus, finalizedInvoiceId, onDepositCompleted, onDepositExpired]);
+
+  const invoiceHeading = invoice?.method === 'binance'
+    ? `أرسل ${invoice.amount.toFixed(2)} USDT إلى معرّف Binance التالي`
+    : `أرسل ${invoice?.amount.toFixed(2)} USDT إلى العنوان التالي`;
+  const statusLabel = invoiceStatus === 'completed' ? 'تم التأكيد تلقائيًا' : invoiceStatus === 'expired' ? 'انتهت صلاحية الفاتورة' : 'جاري المعالجة';
 
   return (
     <main className="mx-auto w-full max-w-[1080px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
       <div className="mb-7">
         <div className="text-xs font-semibold text-[#1557ee]">إدارة الإعلانات / الإيداع</div>
         <h1 className="mt-2 font-display text-2xl font-bold text-[#12234b] md:text-3xl">إيداع رصيد الإعلانات</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">اختر المبلغ وطريقة الدفع، ثم أنشئ فاتورة الإيداع المناسبة.</p>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">أنشئ فاتورة، أرسل المبلغ، وسنتحقق من العملية تلقائيًا دون الحاجة إلى تأكيد يدوي.</p>
       </div>
 
       {!invoice ? (
         <div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]">
           <section className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-[var(--shadow-soft)] md:p-8">
-            <div className="flex items-center gap-3">
-              <div className="grid h-11 w-11 place-items-center rounded-xl bg-[#edf3ff] text-[#1557ee]"><DollarSign className="h-5 w-5" /></div>
-              <div><h2 className="font-display text-lg font-bold text-[#12234b]">بيانات الإيداع</h2><p className="mt-1 text-xs text-slate-400">اختر Web3 أو Telegram Stars</p></div>
-            </div>
-
+            <div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-[#edf3ff] text-[#1557ee]"><DollarSign className="h-5 w-5" /></div><div><h2 className="font-display text-lg font-bold text-[#12234b]">بيانات الإيداع</h2><p className="mt-1 text-xs text-slate-400">اختر Binance ID أو محفظة Web3</p></div></div>
             <div className="mt-7">
               <div className="mb-2 text-xs font-bold text-slate-700">طريقة الدفع</div>
               <div className="grid grid-cols-2 gap-2">
-                {([
-                  { value: 'web3', title: 'Web3 Wallet', Icon: Wallet },
-                  { value: 'stars', title: 'Telegram Stars', Icon: Sparkles },
-                ] as Array<{ value: DepositMethod; title: string; Icon: typeof Wallet }>).map(({ value, title, Icon }) => (
-                  <button
-                    type="button"
-                    key={value}
-                    data-testid={`button-deposit-method-${value}`}
-                    onClick={() => { setMethod(value); createInvoiceMutation.reset(); }}
-                    className={`flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2.5 text-right transition ${method === value ? 'border-[#1557ee] bg-[#eff4ff] text-[#1557ee]' : 'border-slate-200 text-slate-600 hover:border-blue-200'}`}
-                  >
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white"><Icon className="h-4 w-4" /></span>
-                    <span className="truncate whitespace-nowrap text-[11px] font-bold">{title}</span>
+                  {([
+                   { value: 'binance', title: 'Binance ID', Icon: WalletCards },
+                   { value: 'web3', title: 'Web3 Wallet', Icon: Wallet },
+                 ] as Array<{ value: PaymentMethod; title: string; Icon: typeof Wallet }>).map(({ value, title, Icon }) => (
+                   <button type="button" key={value} data-testid={`button-deposit-method-${value}`} onClick={() => setMethod(value)} className={`flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2.5 text-right transition ${method === value ? 'border-[#1557ee] bg-[#eff4ff] text-[#1557ee]' : 'border-slate-200 text-slate-600 hover:border-blue-200'}`}>
+                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white"><Icon className="h-4 w-4" /></span>
+                     <span className="truncate whitespace-nowrap text-[11px] font-bold">{title}</span>
                     {method === value && <CheckCircle2 className="mr-auto h-4 w-4" />}
                   </button>
                 ))}
               </div>
             </div>
-
-            <label className="mt-6 block text-xs font-bold text-slate-700">
-              المبلغ المطلوب (USDT)
-              <div className="relative mt-2">
-                <input value={amount} onChange={(event) => setAmount(event.target.value)} type="number" min="1" step="0.01" placeholder="مثال: 50.00" data-testid="input-deposit-amount" className="w-full rounded-xl border border-slate-200 bg-[#fbfcff] px-4 py-3 pl-16 text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" />
-                <span className="absolute left-4 top-3 rounded-md bg-[#eafbf8] px-2 py-1 text-[10px] font-bold text-[#159b89]">USDT</span>
-              </div>
-            </label>
-
-            <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-[11px] leading-5 text-amber-800">
-              <div className="flex items-center gap-2 font-bold"><ShieldCheck className="h-4 w-4" /> تنبيه قبل التحويل</div>
-              <p className="mt-1">
-                {method === 'web3'
-                  ? 'استخدم شبكة BEP20 فقط، وأرسل المبلغ نفسه الموضح في الفاتورة.'
-                  : 'فاتورة Telegram Stars ثابتة: 1000 نجمة مقابل 10 USDT. أدخل 10 USDT لإنشائها.'}
-              </p>
-            </div>
-
-            {createInvoiceMutation.isError && (
-              <div data-testid="status-invoice-error" role="alert" className="mt-4 flex items-start gap-2 rounded-2xl border border-rose-100 bg-rose-50 p-4 text-[11px] leading-5 text-rose-700">
-                <Info className="mt-0.5 h-4 w-4 shrink-0" />
-                <div><strong className="font-bold">لم يتم إنشاء الفاتورة</strong><p className="mt-1">{errorMessage}</p></div>
-              </div>
-            )}
-
-            <button type="button" data-testid={`button-create-invoice-${method}`} onClick={createInvoice} disabled={!validAmount || (method === 'stars' && !validStarsAmount) || createInvoiceMutation.isPending} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1557ee] py-3.5 text-sm font-bold text-white shadow-[0_10px_20px_rgba(21,87,238,.18)] transition hover:bg-[#0f48d0] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none">
-              {createInvoiceMutation.isPending ? <><span className="h-4 w-4 animate-pulse rounded-full border-2 border-white/40 border-t-white" /> جارٍ إنشاء الفاتورة</> : <><FileText className="h-4 w-4" /> إنشاء فاتورة {method === 'web3' ? 'Web3' : 'Telegram Stars'}</>}
-            </button>
+            <label className="mt-6 block text-xs font-bold text-slate-700">المبلغ المطلوب (USDT)<div className="relative mt-2"><input value={amount} onChange={(event) => setAmount(event.target.value)} type="number" min="1" step="0.01" placeholder="مثال: 50.00" data-testid="input-deposit-amount" className="w-full rounded-xl border border-slate-200 bg-[#fbfcff] px-4 py-3 pl-16 text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" /><span className="absolute left-4 top-3 rounded-md bg-[#eafbf8] px-2 py-1 text-[10px] font-bold text-[#159b89]">USDT</span></div></label>
+            <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-[11px] leading-5 text-amber-800"><div className="flex items-center gap-2 font-bold"><ShieldCheck className="h-4 w-4" /> تنبيه قبل التحويل</div><p className="mt-1">{method === 'binance' ? 'أرسل المبلغ إلى Binance ID الظاهر في الفاتورة، وليس إلى عنوان محفظة.' : 'استخدم شبكة BEP20 فقط، وأرسل المبلغ نفسه الموضح في الفاتورة.'}</p></div>
+            <button type="button" data-testid="button-create-invoice" onClick={createInvoice} disabled={!validAmount} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1557ee] py-3.5 text-sm font-bold text-white transition hover:bg-[#0f48d0] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"><FileText className="h-4 w-4" /> إنشاء فاتورة الإيداع</button>
           </section>
-
           <section className="rounded-[24px] bg-[#0e2452] p-6 text-white shadow-[0_15px_34px_rgba(14,36,82,.16)] md:p-8">
             <div className="flex items-center justify-between"><span className="text-xs font-bold text-blue-100">الرصيد الحالي</span><WalletCards className="h-5 w-5 text-cyan-300" /></div>
-            <div data-testid="text-advertiser-balance" className="mt-7 text-4xl font-bold tracking-tight">${advertiserBalance.toFixed(2)}</div>
-            <p className="mt-2 text-xs leading-5 text-blue-100/65">الرصيد الذي يمكنك استخدامه لتمويل إعلاناتك. ستظهر الإيداعات بعد التحقق.</p>
-            <div className="mt-8 border-t border-white/10 pt-5">
-              <div className="text-[10px] font-bold text-blue-100/60">{method === 'web3' ? 'معلومات الشبكة' : 'معلومات الفاتورة'}</div>
-              {method === 'web3' ? (
-                <>
-                  <div className="mt-3 flex items-center justify-between text-xs"><span className="text-blue-100/70">الشبكة</span><span className="font-bold text-cyan-300">BNB Smart Chain</span></div>
-                  <div className="mt-3 flex items-center justify-between text-xs"><span className="text-blue-100/70">العملة</span><span className="font-bold text-cyan-300">USDT (BEP20)</span></div>
-                </>
-              ) : (
-                <>
-                  <div className="mt-3 flex items-center justify-between text-xs"><span className="text-blue-100/70">المبلغ</span><span className="font-bold text-cyan-300">1000 Stars</span></div>
-                  <div className="mt-3 flex items-center justify-between text-xs"><span className="text-blue-100/70">الرصيد المقابل</span><span className="font-bold text-cyan-300">10 USDT</span></div>
-                </>
-              )}
-            </div>
+            <div className="mt-7 text-4xl font-bold tracking-tight">${advertiserBalance.toFixed(2)}</div>
+            <p className="mt-2 text-xs leading-5 text-blue-100/65">الرصيد الذي يمكنك استخدامه لتمويل إعلاناتك. ستظهر الإيداعات بعد التحقق التلقائي.</p>
+            <div className="mt-8 border-t border-white/10 pt-5"><div className="text-[10px] font-bold text-blue-100/60">معلومات الشبكة</div><div className="mt-3 flex items-center justify-between text-xs"><span className="text-blue-100/70">الشبكة</span><span className="font-bold text-cyan-300">BNB Smart Chain</span></div><div className="mt-3 flex items-center justify-between text-xs"><span className="text-blue-100/70">العملة</span><span className="font-bold text-cyan-300">USDT (BEP20)</span></div></div>
           </section>
         </div>
       ) : (
-        <section data-testid="status-invoice-success" className="animate-rise rounded-[24px] border border-slate-200 bg-white p-4 shadow-[var(--shadow-soft)] sm:p-5 md:p-6">
-          {invoice.kind === 'stars' ? (
-            <>
-              <div className="grid min-h-[60px] gap-3 rounded-[18px] border border-slate-100 bg-[#fbfcff] p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+        <section className="animate-rise rounded-[24px] border border-slate-200 bg-white p-4 shadow-[var(--shadow-soft)] sm:p-5 md:p-6">
+          <div className="grid min-h-[60px] gap-3 rounded-[18px] border border-slate-100 bg-[#fbfcff] p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div className="min-w-0">
+              <div className={`flex items-center gap-2 text-[10px] font-bold ${invoiceStatus === 'completed' ? 'text-[#159b89]' : invoiceStatus === 'expired' ? 'text-rose-500' : 'text-amber-600'}`}><span className={`h-1.5 w-1.5 rounded-full ${invoiceStatus === 'completed' ? 'bg-[#159b89]' : invoiceStatus === 'expired' ? 'bg-rose-500' : 'animate-pulse bg-amber-500'}`} /> {statusLabel}</div>
+              <h2 className="mt-1 truncate font-display text-sm font-bold text-[#12234b]">{invoiceHeading}</h2>
+            </div>
+            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500"><span className="rounded-lg bg-[#edf3ff] px-2 py-1 text-[#1557ee]">{methodLabel(invoice.method)}</span><span className="rounded-lg bg-[#eafbf8] px-2 py-1 text-[#159b89]">{invoice.amount.toFixed(2)} USDT</span></div>
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_220px]">
+            <div className="grid gap-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <CompactInvoiceValue
+                  label={invoice.method === 'binance' ? 'معرّف Binance للإيداع' : 'عنوان الإيداع (BEP20)'}
+                  value={invoice.destination}
+                  action={<button type="button" data-testid="button-copy-deposit-destination" onClick={() => copyValue(invoice.destination, 'destination')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee] shadow-sm transition hover:bg-[#edf3ff]" aria-label="نسخ وجهة الإيداع">{copied === 'destination' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</button>}
+                />
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 text-[10px] font-bold text-[#159b89]"><span className="h-1.5 w-1.5 rounded-full bg-[#159b89]" /> تم إنشاء الفاتورة</div>
-                  <h2 className="mt-1 truncate font-display text-sm font-bold text-[#12234b]">افتح فاتورة Telegram Stars لإتمام الدفع</h2>
+                  <CompactInvoiceValue
+                    label="Memo / Tag فريد لهذه العملية"
+                    value={invoice.memoTag}
+                    tone="text-[#159b89]"
+                    action={<button type="button" data-testid="button-copy-deposit-memo" onClick={() => copyValue(invoice.memoTag, 'memo')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee] shadow-sm transition hover:bg-[#edf3ff]" aria-label="نسخ Memo Tag">{copied === 'memo' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</button>}
+                  />
+                  <p className="mt-1 px-1 text-[9px] font-semibold leading-4 text-slate-400">الصق هذا الرمز في خانة الملاحظات عند إرسال الإيداع.</p>
                 </div>
-                <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500"><span className="rounded-lg bg-[#edf3ff] px-2 py-1 text-[#1557ee]">Telegram Stars</span><span className="rounded-lg bg-[#eafbf8] px-2 py-1 text-[#159b89]">10.00 USDT</span></div>
               </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <CompactInvoiceValue label="المبلغ" value={`${invoice.amountStars} Telegram Stars`} />
-                <CompactInvoiceValue label="الرصيد المقابل" value={`${invoice.creditUsd} USDT`} tone="text-[#159b89]" />
-                <CompactInvoiceValue label="عملة الفاتورة" value={invoice.currency} />
-                <CompactInvoiceValue label="معرّف الفاتورة" value={invoice.payload} tone="text-[#1557ee]" />
-              </div>
-              <div className="mt-4 rounded-2xl border border-blue-100 bg-[#f4f8ff] p-4">
-                <div className="flex items-start gap-3"><Info className="mt-0.5 h-4 w-4 shrink-0 text-[#1557ee]" /><p className="text-xs leading-6 text-slate-600">هذه فاتورة Telegram الرسمية. إنشاء الرابط لا يضيف الرصيد؛ سيظهر الإيداع بعد تأكيد الدفع.</p></div>
-              </div>
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                <button type="button" data-testid="button-open-telegram-invoice" onClick={openInvoice} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#1557ee] py-3.5 text-sm font-bold text-white shadow-[0_10px_20px_rgba(21,87,238,.18)] transition hover:bg-[#0f48d0]"><ExternalLink className="h-4 w-4" /> فتح الفاتورة في Telegram</button>
-                <button type="button" data-testid="button-create-another-invoice" onClick={() => { setInvoice(null); createInvoiceMutation.reset(); }} className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 py-3.5 text-sm font-bold text-slate-600 transition hover:border-blue-200 hover:text-[#1557ee]"><RefreshCw className="h-4 w-4" /> إنشاء فاتورة جديدة</button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="grid min-h-[60px] gap-3 rounded-[18px] border border-slate-100 bg-[#fbfcff] p-3 sm:grid-cols-[1fr_auto] sm:items-center">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 text-[10px] font-bold text-amber-600"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" /> بانتظار التحويل</div>
-                  <h2 className="mt-1 truncate font-display text-sm font-bold text-[#12234b]">أرسل {invoice.amount.toFixed(2)} USDT إلى محفظة Web3</h2>
-                </div>
-                <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500"><span className="rounded-lg bg-[#edf3ff] px-2 py-1 text-[#1557ee]">Web3 Wallet</span><span className="rounded-lg bg-[#eafbf8] px-2 py-1 text-[#159b89]">{invoice.amount.toFixed(2)} USDT</span></div>
-              </div>
-              <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                <CompactInvoiceValue label="عنوان الإيداع (BEP20)" value={invoice.destination} action={<button type="button" data-testid="button-copy-deposit-destination" onClick={() => copyValue(invoice.destination, 'destination')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee] shadow-sm transition hover:bg-[#edf3ff]" aria-label="نسخ عنوان الإيداع">{copied === 'destination' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</button>} />
-                <CompactInvoiceValue label="Memo / Tag فريد لهذه العملية" value={invoice.memoTag} tone="text-[#159b89]" action={<button type="button" data-testid="button-copy-deposit-memo" onClick={() => copyValue(invoice.memoTag, 'memo')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee] shadow-sm transition hover:bg-[#edf3ff]" aria-label="نسخ Memo Tag">{copied === 'memo' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</button>} />
-              </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-3">
                 <CompactInvoiceValue label="المبلغ" value={`${invoice.amount.toFixed(2)} USDT`} />
-                <CompactInvoiceValue label="طريقة الدفع" value="Web3 Wallet" />
-                <CompactInvoiceValue label="الشبكة" value="BNB Smart Chain · BEP20" tone="text-[#159b89]" />
+                <CompactInvoiceValue label="طريقة الدفع" value={methodLabel(invoice.method)} />
+                <CompactInvoiceValue label="الوقت المتبقي" value={invoiceStatus === 'pending' ? formatRemaining(remainingSeconds) : invoiceStatus === 'completed' ? 'تمت العملية' : 'منتهية'} tone={invoiceStatus === 'pending' ? 'text-amber-600' : 'text-[#159b89]'} />
               </div>
-              <div className="mt-4 flex min-h-[60px] items-center gap-2 rounded-[16px] border border-amber-100 bg-amber-50 px-3.5 text-amber-700"><Timer className="h-4 w-4 shrink-0" /><p className="text-[10px] font-bold">أرسل المبلغ نفسه عبر شبكة BEP20، ثم انتظر تأكيد التحويل.</p></div>
-              <div className="mt-6 flex justify-end border-t border-slate-100 pt-6"><button type="button" data-testid="button-create-another-invoice" onClick={() => setInvoice(null)} className="flex items-center justify-center gap-2 rounded-xl bg-[#1557ee] px-5 py-3 text-xs font-bold text-white"><RefreshCw className="h-4 w-4" /> إنشاء فاتورة جديدة</button></div>
-            </>
-          )}
+              <div className={`flex min-h-[60px] items-center gap-2 rounded-[16px] border px-3.5 ${invoiceStatus === 'pending' ? 'border-amber-100 bg-amber-50 text-amber-700' : invoiceStatus === 'completed' ? 'border-emerald-100 bg-[#eafbf8] text-[#159b89]' : 'border-rose-100 bg-rose-50 text-rose-600'}`}>
+                <Timer className="h-4 w-4 shrink-0" />
+                <p className="truncate text-[10px] font-bold">{invoiceStatus === 'pending' ? `تحديث تلقائي كل ثانيتين · تنتهي خلال ${formatRemaining(remainingSeconds)}` : invoiceStatus === 'completed' ? 'تم العثور على التحويل وتأكيد الإيداع تلقائيًا.' : 'انتهت الفاتورة قبل وصول التحويل.'}</p>
+              </div>
+            </div>
+            <div className="flex h-[60px] items-center gap-3 rounded-[16px] border border-dashed border-slate-200 bg-[#fbfcff] px-3">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border-2 border-white bg-[#eef3ff] text-[#1557ee] shadow-sm"><QrCode className="h-6 w-6" /></div>
+              <p className="text-[10px] font-semibold leading-4 text-slate-400">{invoice.method === 'binance' ? 'حوّل إلى معرّف Binance الظاهر.' : 'استخدم شبكة BEP20 وأرسل المبلغ المحدد.'}</p>
+            </div>
+          </div>
+          {invoiceStatus !== 'pending' && <div className="mt-7 flex justify-end border-t border-slate-100 pt-6"><button type="button" onClick={() => setInvoice(null)} className="flex items-center justify-center gap-2 rounded-xl bg-[#1557ee] px-5 py-3 text-xs font-bold text-white"><RefreshCw className="h-4 w-4" /> إنشاء فاتورة جديدة</button></div>}
         </section>
       )}
     </main>
@@ -1736,7 +1656,7 @@ function WithdrawHistoryPage({ records }: { records: WithdrawRecord[] }) {
 }
 
 const initialDepositHistory: DepositRecord[] = [
-  { id: 'DEP-1042', amount: 10, method: 'stars', destination: 'Telegram Stars · 1000 XTR', memoTag: 'vidreward:deposit:1000', createdAt: 'اليوم، 10:12 ص', status: 'تم' },
+  { id: 'DEP-1042', amount: 120, method: 'binance', destination: depositBinanceId, memoTag: '62182212#1', blockchainTxId: createBlockchainTxId(), createdAt: 'اليوم، 10:12 ص', status: 'تم' },
   { id: 'DEP-1037', amount: 75, method: 'web3', destination: depositAddress, memoTag: '62182212#2', createdAt: '18 سبتمبر، 04:36 م', status: 'تم الإلغاء' },
 ];
 
@@ -1915,7 +1835,22 @@ function Home() {
 
   const requestDeposit = (record: DepositRecord) => {
     setDepositHistory((current) => [record, ...current]);
-    notify('info', 'تم إنشاء الفاتورة', `المعرّف الداخلي ${record.id} · طريقة الدفع ${methodLabel(record.method)}.`);
+    notify('info', 'تم إنشاء الفاتورة', `المعرّف الداخلي ${record.id} · Memo / Tag ${record.memoTag}`);
+  };
+
+  const completeDeposit = (id: string) => {
+    const record = depositHistory.find((item) => item.id === id);
+    const blockchainTxId = record?.blockchainTxId ?? createBlockchainTxId();
+    setDepositHistory((current) => current.map((item) => item.id === id ? { ...item, status: 'تم', blockchainTxId } : item));
+    if (record) {
+      setAdvertiserBalance((current) => Number((current + record.amount).toFixed(2)));
+      notify('success', 'تم تأكيد الإيداع', `تمت إضافة ${record.amount.toFixed(2)} USDT إلى رصيد المعلن.`);
+    }
+  };
+
+  const expireDeposit = (id: string) => {
+    setDepositHistory((current) => current.map((record) => record.id === id ? { ...record, status: 'تم الإلغاء' } : record));
+    notify('warning', 'انتهت صلاحية الفاتورة', 'لم يصل تحويل مؤكد قبل انتهاء مدة الفاتورة.');
   };
 
   const creditViewer = (video: Video) => {
@@ -1927,15 +1862,8 @@ function Home() {
     notify('success', 'تمت إضافة المكافأة', `أضيفت ${video.reward} إلى رصيدك بعد إكمال المدة المطلوبة.`);
   };
 
-  const healthQuery = useHealthCheck();
-  const healthStatus: 'loading' | 'online' | 'offline' = healthQuery.isLoading
-    ? 'loading'
-    : healthQuery.isError
-      ? 'offline'
-      : 'online';
-
-  const openWatchInBrowser = (video: Video) => {
-    const url = createBrowserWatchUrl(telegramUser, video);
+  const openWatchInBrowser = (_video: Video) => {
+    const url = createBrowserWatchUrl(telegramUser);
     const webApp = window.Telegram?.WebApp;
     if (webApp?.openLink) {
       webApp.openLink(url, { try_instant_view: false });
@@ -1947,12 +1875,12 @@ function Home() {
   return (
     <div className="min-h-[100dvh] bg-[#f7f9fc] text-[#12234b]">
       <div className={`flex min-h-[100dvh] ${browserEarningPage ? '' : 'lg:gap-5 lg:p-5'}`}>
-        {!browserEarningPage && <Sidebar mode={mode} screen={screen} telegramUser={telegramUser} healthStatus={healthStatus} onModeChange={(nextMode) => { setMode(nextMode); setScreen(nextMode === 'creator' ? 'overview' : 'watch'); }} onNavigate={setScreen} onAdd={() => { setMode('creator'); setScreen('add'); }} open={mobileMenu} onClose={() => setMobileMenu(false)} />}
+        {!browserEarningPage && <Sidebar mode={mode} screen={screen} telegramUser={telegramUser} onModeChange={(nextMode) => { setMode(nextMode); setScreen(nextMode === 'creator' ? 'overview' : 'watch'); }} onNavigate={setScreen} onAdd={() => { setMode('creator'); setScreen('add'); }} open={mobileMenu} onClose={() => setMobileMenu(false)} />}
         {!browserEarningPage && mobileMenu && <button type="button" aria-label="إغلاق خلفية القائمة" data-testid="button-close-menu-overlay" onClick={() => setMobileMenu(false)} className="fixed inset-0 z-40 bg-[#061333]/30 backdrop-blur-sm lg:hidden" />}
         <div className={`min-w-0 flex-1 ${browserEarningPage ? '' : 'overflow-hidden rounded-none bg-[#f7f9fc] lg:rounded-[26px] lg:border lg:border-slate-200/80 lg:bg-[#fbfcfe]'}`}>
           {!browserEarningPage && <Header mode={mode} screen={screen} telegramUser={telegramUser} onMenu={() => setMobileMenu(true)} onAdd={() => { setMode('creator'); setScreen('add'); }} />}
           {screen === 'add' && mode === 'creator' ? <AddVideo telegramUser={telegramUser} onBack={() => setScreen('campaigns')} onSubmit={(video) => { addVideo(video); notify('success', 'تم نشر الإعلان', 'أصبح الفيديو نشطًا ويمكن للمشاهدين اكتشافه الآن.'); }} />
-            : screen === 'deposit' && mode === 'creator' ? <DepositPage advertiserBalance={advertiserBalance} telegramUser={telegramUser} onDepositRequested={requestDeposit} />
+            : screen === 'deposit' && mode === 'creator' ? <DepositPage advertiserBalance={advertiserBalance} telegramUser={telegramUser} onDepositRequested={requestDeposit} onDepositCompleted={completeDeposit} onDepositExpired={expireDeposit} />
               : screen === 'deposit-history' && mode === 'creator' ? <DepositHistoryPage records={depositHistory} />
                 : screen === 'withdraw' && mode === 'viewer' ? <WithdrawPage viewerBalance={viewerBalance} telegramUser={telegramUser} onWithdraw={withdrawEarnings} />
                   : screen === 'withdraw-history' && mode === 'viewer' ? <WithdrawHistoryPage records={withdrawHistory} />

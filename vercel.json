@@ -1,7 +1,7 @@
 {
-  "buildCommand": "BASE_PATH=/ PORT=4173 pnpm --filter @workspace/vidreward build",
-  "outputDirectory": "artifacts/vidreward/dist/public",
-  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist/public",
+  "framework": "vite",
   "rewrites": [
     {
       "source": "/(.*)",
