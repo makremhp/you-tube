@@ -1,4 +1,4 @@
-import { createContext, createElement, useContext, useEffect, useMemo, type ReactNode } from 'react';
+import { createContext, createElement, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 export type Language = 'ar' | 'en';
 
@@ -49,6 +49,7 @@ const exactTranslations: Record<string, string> = {
   'Telegram Stars': 'Stars',
   'Web3 Wallet': 'Web3 wallet',
   'محفظة Web3': 'Web3 wallet',
+  'Web3': 'Web3',
   'Binance ID': 'Binance ID',
   'إيداع رصيد الإعلانات': 'Deposit campaign funds',
   'بيانات الإيداع': 'Deposit details',
@@ -70,24 +71,27 @@ const exactTranslations: Record<string, string> = {
   'انتهت صلاحية الفاتورة': 'Invoice expired',
   'إنشاء فاتورة جديدة': 'Create a new invoice',
   'ادفع بالنجوم': 'Pay with Stars',
+  'اضغط لفتح رابط الدفع': 'Tap to open payment link',
+  'اضغط لفتح رابط دفع Telegram وإكمال الدفع': 'Tap to open the Telegram payment link and complete payment',
   'تعذر إنشاء فاتورة Stars.': 'Unable to create a Stars invoice.',
   'أنشئ فاتورة، أرسل المبلغ، وسنتحقق من العملية تلقائيًا دون الحاجة إلى تأكيد يدوي.': 'Create an invoice, send the amount, and we will verify the payment automatically.',
   'اختر Stars أو محفظة Web3': 'Choose Stars or a Web3 wallet',
-  'استخدم شبكة BEP20 فقط، وأرسل المبلغ نفسه الموضح في الفاتورة.': 'Use the BEP20 network only and send the exact amount shown on the invoice.',
+  'استخدم شبكة Polygon فقط، وأرسل المبلغ نفسه الموضح في الفاتورة.': 'Use the Polygon network only and send the exact amount shown on the invoice.',
   'تم تأكيد دفع Telegram Stars وإضافة الإيداع.': 'Stars payment confirmed and deposit added.',
   'تم تأكيد دفع Stars وإضافة الإيداع.': 'Stars payment confirmed and deposit added.',
   'فاتورة Telegram آمنة': 'Secure Telegram invoice',
   'اضغط زر الدفع أسفل الفاتورة لإكمال الدفع داخل Telegram.': 'Use the payment button below to complete payment in Telegram.',
-  'استخدم شبكة BEP20 وأرسل المبلغ المحدد.': 'Use the BEP20 network and send the specified amount.',
+  'استخدم شبكة Polygon وأرسل المبلغ المحدد.': 'Use the Polygon network and send the specified amount.',
   'الصق هذا الرمز في خانة الملاحظات عند إرسال الإيداع.': 'Paste this code into the memo field when sending your deposit.',
   'نسخ': 'Copy',
   'نسخ وجهة الإيداع': 'Copy deposit destination',
   'نسخ Memo Tag': 'Copy memo tag',
   'مبلغ': 'Amount',
   'المبلغ': 'Amount',
-  'عنوان الإيداع (BEP20)': 'Deposit address (BEP20)',
+  'عنوان الإيداع (Polygon)': 'Deposit address (Polygon)',
   'Memo / Tag فريد لهذه العملية': 'Unique Memo / Tag for this payment',
-  'عنوان محفظة USDT (BEP20)': 'USDT wallet address (BEP20)',
+  'عنوان محفظة USDT (Polygon)': 'USDT wallet address (Polygon)',
+  'USDT عبر Polygon': 'USDT via Polygon',
   'معرّف Binance الرقمي': 'Binance numeric ID',
   'الرصيد المتاح': 'Available balance',
   'بيانات الاستلام': 'Receiving details',
@@ -117,7 +121,7 @@ const exactTranslations: Record<string, string> = {
   'الأربعاء، ٢٣ سبتمبر ٢٠٢٦': 'Wednesday, September 23, 2026',
   'الثلاثاء، ٢٤ ديسمبر ٢٠٢٤': 'Tuesday, December 24, 2024',
   'رصيد المعلن': 'Advertiser balance',
-  'جاهز للتحويل عبر Web3 · BEP20': 'Ready for Web3 transfer · BEP20',
+  'جاهز للتحويل عبر Web3 · Polygon': 'Ready for Web3 transfer · Polygon',
   'إيداع رصيد جديد': 'Deposit new funds',
   'أداء هذا الشهر': 'This month’s performance',
   'إكمالات الفيديو': 'Video completions',
@@ -323,7 +327,7 @@ const fragmentTranslations: Record<string, string> = {
   'مثال: كيف تبدأ مشروعك من الصفر؟': 'Example: How do you start a business from scratch?',
   'مثال: 782946315': 'Example: 782946315',
   'أدخل Binance ID رقميًا فقط (3 إلى 20 رقمًا).': 'Enter a numeric Binance ID only (3 to 20 digits).',
-  'أدخل عنوان BEP20 صحيحاً مكوناً من 42 رمزاً.': 'Enter a valid 42-character BEP20 address.',
+  'أدخل عنوان Polygon صحيحاً مكوناً من 42 رمزاً.': 'Enter a valid 42-character Polygon address.',
   'نسخ وجهة الإيداع': 'Copy deposit destination',
   'نسخ Memo Tag': 'Copy memo tag',
   'نسخ ': 'Copy ',
@@ -373,7 +377,7 @@ type LanguageContextValue = {
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const language = useMemo(getBrowserLanguage, []);
+  const [language, setLanguage] = useState<Language>(() => getBrowserLanguage());
   const value = useMemo<LanguageContextValue>(() => ({
     language,
     dir: language === 'ar' ? 'rtl' : 'ltr',
@@ -382,12 +386,25 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }), [language]);
 
   useEffect(() => {
+    const handleBrowserLanguageChange = () => setLanguage(getBrowserLanguage());
+    window.addEventListener('languagechange', handleBrowserLanguageChange);
+    return () => window.removeEventListener('languagechange', handleBrowserLanguageChange);
+  }, []);
+
+  useEffect(() => {
+    const originalText = new WeakMap<Text, string>();
+    const lastRenderedText = new WeakMap<Text, string>();
+    const originalAttributes = new WeakMap<HTMLElement, Map<string, string>>();
+    const lastRenderedAttributes = new WeakMap<HTMLElement, Map<string, string>>();
+
     const applyLanguage = () => {
       document.documentElement.lang = language;
       document.documentElement.dir = value.dir;
       document.documentElement.style.direction = value.dir;
-      document.querySelectorAll<HTMLElement>('[dir="rtl"]').forEach((element) => {
-        element.dir = value.dir;
+      document.querySelectorAll<HTMLElement>('[dir]').forEach((element) => {
+        const originalDir = element.dataset.vidrewardOriginalDir ?? element.getAttribute('dir');
+        if (originalDir) element.dataset.vidrewardOriginalDir = originalDir;
+        if (originalDir === 'rtl') element.dir = value.dir;
       });
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       const nodes: Text[] = [];
@@ -400,16 +417,32 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       }
       nodes.forEach((textNode) => {
         const current = textNode.nodeValue ?? '';
-        const translated = translateText(current, language);
+        const lastRendered = lastRenderedText.get(textNode);
+        const source = lastRendered === undefined || current !== lastRendered
+          ? current
+          : originalText.get(textNode) ?? current;
+        originalText.set(textNode, source);
+        const translated = translateText(source, language);
+        lastRenderedText.set(textNode, translated);
         if (translated !== current) textNode.nodeValue = translated;
       });
       document.querySelectorAll<HTMLElement>('[aria-label],[title],[placeholder],[alt]').forEach((element) => {
+        const sourceAttributes = originalAttributes.get(element) ?? new Map<string, string>();
+        const renderedAttributes = lastRenderedAttributes.get(element) ?? new Map<string, string>();
         ['aria-label', 'title', 'placeholder', 'alt'].forEach((attribute) => {
           const current = element.getAttribute(attribute);
           if (!current) return;
-          const translated = translateText(current, language);
+          const lastRendered = renderedAttributes.get(attribute);
+          const source = lastRendered === undefined || current !== lastRendered
+            ? current
+            : sourceAttributes.get(attribute) ?? current;
+          sourceAttributes.set(attribute, source);
+          const translated = translateText(source, language);
+          renderedAttributes.set(attribute, translated);
           if (translated !== current) element.setAttribute(attribute, translated);
         });
+        originalAttributes.set(element, sourceAttributes);
+        lastRenderedAttributes.set(element, renderedAttributes);
       });
     };
     applyLanguage();
