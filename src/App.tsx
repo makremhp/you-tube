@@ -633,12 +633,18 @@ function VideoArtwork({ video, compact = false }: { video: Video; compact?: bool
   const thumbnail = getVideoThumbnail(video.link);
 
   return (
-    <div className={`relative aspect-video w-full overflow-hidden ${compact ? 'rounded-xl' : 'rounded-[20px]'} ${thumbnail ? 'bg-slate-900' : video.art}`}>
+    <div className={`relative aspect-video overflow-hidden ${compact ? 'w-full rounded-xl' : 'mr-1 mt-1 w-[calc(100%-0.25rem)] rounded-[20px]'} ${thumbnail ? 'bg-slate-900' : video.art}`}>
       {thumbnail ? (
         <img src={thumbnail} alt="" className="absolute inset-0 h-full w-full object-cover" />
       ) : (
         <div className="absolute inset-0 opacity-[.12] [background-image:linear-gradient(120deg,transparent_25%,white_25%,white_27%,transparent_27%,transparent_62%,white_62%,white_64%,transparent_64%)]" />
       )}
+      <div className="pointer-events-none absolute inset-0 grid place-items-center">
+        <span className="absolute h-[45px] w-[45px] rounded-full border border-white/25" />
+        <span className="relative z-10 grid h-[34px] w-[34px] place-items-center rounded-full border border-white/50 bg-white/20 text-white backdrop-blur-md">
+          <Play className="mr-[-1px] h-4 w-4 fill-current" />
+        </span>
+      </div>
     </div>
   );
 }
