@@ -1,0 +1,428 @@
+import { createContext, createElement, useContext, useEffect, useMemo, type ReactNode } from 'react';
+
+export type Language = 'ar' | 'en';
+
+export function getBrowserLanguage(): Language {
+  if (typeof navigator === 'undefined') return 'en';
+  const languages = navigator.languages?.length ? navigator.languages : [navigator.language];
+  return languages.some((value) => value?.toLowerCase().startsWith('ar')) ? 'ar' : 'en';
+}
+
+const exactTranslations: Record<string, string> = {
+  'حساب المستخدم': 'User account',
+  'إغلاق القائمة': 'Close menu',
+  'فتح القائمة': 'Open menu',
+  'الرئيسية': 'Home',
+  'نشر إعلان': 'Publish ad',
+  'اربح': 'Earn',
+  'إدارة الإعلانات': 'Ad management',
+  'مساحة الربح': 'Earning space',
+  'نظرة عامة': 'Overview',
+  'إعلاناتي': 'My campaigns',
+  'إيداع رصيد': 'Deposit funds',
+  'سجل الإيداع': 'Deposit history',
+  'شاهد واربح': 'Watch and earn',
+  'سحب الأرباح': 'Withdraw earnings',
+  'سجل السحب': 'Withdrawal history',
+  'ميزة جديدة': 'New feature',
+  'موّل إعلانك بسهولة': 'Fund your campaign with ease',
+  'ابدأ بجمع أرباحك': 'Start collecting earnings',
+  'أضف إعلان الآن': 'Add an ad now',
+  'اذهب إلى المشاهدة': 'Go to watch',
+  'حساب منشئ': 'Creator account',
+  'إضافة إعلان': 'Add campaign',
+  'إعلان جديد': 'New campaign',
+  'إيداع': 'Deposit',
+  'سحب': 'Withdrawal',
+  'الطريقة': 'Method',
+  'الوجهة': 'Destination',
+  'نوع Memo': 'Memo type',
+  'رقم العملية': 'Transaction ID',
+  'المعرّف الداخلي': 'Internal ID',
+  'بعد التأكيد': 'After confirmation',
+  'سيظهر بعد التأكيد': 'Appears after confirmation',
+  'قيد المعالجة': 'Processing',
+  'تم': 'Completed',
+  'تم الإلغاء': 'Cancelled',
+  'مرفوض': 'Declined',
+  'Stars': 'Stars',
+  'Telegram Stars': 'Stars',
+  'Web3 Wallet': 'Web3 wallet',
+  'محفظة Web3': 'Web3 wallet',
+  'Binance ID': 'Binance ID',
+  'إيداع رصيد الإعلانات': 'Deposit campaign funds',
+  'بيانات الإيداع': 'Deposit details',
+  'طريقة الدفع': 'Payment method',
+  'المبلغ المطلوب (دولار)': 'Amount (USD)',
+  'تنبيه قبل الدفع': 'Before you pay',
+  'إنشاء فاتورة الإيداع': 'Create deposit invoice',
+  'الرصيد الحالي': 'Current balance',
+  'طرق الإيداع': 'Deposit methods',
+  'الدفع السريع': 'Quick payment',
+  'التحويل المباشر': 'Direct transfer',
+  'فاتورة الإيداع': 'Deposit invoice',
+  'عدد النجوم': 'Star amount',
+  'الوقت المتبقي': 'Time remaining',
+  'تمت العملية': 'Payment completed',
+  'منتهية': 'Expired',
+  'جاري المعالجة': 'Processing',
+  'تم التأكيد تلقائيًا': 'Automatically confirmed',
+  'انتهت صلاحية الفاتورة': 'Invoice expired',
+  'إنشاء فاتورة جديدة': 'Create a new invoice',
+  'ادفع بالنجوم': 'Pay with Stars',
+  'تعذر إنشاء فاتورة Stars.': 'Unable to create a Stars invoice.',
+  'أنشئ فاتورة، أرسل المبلغ، وسنتحقق من العملية تلقائيًا دون الحاجة إلى تأكيد يدوي.': 'Create an invoice, send the amount, and we will verify the payment automatically.',
+  'اختر Stars أو محفظة Web3': 'Choose Stars or a Web3 wallet',
+  'استخدم شبكة BEP20 فقط، وأرسل المبلغ نفسه الموضح في الفاتورة.': 'Use the BEP20 network only and send the exact amount shown on the invoice.',
+  'تم تأكيد دفع Telegram Stars وإضافة الإيداع.': 'Stars payment confirmed and deposit added.',
+  'تم تأكيد دفع Stars وإضافة الإيداع.': 'Stars payment confirmed and deposit added.',
+  'فاتورة Telegram آمنة': 'Secure Telegram invoice',
+  'اضغط زر الدفع أسفل الفاتورة لإكمال الدفع داخل Telegram.': 'Use the payment button below to complete payment in Telegram.',
+  'استخدم شبكة BEP20 وأرسل المبلغ المحدد.': 'Use the BEP20 network and send the specified amount.',
+  'الصق هذا الرمز في خانة الملاحظات عند إرسال الإيداع.': 'Paste this code into the memo field when sending your deposit.',
+  'نسخ': 'Copy',
+  'نسخ وجهة الإيداع': 'Copy deposit destination',
+  'نسخ Memo Tag': 'Copy memo tag',
+  'مبلغ': 'Amount',
+  'المبلغ': 'Amount',
+  'عنوان الإيداع (BEP20)': 'Deposit address (BEP20)',
+  'Memo / Tag فريد لهذه العملية': 'Unique Memo / Tag for this payment',
+  'عنوان محفظة USDT (BEP20)': 'USDT wallet address (BEP20)',
+  'معرّف Binance الرقمي': 'Binance numeric ID',
+  'الرصيد المتاح': 'Available balance',
+  'بيانات الاستلام': 'Receiving details',
+  'إرسال طلب السحب': 'Submit withdrawal request',
+  'راجع البيانات قبل الإرسال': 'Review before submitting',
+  'عمليات الإيداع': 'Deposits',
+  'طلبات السحب': 'Withdrawal requests',
+  'لا توجد عمليات إيداع بعد': 'No deposits yet',
+  'لا توجد طلبات سحب بعد': 'No withdrawal requests yet',
+  'إجمالي العمليات': 'Total transactions',
+  'الإيداعات المكتملة': 'Completed deposits',
+  'قيد المراجعة': 'Under review',
+  'إجمالي الطلبات': 'Total requests',
+  'تم تحويله': 'Transferred',
+  'مكافآت موثوقة': 'Trusted rewards',
+  'مدة واضحة': 'Clear durations',
+  'أكمل المدة المطلوبة': 'Complete the required time',
+  'الفيديو جاهز للمشاهدة': 'Video ready to watch',
+  'فتح الفيديو على YouTube': 'Open video on YouTube',
+  'تحقق واستلم المكافأة': 'Verify and claim reward',
+  'شاهد فيديو آخر': 'Watch another video',
+  'تمت إضافة المكافأة': 'Reward added',
+  'تم تأكيد الإيداع': 'Deposit confirmed',
+  'تم إنشاء الفاتورة': 'Invoice created',
+  'هذه لمحة سريعة عن أثر إعلاناتك اليوم.': 'Here is a quick look at your campaign impact today.',
+  'ملخص أداء حملاتك ورصيدك في مكان واحد.': 'Your campaign performance and balance in one place.',
+  'الأربعاء، ٢٣ سبتمبر ٢٠٢٦': 'Wednesday, September 23, 2026',
+  'الثلاثاء، ٢٤ ديسمبر ٢٠٢٤': 'Tuesday, December 24, 2024',
+  'رصيد المعلن': 'Advertiser balance',
+  'جاهز للتحويل عبر Web3 · BEP20': 'Ready for Web3 transfer · BEP20',
+  'إيداع رصيد جديد': 'Deposit new funds',
+  'أداء هذا الشهر': 'This month’s performance',
+  'إكمالات الفيديو': 'Video completions',
+  'مقارنة بالأسبوع الماضي': 'Compared with last week',
+  'خطواتك التالية': 'Your next steps',
+  'أكمل هذه الخطوات لتحصل على أفضل نتيجة.': 'Complete these steps for the best result.',
+  'موّل حملتك': 'Fund your campaign',
+  'راجع الأداء': 'Review performance',
+  'شارك فيديو يستحق وقت المشاهدين.': 'Share a video worth your viewers’ time.',
+  'أنشئ فاتورة إيداع آمنة عبر Stars أو Web3.': 'Create a secure deposit invoice with Stars or Web3.',
+  'تابع المشاهدات والإكمالات من صفحة الإعلانات.': 'Track views and completions from the campaigns page.',
+  'ملخص الإنفاق': 'Spend summary',
+  'آخر ٧ أيام': 'Last 7 days',
+  'آخر ٣٠ يومًا': 'Last 30 days',
+  'عن الأسبوع الماضي': 'from last week',
+  'متاح لتمويل الحملات': 'Available for campaign funding',
+  'متاح لتمويل الحملات القادمة': 'Available for upcoming campaigns',
+  'الإنفاق على الإعلانات': 'Ad spend',
+  'منذ بداية الشهر': 'Since the start of the month',
+  'أحدث إعلاناتك': 'Your latest campaigns',
+  'راقب أداء المحتوى المنشور مؤخراً': 'Track recently published content',
+  'مقارنة المشاهدات المكتملة بالأسبوع السابق': 'Completed views compared with the previous week',
+  'معدل التحويل': 'Conversion rate',
+  'الرصيد الذي يمكنك استخدامه لتمويل إعلاناتك. ستظهر الإيداعات بعد التحقق التلقائي.': 'The balance available to fund your campaigns. Deposits appear after automatic verification.',
+};
+
+const dynamicTranslations: Array<[RegExp, (match: RegExpExecArray) => string]> = [
+  [/^(\d+) ث$/, (match) => `${match[1]} sec`],
+  [/^(\d+) ثانية$/, (match) => `${match[1]} seconds`],
+  [/^فيديو (\d+)$/, (match) => `Video ${match[1]}`],
+  [/^ادفع (.+) دولار عبر Telegram Stars$/, (match) => `Pay ${match[1]} USD with Stars`],
+  [/^ادفع (.+) دولار عبر Stars$/, (match) => `Pay ${match[1]} USD with Stars`],
+  [/^أرسل (.+) USDT إلى العنوان التالي$/, (match) => `Send ${match[1]} USDT to this address`],
+  [/^في انتظار تأكيد الدفع · تنتهي خلال (.+)$/, (match) => `Awaiting payment confirmation · expires in ${match[1]}`],
+  [/^تم تأكيد دفع Telegram Stars وإضافة الإيداع\.$/, () => 'Stars payment confirmed and deposit added.'],
+  [/^انتهت الفاتورة قبل وصول الدفع\.$/, () => 'The invoice expired before payment arrived.'],
+  [/^اضغط زر الدفع أسفل الفاتورة لإكمال الدفع داخل Telegram\.$/, () => 'Use the payment button below to complete payment in Telegram.'],
+  [/^كل 1 دولار = 100 نجمة\. سيدفع المستخدم (.+) نجمة عبر Telegram\.$/, (match) => `1 USD = 100 Stars. You will pay ${match[1]} Stars through Telegram.`],
+  [/^المعرّف الداخلي (.+) · Memo \/ Tag (.+)$/, (match) => `Internal ID ${match[1]} · Memo / Tag ${match[2]}`],
+  [/^تمت إضافة (.+) USDT إلى رصيد المعلن\.$/, (match) => `${match[1]} USDT was added to the advertiser balance.`],
+  [/^تم إنشاء طلب السحب بقيمة (.+) USDT\. الحالة: قيد المعالجة\.$/, (match) => `Withdrawal request for ${match[1]} USDT created. Status: processing.`],
+  [/^تم إرسال طلب السحب$/, () => 'Withdrawal request sent'],
+];
+
+const fragmentTranslations: Record<string, string> = {
+  'إدارة الإعلانات': 'Ad management',
+  'صباح الخير': 'Good morning',
+  'زائر': 'Guest',
+  'محمد': 'Mohammed',
+  'محمد العتيبي': 'Mohammed Alotaibi',
+  'سارة العتيبي': 'Sarah Alotaibi',
+  'محمود ناصر': 'Mahmoud Nasser',
+  'نوف الحربي': 'Nouf Alharbi',
+  'ستوديو عدسة': 'Lens Studio',
+  'كيف صنعت أول منتج رقمي لي؟': 'How I built my first digital product',
+  'جولة صباحية في استوديو التصميم': 'A morning tour of a design studio',
+  'ثلاث أفكار لتطوير عاداتك': 'Three ideas for better habits',
+  'دليل المبتدئين إلى التصوير بالهاتف': 'A beginner guide to phone photography',
+  'منذ يومين': '2 days ago',
+  'منذ 4 أيام': '4 days ago',
+  'منذ أسبوع': '1 week ago',
+  'منذ 9 أيام': '9 days ago',
+  'الآن': 'Now',
+  'اليوم، 10:12 ص': 'Today, 10:12 AM',
+  'أمس، 08:20 م': 'Yesterday, 08:20 PM',
+  '18 سبتمبر، 04:36 م': 'Sep 18, 04:36 PM',
+  '14 سبتمبر، 01:05 م': 'Sep 14, 01:05 PM',
+  '10 سبتمبر، 11:40 ص': 'Sep 10, 11:40 AM',
+  '10 ثوانٍ': '10 seconds',
+  '20 ثانية': '20 seconds',
+  '40 ثانية': '40 seconds',
+  '80 ثانية': '80 seconds',
+  'مساحة الربح': 'Earning space',
+  'إرشادات المشاهدة': 'Watch guidance',
+  'إغلاق التنبيه': 'Dismiss notification',
+  'إغلاق المشاهدة': 'Close watch session',
+  'إغلاق خلفية القائمة': 'Close menu backdrop',
+  'إعلاناتي': 'My campaigns',
+  'إعلان جديد': 'New campaign',
+  'إضافة إعلان جديد': 'Add new campaign',
+  'أضف إعلان جديد': 'Add new campaign',
+  'أضف إعلاناً جديداً وحدد ميزانيته.': 'Add a new campaign and set its budget.',
+  'أضف إعلانك الأول': 'Add your first campaign',
+  'أضف إعلان الآن': 'Add campaign now',
+  'إجمالي المشاهدات': 'Total views',
+  'إجمالي الإنفاق الإعلاني': 'Total ad spend',
+  'إجمالي الإنفاق': 'Total spend',
+  'مشاهدون جدد': 'New viewers',
+  'متوسط الإكمال': 'Average completion',
+  'رصيد المعلن': 'Advertiser balance',
+  'رصيد الإعلانات': 'Campaign balance',
+  'متاح لتمويل الحملات': 'Available for campaign funding',
+  'متاح لتمويل الحملات القادمة': 'Available for upcoming campaigns',
+  'الإنفاق على الإعلانات': 'Ad spend',
+  'منذ بداية الشهر': 'Since the start of the month',
+  'أحدث إعلاناتك': 'Your latest campaigns',
+  'راقب أداء المحتوى المنشور مؤخراً': 'Track recently published content',
+  'الأداء هذا الشهر': 'Performance this month',
+  'أداء هذا الشهر': 'This month’s performance',
+  'خطواتك التالية': 'Your next steps',
+  'أكمل هذه الخطوات لتحصل على أفضل نتيجة.': 'Complete these steps for the best result.',
+  'ملخص الإنفاق': 'Spend summary',
+  'إكمالات الفيديو': 'Video completions',
+  'معدل التحويل': 'Conversion rate',
+  'عرض الكل': 'View all',
+  'الكل': 'All',
+  'نشطة': 'Active',
+  'مسودات': 'Drafts',
+  'نشط': 'Active',
+  'مسودة': 'Draft',
+  'مكتمل': 'Completed',
+  'فيديوهات متاحة': 'Available videos',
+  'إجمالي المكافآت': 'Total rewards',
+  'رصيدك القابل للسحب': 'Withdrawable balance',
+  'اربح من وقتك': 'Earn from your time',
+  'شاهد ما تحب،': 'Watch what you love,',
+  'واكسب مقابل وقتك.': 'and earn for your time.',
+  'أكمل المدة المطلوبة، واحصل على رصيدك مباشرة. لا تعقيد، فقط محتوى يستحق وقتك.': 'Complete the required time and receive your balance directly. No complexity, just content worth your time.',
+  'أرباح موثوقة': 'Trusted rewards',
+  'مدد واضحة': 'Clear durations',
+  'الفيديوهات المتاحة': 'Available videos',
+  'كل مشاهدة مكتملة تضيف إلى رصيدك': 'Every completed view adds to your balance',
+  'فيديو متاح الآن': 'video available now',
+  'لا توجد فيديوهات جديدة الآن': 'No new videos right now',
+  'ستظهر هنا الفيديوهات التي لم تشاهدها بعد.': 'Videos you have not watched yet will appear here.',
+  'الفيديوهات الجديدة للمشاهدة حاليًا.': 'new videos available to watch.',
+  'أنت في صفحة المشاهدة': 'You are on the watch page',
+  'اختر فيديو لبدء جلسة مشاهدة موثقة': 'Choose a video to start a verified watch session',
+  'آمنة': 'Secure',
+  'شاهد واربح من المتصفح': 'Watch and earn in your browser',
+  'مشغلات YouTube لا تظهر داخل Telegram. افتح صفحة المشاهدة في المتصفح لمشاهدة الفيديوهات مباشرةً دون قوائم التطبيق.': 'YouTube players are not shown inside Telegram. Open the watch page in your browser to watch videos directly.',
+  'اذهب للمتصفح للمشاهدة والربح': 'Open browser to watch and earn',
+  'لا توجد فيديوهات جديدة للمشاهدة حاليًا.': 'No new videos are available right now.',
+  'ستفتح صفحة مشاهدة مستقلة تعرض الفيديو المختار فقط.': 'A dedicated watch page will open with only the selected video.',
+  'سحب الأرباح': 'Withdraw earnings',
+  'اختر Binance ID أو محفظة Web3 لاستلام أرباحك، ثم أرسل الطلب للمراجعة.': 'Choose a Binance ID or Web3 wallet for your earnings, then submit the request for review.',
+  'الحد الأدنى للسحب 1 USDT. يتم خصم الرصيد عند إرسال الطلب للمراجعة.': 'The minimum withdrawal is 1 USDT. Your balance is deducted when the request is submitted.',
+  'تحويل آمن': 'Secure transfer',
+  'تحويلات Binance سريعة وواضحة': 'Fast, clear Binance transfers',
+  'يتم حفظ الطلب في سجل السحب بحالة قيد المعالجة.': 'The request is saved in withdrawal history as processing.',
+  'ستظهر العملية في سجل السحب بحالة قيد المعالجة، ولا يمكن إلغاؤها بعد بدء التحويل.': 'The transaction will appear in withdrawal history as processing and cannot be cancelled once transfer begins.',
+  'سجل الإيداع': 'Deposit history',
+  'سجل السحب': 'Withdrawal history',
+  'تابع عمليات تمويل الإعلانات بسرعة ووضوح.': 'Track campaign funding quickly and clearly.',
+  'كل طلبات سحب الأرباح في عرض سريع ومنظم.': 'All earnings withdrawal requests in one organized view.',
+  'المبلغ · الطريقة · الوجهة · الحالة': 'Amount · method · destination · status',
+  'طلبات السحب': 'Withdrawal requests',
+  'ستظهر هنا كل فاتورة تمويل مع طريقة الدفع وحالة التحقق.': 'Every funding invoice appears here with its method and verification status.',
+  'ستظهر هنا طلبات السحب مع وجهتها وحالة التحويل.': 'Withdrawal requests appear here with their destination and transfer status.',
+  'نشر إعلان / إعلان جديد': 'Publish ad / New campaign',
+  'انشر إعلانك': 'Publish your campaign',
+  'تفاصيل الفيديو': 'Video details',
+  'أخبر المشاهدين لماذا يستحق هذا الفيديو وقتهم.': 'Tell viewers why this video is worth their time.',
+  'عنوان الفيديو': 'Video title',
+  'رابط الفيديو': 'Video link',
+  'المدة الإلزامية للمشاهدة': 'Required watch duration',
+  'اختر الوقت الذي سيكمله المشاهد قبل احتساب المكافأة.': 'Choose the time viewers must complete before the reward is counted.',
+  'تكلفة الألف مشاهدة (CPM)': 'Cost per thousand views (CPM)',
+  'كلما زادت المدة،': 'The longer the duration,',
+  'زادت جودة التفاعل': 'the stronger the engagement',
+  'نشر الإعلان': 'Publish campaign',
+  'المعاينة المباشرة': 'Live preview',
+  'هكذا سيظهر الفيديو للمشاهدين.': 'This is how the video will appear to viewers.',
+  'مباشر': 'Live',
+  'ستظهر المعاينة هنا': 'Preview will appear here',
+  'عنوان الفيديو سيظهر هنا': 'Video title will appear here',
+  'روابط مدعومة': 'Supported links',
+  'يمكنك استخدام روابط YouTube أو أي رابط فيديو مباشر قابل للتشغيل.': 'You can use YouTube links or any playable direct video link.',
+  'تم النشر بنجاح': 'Published successfully',
+  'فيديوك جاهز للوصول إلى جمهور جديد': 'Your video is ready to reach a new audience',
+  'أصبح الفيديو نشطاً الآن. سيظهر للمشاهدين الذين يبحثون عن محتوى جديد مع مكافآت عادلة.': 'Your video is active now and will appear to viewers looking for fresh content with fair rewards.',
+  'العودة إلى لوحة التحكم': 'Back to dashboard',
+  'إضافة إعلان آخر': 'Add another campaign',
+  'المكافأة المتوقعة': 'Expected reward',
+  'حالة المشاهدة': 'Watch status',
+  'افتح الفيديو أولاً': 'Open the video first',
+  'الفيديو مفتوح — الوقت يُحتسب': 'Video open — time is counting',
+  'اكتملت المدة — جاهز للتحقق': 'Duration complete — ready to verify',
+  'المدة غير مكتملة': 'Duration incomplete',
+  'تحقق بعد إكمال مدة المشاهدة': 'Verify after completing the watch duration',
+  'لم تكتمل المدة بعد. ارجع إلى الفيديو وأكمل الوقت المطلوب؛ لن تُصرف المكافأة قبل إكماله.': 'The duration is not complete. Return to the video and finish the required time; the reward is not released before completion.',
+  'يُحتسب الوقت أثناء وجود التطبيق بالخلفية، وتُصرف المكافأة بعد العودة والتحقق.': 'Time counts while the app is in the background; the reward is released after you return and verify.',
+  'أحسنت، تمت المشاهدة': 'Great, viewing completed',
+  'أضيفت الأرباح إلى رصيدك بنجاح.': 'The reward was added to your balance.',
+  'معاينة الفيديو': 'Video preview',
+  'المدة المطلوبة': 'Required duration',
+  'سيتم احتساب المكافأة بعد إكمال المشاهدة دون تخطي.': 'The reward is counted after completing the view without skipping.',
+  'إجمالي العمليات': 'Total transactions',
+  'الإيداعات المكتملة': 'Completed deposits',
+  'قيد المراجعة': 'Under review',
+  'تم تحويله': 'Transferred',
+  'تم إرسال طلب السحب': 'Withdrawal request sent',
+  'تم نشر الإعلان': 'Campaign published',
+  'إعلان غير مكتمل': 'Campaign incomplete',
+  'لا توجد إعلانات هنا بعد': 'No campaigns here yet',
+  'ابدأ بإضافة إعلان جديد وامنح المشاهدين تجربة تستحق وقتهم.': 'Add a campaign and give viewers an experience worth their time.',
+  'إضافة أول إعلان': 'Add first campaign',
+  'عرض': 'Showing',
+  'فيديوهات': 'videos',
+  'فيديو': 'Video',
+  'لكل إكمال': 'per completion',
+  'المتاح:': 'Available:',
+  'مثال: كيف تبدأ مشروعك من الصفر؟': 'Example: How do you start a business from scratch?',
+  'مثال: 782946315': 'Example: 782946315',
+  'أدخل Binance ID رقميًا فقط (3 إلى 20 رقمًا).': 'Enter a numeric Binance ID only (3 to 20 digits).',
+  'أدخل عنوان BEP20 صحيحاً مكوناً من 42 رمزاً.': 'Enter a valid 42-character BEP20 address.',
+  'نسخ وجهة الإيداع': 'Copy deposit destination',
+  'نسخ Memo Tag': 'Copy memo tag',
+  'نسخ ': 'Copy ',
+  'الوجهة · Binance ID': 'Destination · Binance ID',
+  'نوع Memo': 'Memo type',
+  'TXID الشبكة': 'Network TXID',
+  'بعد التأكيد': 'After confirmation',
+  'مشاهدة الفيديو': 'Watch video',
+  'صفحة فيديو مستقلة للمتصفح': 'Standalone browser video page',
+  'تعذّر العثور على فيديو YouTube': 'Could not find the YouTube video',
+  'ارجع إلى VidReward واختر فيديو YouTube نشطًا ثم افتحه في المتصفح.': 'Return to VidReward, choose an active YouTube video, and open it in the browser.',
+  'المكافأة المعروضة:': 'Displayed reward:',
+  'فتح في YouTube': 'Open in YouTube',
+  'يمكنك مشاهدة هذا الفيديو هنا مباشرةً. بيانات Telegram المعروضة في الصفحة للتعريف فقط، ولا تُستخدم لتأكيد الهوية أو صرف الأرباح.': 'You can watch this video here directly. Telegram details are shown for identification only and are not used to verify identity or release rewards.',
+};
+
+export function translateText(value: string, language: Language): string {
+  if (language === 'ar' || !value.trim()) return value;
+  const trimmed = value.trim();
+  if (exactTranslations[trimmed]) {
+    return value.replace(trimmed, exactTranslations[trimmed]);
+  }
+  for (const [pattern, translate] of dynamicTranslations) {
+    const match = pattern.exec(trimmed);
+    if (match) return value.replace(trimmed, translate(match));
+  }
+  let translated = value
+    .replaceAll('Telegram Stars', 'Stars')
+    .replaceAll(' عبر Telegram', ' through Telegram')
+    .replaceAll('نجمة', 'Stars')
+    .replaceAll('نجوم', 'Stars');
+  Object.entries(fragmentTranslations)
+    .sort(([left], [right]) => right.length - left.length)
+    .forEach(([arabic, english]) => {
+      translated = translated.replaceAll(arabic, english);
+    });
+  return translated;
+}
+
+type LanguageContextValue = {
+  language: Language;
+  dir: 'rtl' | 'ltr';
+  isArabic: boolean;
+  t: (value: string) => string;
+};
+
+const LanguageContext = createContext<LanguageContextValue | null>(null);
+
+export function LanguageProvider({ children }: { children: ReactNode }) {
+  const language = useMemo(getBrowserLanguage, []);
+  const value = useMemo<LanguageContextValue>(() => ({
+    language,
+    dir: language === 'ar' ? 'rtl' : 'ltr',
+    isArabic: language === 'ar',
+    t: (text: string) => translateText(text, language),
+  }), [language]);
+
+  useEffect(() => {
+    const applyLanguage = () => {
+      document.documentElement.lang = language;
+      document.documentElement.dir = value.dir;
+      document.documentElement.style.direction = value.dir;
+      document.querySelectorAll<HTMLElement>('[dir="rtl"]').forEach((element) => {
+        element.dir = value.dir;
+      });
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      const nodes: Text[] = [];
+      let node: Node | null = walker.nextNode();
+      while (node) {
+        if (node.parentElement && !['SCRIPT', 'STYLE', 'CODE'].includes(node.parentElement.tagName)) {
+          nodes.push(node as Text);
+        }
+        node = walker.nextNode();
+      }
+      nodes.forEach((textNode) => {
+        const current = textNode.nodeValue ?? '';
+        const translated = translateText(current, language);
+        if (translated !== current) textNode.nodeValue = translated;
+      });
+      document.querySelectorAll<HTMLElement>('[aria-label],[title],[placeholder],[alt]').forEach((element) => {
+        ['aria-label', 'title', 'placeholder', 'alt'].forEach((attribute) => {
+          const current = element.getAttribute(attribute);
+          if (!current) return;
+          const translated = translateText(current, language);
+          if (translated !== current) element.setAttribute(attribute, translated);
+        });
+      });
+    };
+    applyLanguage();
+    const observer = new MutationObserver(applyLanguage);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'title', 'placeholder', 'alt'] });
+    return () => observer.disconnect();
+  }, [language, value.dir]);
+
+  return createElement(LanguageContext.Provider, { value }, children);
+}
+
+export function useLanguage() {
+  const context = useContext(LanguageContext);
+  if (!context) throw new Error('useLanguage must be used inside LanguageProvider');
+  return context;
+}
