@@ -273,6 +273,15 @@ input[type='number']::-webkit-outer-spin-button {
     color .14s ease,
     opacity .14s ease;
 }
+.button-ghost {
+  --button-depth: 1px;
+  --button-edge: rgba(18, 32, 77, .08);
+  --button-glow: rgba(18, 32, 77, .03);
+  box-shadow: 0 1px 0 var(--button-edge);
+}
+.button-ghost:hover:not(:disabled) {
+  box-shadow: 0 2px 6px var(--button-glow);
+}
 .button-ghost:active:not(:disabled),
 .button-system-unstyled:active:not(:disabled) {
   transform: translateY(1px);
@@ -280,6 +289,21 @@ input[type='number']::-webkit-outer-spin-button {
 .button-system-unstyled::before,
 .button-ghost::before {
   display: none;
+}
+.copy-action {
+  --button-depth: 1px;
+  --button-edge: hsl(220 16% 83%);
+  --button-glow: rgba(18, 32, 77, .045);
+  background-color: #f4f6fa !important;
+  box-shadow:
+    0 1px 0 var(--button-edge),
+    0 2px 5px var(--button-glow);
+}
+.copy-action:hover:not(:disabled) {
+  background-color: #edf1f7 !important;
+  box-shadow:
+    0 1px 0 hsl(220 16% 78%),
+    0 3px 7px rgba(18, 32, 77, .07);
 }
 
 .wallet-artwork {

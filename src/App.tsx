@@ -633,24 +633,12 @@ function VideoArtwork({ video, compact = false }: { video: Video; compact?: bool
   const thumbnail = getVideoThumbnail(video.link);
 
   return (
-    <div className={`relative aspect-video w-full overflow-hidden ${thumbnail ? 'bg-slate-900' : video.art}`}>
+    <div className={`relative aspect-video w-full overflow-hidden ${compact ? 'rounded-xl' : 'rounded-[20px]'} ${thumbnail ? 'bg-slate-900' : video.art}`}>
       {thumbnail ? (
         <img src={thumbnail} alt="" className="absolute inset-0 h-full w-full object-cover" />
       ) : (
         <div className="absolute inset-0 opacity-[.12] [background-image:linear-gradient(120deg,transparent_25%,white_25%,white_27%,transparent_27%,transparent_62%,white_62%,white_64%,transparent_64%)]" />
       )}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-black/10" />
-      <div className="absolute right-5 top-5 h-16 w-16 rounded-full border border-white/20" />
-      {!compact && (
-        <div className="absolute bottom-2 left-2 rounded-md bg-black/55 px-2 py-1 font-mono text-[10px] font-bold text-white backdrop-blur-sm">
-          {video.duration} ث
-        </div>
-      )}
-      <div className={`absolute inset-0 grid place-items-center ${compact ? '' : 'group-hover:scale-105'} transition-transform`}>
-        <span className="grid h-12 w-12 place-items-center rounded-full border border-white/50 bg-white/20 text-white backdrop-blur-md">
-          <Play className="mr-[-2px] h-5 w-5 fill-current" />
-        </span>
-      </div>
     </div>
   );
 }
@@ -1274,7 +1262,7 @@ function CopyableIdentifier({ label, value, tone = 'text-[#12234b]' }: { label: 
       <div className="text-[9px] font-bold text-slate-400">{label}</div>
       <div className="mt-1 flex min-w-0 items-center gap-1">
         <code dir="ltr" className={`min-w-0 flex-1 truncate text-[10px] font-bold ${tone}`} title={value}>{value}</code>
-        <Button type="button" onClick={copy} variant="ghost" size="icon" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-white hover:text-[#1557ee]" aria-label={`نسخ ${label}`}>
+        <Button type="button" onClick={copy} variant="ghost" size="icon" className="copy-action grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 transition hover:text-[#1557ee]" aria-label={`نسخ ${label}`}>
           {copied ? <Check className="h-3 w-3 text-[#159b89]" /> : <Copy className="h-3 w-3" />}
         </Button>
       </div>
@@ -1357,7 +1345,7 @@ function CompactCopyableIdentifier({
       <div className="truncate text-[9px] font-semibold text-slate-400">{label}</div>
       <div className="mt-0.5 flex min-w-0 items-center gap-1">
         <code dir="ltr" className={`min-w-0 flex-1 truncate text-[10px] font-bold ${tone}`} title={value}>{value}</code>
-        <Button type="button" onClick={copy} variant="ghost" size="icon" className="grid h-5 w-5 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-[#edf3ff] hover:text-[#1557ee]" aria-label={`نسخ ${label}`}>
+        <Button type="button" onClick={copy} variant="ghost" size="icon" className="copy-action grid h-5 w-5 shrink-0 place-items-center rounded-md text-slate-400 transition hover:text-[#1557ee]" aria-label={`نسخ ${label}`}>
           {copied ? <Check className="h-2.5 w-2.5 text-[#159b89]" /> : <Copy className="h-2.5 w-2.5" />}
         </Button>
       </div>
@@ -1622,14 +1610,14 @@ function DepositPage({
                       <CompactInvoiceValue
                        label={t('عنوان الإيداع (Polygon)')}
                    value={invoice.destination}
-                    action={<Button type="button" data-testid="button-copy-deposit-destination" onClick={() => copyValue(invoice.destination, 'destination')} variant="icon" size="icon" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee]" aria-label="نسخ وجهة الإيداع">{copied === 'destination' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</Button>}
+                       action={<Button type="button" data-testid="button-copy-deposit-destination" onClick={() => copyValue(invoice.destination, 'destination')} variant="icon" size="icon" className="copy-action grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[#1557ee]" aria-label="نسخ وجهة الإيداع">{copied === 'destination' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</Button>}
                  />
                  <div className="min-w-0">
                    <CompactInvoiceValue
                       label={t('Memo / Tag فريد لهذه العملية')}
                      value={invoice.memoTag}
                      tone="text-[#159b89]"
-                      action={<Button type="button" data-testid="button-copy-deposit-memo" onClick={() => copyValue(invoice.memoTag, 'memo')} variant="icon" size="icon" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee]" aria-label="نسخ Memo Tag">{copied === 'memo' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</Button>}
+                      action={<Button type="button" data-testid="button-copy-deposit-memo" onClick={() => copyValue(invoice.memoTag, 'memo')} variant="icon" size="icon" className="copy-action grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[#1557ee]" aria-label="نسخ Memo Tag">{copied === 'memo' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</Button>}
                    />
                     <p className="mt-1 px-1 text-[9px] font-semibold leading-4 text-slate-400">{t('الصق هذا الرمز في خانة الملاحظات عند إرسال الإيداع.')}</p>
                  </div>
