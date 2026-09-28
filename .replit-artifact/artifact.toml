@@ -1,7 +1,7 @@
 kind = "web"
 previewPath = "/"
 title = "VidReward"
-description = "واجهة عربية لإدارة إعلانات الفيديو ومشاهدة المحتوى مقابل المكافآت، مع صفحات منفصلة للإيداع عبر Binance أو Web3 وسحب الأرباح إلى محفظة USDT على شبكة BEP20."
+description = "واجهة عربية لإدارة إعلانات الفيديو ومشاهدة المحتوى مقابل المكافآت، مع محافظ للنجوم وWeb3 وBinance مدمجة داخل تجربة المستخدم."
 version = "1.0.0"
 id = "artifacts/vidreward"
 router = "path"

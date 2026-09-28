@@ -30,14 +30,12 @@ import {
   RefreshCw,
   Settings2,
   ShieldCheck,
-  Star,
   Sparkles,
   Target,
   Timer,
   TrendingUp,
   Upload,
   Users,
-  Wallet,
   WalletCards,
   X,
   PlaySquare,
@@ -106,7 +104,7 @@ function getUserDisplayName(user: TelegramUser | null, fallback = 'محمد ال
 }
 
 function getGreetingName(user: TelegramUser | null, fallback = 'محمد') {
-  return user?.first_name?.trim() || fallback;
+  return Array.from((user?.first_name?.trim() || fallback)).slice(0, 5).join('');
 }
 
 function getCompletedVideoIds() {
@@ -344,15 +342,57 @@ function IconButton({
 function BrandMark() {
   return (
     <div className="flex items-center gap-3" dir="rtl">
-      <div className="relative grid h-10 w-10 place-items-center overflow-hidden rounded-[13px] bg-[#1557ee] text-white shadow-[0_8px_20px_rgba(21,87,238,.24)]">
-        <span className="absolute -left-1 -top-2 h-7 w-7 rounded-full border-[5px] border-cyan-300/80" />
-        <Play className="relative mr-0.5 h-4 w-4 fill-current" />
+      <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-[13px] bg-[#1557ee] shadow-[0_8px_20px_rgba(21,87,238,.24)]">
+        <img src="/assets/vidreward-mark.png" alt="VidReward" className="h-full w-full object-contain" />
       </div>
       <div className="leading-none">
         <div className="font-display text-[17px] font-bold tracking-tight text-[#0f1f46]">VidReward</div>
         <div className="mt-1 text-[9px] font-semibold tracking-[.18em] text-slate-400">WATCH · EARN · GROW</div>
       </div>
     </div>
+  );
+}
+
+type WalletArtworkMethod = PaymentMethod | 'balance';
+
+const walletArtwork: Record<WalletArtworkMethod, { src: string; alt: string }> = {
+  stars: { src: '/assets/stars-wallet.png', alt: 'محفظة Telegram Stars' },
+  web3: { src: '/assets/web3-wallet.png', alt: 'محفظة Web3' },
+  binance: { src: '/assets/binance-wallet.png', alt: 'محفظة Binance' },
+  balance: { src: '/assets/dollar-balance.png', alt: 'رصيد بالدولار' },
+};
+
+function WalletArtwork({
+  method,
+  size = 'sm',
+  className = '',
+}: {
+  method: WalletArtworkMethod;
+  size?: 'xs' | 'sm' | 'md' | 'lg';
+  className?: string;
+}) {
+  const sizes = {
+    xs: 'h-7 w-7',
+    sm: 'h-10 w-10',
+    md: 'h-16 w-16',
+    lg: 'h-24 w-24',
+  };
+  return (
+    <img
+      src={walletArtwork[method].src}
+      alt={walletArtwork[method].alt}
+      className={`wallet-artwork shrink-0 ${sizes[size]} ${className}`}
+      data-testid={`img-wallet-${method}`}
+    />
+  );
+}
+
+function PaymentMethodBadge({ method, compact = false }: { method: PaymentMethod; compact?: boolean }) {
+  return (
+    <span className={`inline-flex min-w-0 items-center gap-1.5 font-bold ${compact ? 'text-[10px]' : 'text-[11px]'}`}>
+      <WalletArtwork method={method} size="xs" />
+      <span className="truncate">{methodLabel(method)}</span>
+    </span>
   );
 }
 
@@ -626,9 +666,9 @@ function CampaignsPage({
       <section className="animate-rise flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#1557ee]"><span className="h-1.5 w-1.5 rounded-full bg-[#23bdc9]" /> الثلاثاء، ٢٤ ديسمبر ٢٠٢٤</div>
-          <h1 className="creator-greeting flex items-baseline gap-2 whitespace-nowrap font-display text-[25px] font-bold leading-tight tracking-[-.04em] text-[#12234b] sm:text-[29px] md:text-[36px]">
-            <span>صباح الخير،</span>
-            <span className="text-[#1557ee]">{getGreetingName(telegramUser)}</span>
+          <h1 data-testid="text-greeting-campaigns" className="creator-greeting flex items-baseline gap-2 whitespace-nowrap font-display text-[25px] font-bold leading-tight tracking-[-.04em] text-[#12234b] sm:text-[29px] md:text-[36px]">
+            <span>صباح الخير{' '}</span>
+            <span className="text-[#1557ee]">{getGreetingName(telegramUser)}..</span>
           </h1>
           <p className="mt-2 text-sm text-slate-500">هذه لمحة سريعة عن أثر إعلاناتك اليوم.</p>
         </div>
@@ -651,7 +691,7 @@ function CampaignsPage({
             <div className="mt-1 text-2xl font-bold tracking-tight text-[#12234b]">$250.00</div>
             <div className="mt-1 text-[10px] text-slate-400">متاح لتمويل الحملات</div>
           </div>
-          <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white text-[#1557ee]"><WalletCards className="h-5 w-5" /></div>
+          <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white"><WalletArtwork method="balance" size="sm" className="h-9 w-9" /></div>
         </div>
         <div className="flex items-center justify-between rounded-[20px] border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)]">
           <div>
@@ -776,9 +816,9 @@ function CreatorOverview({
       <section className="animate-rise flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#1557ee]"><span className="h-1.5 w-1.5 rounded-full bg-[#23bdc9]" /> الأربعاء، ٢٣ سبتمبر ٢٠٢٦</div>
-          <h1 className="creator-greeting flex items-baseline gap-2 whitespace-nowrap font-display text-[25px] font-bold leading-tight tracking-[-.04em] text-[#12234b] sm:text-[29px] md:text-[36px]">
-            <span>صباح الخير،</span>
-            <span className="text-[#1557ee]">{getGreetingName(telegramUser)}</span>
+          <h1 data-testid="text-greeting-overview" className="creator-greeting flex items-baseline gap-2 whitespace-nowrap font-display text-[25px] font-bold leading-tight tracking-[-.04em] text-[#12234b] sm:text-[29px] md:text-[36px]">
+            <span>صباح الخير{' '}</span>
+            <span className="text-[#1557ee]">{getGreetingName(telegramUser)}..</span>
           </h1>
           <p className="mt-2 text-sm text-slate-500">ملخص أداء حملاتك ورصيدك في مكان واحد.</p>
         </div>
@@ -795,14 +835,20 @@ function CreatorOverview({
       </section>
 
       <section className="mt-5 grid gap-4 md:grid-cols-[1.1fr_.9fr]">
-        <div className="rounded-[22px] border border-blue-100 bg-[#eff4ff] p-6">
+        <div className="relative overflow-hidden rounded-[22px] border border-blue-100 bg-[#eff4ff] p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="text-xs font-semibold text-slate-500">رصيد الإعلانات</div>
               <div className="mt-1 text-3xl font-bold tracking-tight text-[#12234b]">${advertiserBalance.toFixed(2)}</div>
               <div className="mt-2 text-[11px] text-slate-400">متاح لتمويل الحملات القادمة</div>
             </div>
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white text-[#1557ee]"><WalletCards className="h-5 w-5" /></div>
+            <div className="relative grid h-16 w-16 place-items-center rounded-2xl bg-white/80 shadow-sm">
+              <WalletArtwork method="balance" size="md" className="h-14 w-14" />
+            </div>
+          </div>
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-white/80 bg-white/60 px-3 py-2">
+            <WalletArtwork method="web3" size="xs" />
+            <span className="text-[10px] font-bold text-slate-600">جاهز للتحويل عبر Web3 · BEP20</span>
           </div>
           <button type="button" data-testid="button-overview-deposit" onClick={onDeposit} className="mt-6 flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-bold text-[#1557ee] shadow-sm transition hover:-translate-y-0.5">
             <Plus className="h-4 w-4" /> إيداع رصيد جديد
@@ -886,14 +932,16 @@ function ViewerView({
       </section>
       <section className="mb-5 flex flex-col gap-4 rounded-[22px] border border-blue-100 bg-white p-5 shadow-[var(--shadow-soft)] sm:flex-row sm:items-center sm:justify-between md:p-6">
         <div className="flex items-center gap-4">
-          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#eafbf8] text-[#159b89]"><WalletCards className="h-6 w-6" /></div>
+          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-[#eef4ff]">
+            <WalletArtwork method="balance" size="md" className="h-12 w-12" />
+          </div>
           <div>
             <div className="text-xs font-semibold text-slate-400">رصيدك القابل للسحب</div>
             <div className="mt-1 text-2xl font-bold tracking-tight text-[#12234b]">{formatUsd(balance)}</div>
           </div>
         </div>
         <button type="button" data-testid="button-withdraw" onClick={onWithdraw} disabled={balance <= 0} className="flex items-center justify-center gap-2 rounded-xl border border-[#1557ee] px-5 py-3 text-xs font-bold text-[#1557ee] transition hover:bg-[#edf3ff] disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300">
-          <WalletCards className="h-4 w-4" /> سحب الأرباح
+          <WalletArtwork method="balance" size="xs" className="h-7 w-7" /> سحب الأرباح
         </button>
       </section>
       {insideTelegram ? (
@@ -1330,7 +1378,7 @@ function CompactHistoryRow({
         </div>
         <div className="min-w-0">
           <div className="text-[9px] font-semibold text-slate-400">الطريقة</div>
-          <div className="mt-0.5 truncate text-[10px] font-bold text-slate-600">{methodLabel(record.method)}</div>
+          <div className="mt-0.5 min-w-0 truncate text-[10px] font-bold text-slate-600"><PaymentMethodBadge method={record.method} compact /></div>
         </div>
         <div className="min-w-0">
           <div className="text-[9px] font-semibold text-slate-400">نوع Memo</div>
@@ -1361,7 +1409,7 @@ function CompactHistoryRow({
         <div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-[14px] bg-[#fbfcff] px-3 py-2.5">
           <div className="min-w-0">
             <div className="text-[9px] font-semibold text-slate-400">الطريقة</div>
-            <div className="mt-0.5 truncate text-[10px] font-bold text-slate-600">{methodLabel(record.method)}</div>
+            <div className="mt-0.5 min-w-0 truncate text-[10px] font-bold text-slate-600"><PaymentMethodBadge method={record.method} compact /></div>
           </div>
           <div className="min-w-0">
             <div className="truncate text-[9px] font-semibold text-slate-400">{record.method === 'binance' ? 'الوجهة · Binance ID' : 'الوجهة'}</div>
@@ -1519,11 +1567,11 @@ function DepositPage({
               <div className="mb-2 text-xs font-bold text-slate-700">طريقة الدفع</div>
               <div className="grid grid-cols-2 gap-2">
                    {([
-                    { value: 'stars', title: 'Telegram Stars', Icon: Star },
-                    { value: 'web3', title: 'Web3 Wallet', Icon: Wallet },
-                  ] as Array<{ value: DepositMethod; title: string; Icon: typeof Wallet }>).map(({ value, title, Icon }) => (
-                   <button type="button" key={value} data-testid={`button-deposit-method-${value}`} onClick={() => setMethod(value)} className={`flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2.5 text-right transition ${method === value ? 'border-[#1557ee] bg-[#eff4ff] text-[#1557ee]' : 'border-slate-200 text-slate-600 hover:border-blue-200'}`}>
-                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white"><Icon className="h-4 w-4" /></span>
+                    { value: 'stars', title: 'Telegram Stars' },
+                    { value: 'web3', title: 'Web3 Wallet' },
+                  ] as Array<{ value: DepositMethod; title: string }>).map(({ value, title }) => (
+                   <button type="button" key={value} data-testid={`button-deposit-method-${value}`} data-selected={method === value} onClick={() => setMethod(value)} className={`flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2.5 text-right transition ${method === value ? 'border-[#1557ee] bg-[#eff4ff] text-[#1557ee]' : 'border-slate-200 text-slate-600 hover:border-blue-200'}`}>
+                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white"><WalletArtwork method={value} size="sm" className="h-8 w-8" /></span>
                      <span className="truncate whitespace-nowrap text-[11px] font-bold">{title}</span>
                     {method === value && <CheckCircle2 className="mr-auto h-4 w-4" />}
                   </button>
@@ -1535,21 +1583,21 @@ function DepositPage({
              {error && <div className="mt-4 rounded-xl bg-rose-50 p-3 text-center text-xs font-bold leading-5 text-rose-600">{error}</div>}
              <button type="button" data-testid="button-create-invoice" onClick={createInvoice} disabled={!validAmount} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1557ee] py-3.5 text-sm font-bold text-white transition hover:bg-[#0f48d0] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"><FileText className="h-4 w-4" /> إنشاء فاتورة الإيداع</button>
           </section>
-           <section className="rounded-[24px] bg-[#0e2452] p-6 text-white shadow-[0_15px_34px_rgba(14,36,82,.16)] md:p-8">
-            <div className="flex items-center justify-between"><span className="text-xs font-bold text-blue-100">الرصيد الحالي</span><WalletCards className="h-5 w-5 text-cyan-300" /></div>
+           <section className="relative overflow-hidden rounded-[24px] bg-[#0e2452] p-6 text-white shadow-[0_15px_34px_rgba(14,36,82,.16)] md:p-8">
+             <div className="flex items-center justify-between"><span className="text-xs font-bold text-blue-100">الرصيد الحالي</span><WalletArtwork method="balance" size="sm" className="h-12 w-12" /></div>
             <div className="mt-7 text-4xl font-bold tracking-tight">${advertiserBalance.toFixed(2)}</div>
             <p className="mt-2 text-xs leading-5 text-blue-100/65">الرصيد الذي يمكنك استخدامه لتمويل إعلاناتك. ستظهر الإيداعات بعد التحقق التلقائي.</p>
-             <div className="mt-8 border-t border-white/10 pt-5"><div className="text-[10px] font-bold text-blue-100/60">طرق الإيداع</div><div className="mt-3 flex items-center justify-between text-xs"><span className="text-blue-100/70">الدفع السريع</span><span className="font-bold text-cyan-300">Telegram Stars</span></div><div className="mt-3 flex items-center justify-between text-xs"><span className="text-blue-100/70">التحويل المباشر</span><span className="font-bold text-cyan-300">Web3 · BEP20</span></div></div>
+             <div className="mt-8 border-t border-white/10 pt-5"><div className="text-[10px] font-bold text-blue-100/60">طرق الإيداع</div><div className="mt-3 flex items-center justify-between text-xs"><span className="flex items-center gap-2 text-blue-100/70"><WalletArtwork method="stars" size="xs" className="h-7 w-7" />الدفع السريع</span><span className="font-bold text-cyan-300">Telegram Stars</span></div><div className="mt-3 flex items-center justify-between text-xs"><span className="flex items-center gap-2 text-blue-100/70"><WalletArtwork method="web3" size="xs" className="h-7 w-7" />التحويل المباشر</span><span className="font-bold text-cyan-300">Web3 · BEP20</span></div></div>
           </section>
         </div>
       ) : (
         <section className="animate-rise rounded-[24px] border border-slate-200 bg-white p-4 shadow-[var(--shadow-soft)] sm:p-5 md:p-6">
           <div className="grid min-h-[60px] gap-3 rounded-[18px] border border-slate-100 bg-[#fbfcff] p-3 sm:grid-cols-[1fr_auto] sm:items-center">
             <div className="min-w-0">
-              <div className={`flex items-center gap-2 text-[10px] font-bold ${invoiceStatus === 'completed' ? 'text-[#159b89]' : invoiceStatus === 'expired' ? 'text-rose-500' : 'text-amber-600'}`}><span className={`h-1.5 w-1.5 rounded-full ${invoiceStatus === 'completed' ? 'bg-[#159b89]' : invoiceStatus === 'expired' ? 'bg-rose-500' : 'animate-pulse bg-amber-500'}`} /> {statusLabel}</div>
+              <div className={`flex items-center gap-2 text-[10px] font-bold ${invoiceStatus === 'completed' ? 'text-[#159b89]' : invoiceStatus === 'expired' ? 'text-rose-500' : 'text-amber-600'}`}><WalletArtwork method={invoice.method} size="xs" className="h-8 w-8" /><span className={`h-1.5 w-1.5 rounded-full ${invoiceStatus === 'completed' ? 'bg-[#159b89]' : invoiceStatus === 'expired' ? 'bg-rose-500' : 'animate-pulse bg-amber-500'}`} /> {statusLabel}</div>
               <h2 className="mt-1 truncate font-display text-sm font-bold text-[#12234b]">{invoiceHeading}</h2>
             </div>
-             <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500"><span className="rounded-lg bg-[#edf3ff] px-2 py-1 text-[#1557ee]">{methodLabel(invoice.method)}</span><span className="rounded-lg bg-[#eafbf8] px-2 py-1 text-[#159b89]">{invoice.amount.toFixed(2)} {invoice.method === 'stars' ? 'USD' : 'USDT'}</span></div>
+             <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500"><span className="max-w-[150px] rounded-lg bg-[#edf3ff] px-2 py-1 text-[#1557ee]"><PaymentMethodBadge method={invoice.method} compact /></span><span className="rounded-lg bg-[#eafbf8] px-2 py-1 text-[#159b89]">{invoice.amount.toFixed(2)} {invoice.method === 'stars' ? 'USD' : 'USDT'}</span></div>
           </div>
           <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_220px]">
             <div className="grid gap-3">
@@ -1586,7 +1634,7 @@ function DepositPage({
             </div>
           </div>
            {invoice.method === 'stars' && invoiceStatus === 'pending' && <button type="button" data-testid="button-pay-stars" onClick={openStarsInvoice} className="mt-5 flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-l from-[#1557ee] to-[#3d7cff] px-5 py-4 text-sm font-bold text-white shadow-[0_12px_24px_rgba(21,87,238,.22)] transition hover:-translate-y-0.5 hover:from-[#0f48d0] hover:to-[#2867ed]">
-             <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/15"><Star className="h-5 w-5 fill-current text-amber-300" /></span>
+             <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/15"><WalletArtwork method="stars" size="sm" className="h-8 w-8" /></span>
              <span>ادفع بالنجوم</span>
              <span className="rounded-lg bg-white/15 px-2 py-1 text-[10px] font-semibold">{invoice.stars?.toLocaleString('en-US')} نجمة</span>
            </button>}
@@ -1637,14 +1685,14 @@ function WithdrawPage({
     <main className="mx-auto w-full max-w-[980px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
       <div className="mb-7"><div className="text-xs font-semibold text-[#1557ee]">مساحة الربح / السحب</div><h1 className="mt-2 font-display text-2xl font-bold text-[#12234b] md:text-3xl">سحب الأرباح</h1><p className="mt-2 text-sm leading-6 text-slate-500">اختر Binance ID أو محفظة Web3 لاستلام أرباحك، ثم أرسل الطلب للمراجعة.</p></div>
       <div className="grid gap-5 lg:grid-cols-[.8fr_1.2fr]">
-        <section className="rounded-[24px] bg-[#0e2452] p-6 text-white shadow-[0_15px_34px_rgba(14,36,82,.16)] md:p-8"><div className="flex items-center justify-between"><span className="text-xs font-bold text-blue-100">الرصيد المتاح</span><WalletCards className="h-5 w-5 text-cyan-300" /></div><div className="mt-7 text-4xl font-bold tracking-tight">{formatUsd(viewerBalance)}</div><p className="mt-2 text-xs leading-5 text-blue-100/65">الحد الأدنى للسحب 1 USDT. يتم خصم الرصيد عند إرسال الطلب للمراجعة.</p><div className="mt-8 border-t border-white/10 pt-5"><div className="flex items-center gap-2 text-xs font-bold text-cyan-300"><ShieldCheck className="h-4 w-4" /> تحويل آمن</div><p className="mt-2 text-[11px] leading-5 text-blue-100/60">{method === 'binance' ? 'أرسل الأرباح إلى Binance ID مباشرة دون استخدام عنوان محفظة.' : 'استخدم عنوانًا صحيحًا على شبكة BNB Smart Chain (BEP20).'}</p></div></section>
+         <section className="relative overflow-hidden rounded-[24px] bg-[#0e2452] p-6 text-white shadow-[0_15px_34px_rgba(14,36,82,.16)] md:p-8"><div className="flex items-center justify-between"><span className="text-xs font-bold text-blue-100">الرصيد المتاح</span><WalletArtwork method="balance" size="sm" className="h-12 w-12" /></div><div className="mt-7 text-4xl font-bold tracking-tight">{formatUsd(viewerBalance)}</div><p className="mt-2 text-xs leading-5 text-blue-100/65">الحد الأدنى للسحب 1 USDT. يتم خصم الرصيد عند إرسال الطلب للمراجعة.</p><div className="mt-8 border-t border-white/10 pt-5"><div className="flex items-center gap-2 text-xs font-bold text-cyan-300"><ShieldCheck className="h-4 w-4" /> تحويل آمن</div><p className="mt-2 text-[11px] leading-5 text-blue-100/60">{method === 'binance' ? 'أرسل الأرباح إلى Binance ID مباشرة دون استخدام عنوان محفظة.' : 'استخدم عنوانًا صحيحًا على شبكة BNB Smart Chain (BEP20).'}</p></div><div className="mt-5 flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-[10px] font-bold text-blue-100/75"><WalletArtwork method="binance" size="xs" className="h-7 w-7" />تحويلات Binance سريعة وواضحة</div></section>
         <section className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-[var(--shadow-soft)] md:p-8"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-[#eafbf8] text-[#159b89]"><ArrowUpLeft className="h-5 w-5" /></div><div><h2 className="font-display text-lg font-bold text-[#12234b]">بيانات الاستلام</h2><p className="mt-1 text-xs text-slate-400">يتم حفظ الطلب في سجل السحب بحالة قيد المعالجة.</p></div></div>
            <div className="mt-7 grid grid-cols-2 gap-2">
              {([
-              { value: 'binance', title: 'Binance ID', Icon: WalletCards },
-              { value: 'web3', title: 'Web3 Wallet', Icon: Wallet },
-             ] as Array<{ value: WithdrawMethod; title: string; Icon: typeof Wallet }>).map(({ value, title, Icon }) => (
-              <button type="button" key={value} data-testid={`button-withdraw-method-${value}`} onClick={() => setMethod(value)} className={`flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2.5 text-right transition ${method === value ? 'border-[#1557ee] bg-[#eff4ff] text-[#1557ee]' : 'border-slate-200 text-slate-600 hover:border-blue-200'}`}><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white"><Icon className="h-4 w-4" /></span><span className="truncate whitespace-nowrap text-[11px] font-bold">{title}</span>{method === value && <CheckCircle2 className="mr-auto h-4 w-4" />}</button>
+              { value: 'binance', title: 'Binance ID' },
+              { value: 'web3', title: 'Web3 Wallet' },
+             ] as Array<{ value: WithdrawMethod; title: string }>).map(({ value, title }) => (
+              <button type="button" key={value} data-testid={`button-withdraw-method-${value}`} data-selected={method === value} onClick={() => setMethod(value)} className={`flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2.5 text-right transition ${method === value ? 'border-[#1557ee] bg-[#eff4ff] text-[#1557ee]' : 'border-slate-200 text-slate-600 hover:border-blue-200'}`}><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white"><WalletArtwork method={value} size="sm" className="h-8 w-8" /></span><span className="truncate whitespace-nowrap text-[11px] font-bold">{title}</span>{method === value && <CheckCircle2 className="mr-auto h-4 w-4" />}</button>
             ))}
           </div>
           <label className="mt-6 block text-xs font-bold text-slate-700">{method === 'binance' ? 'معرّف Binance الرقمي' : 'عنوان محفظة USDT (BEP20)'}<div className="relative mt-2"><Clipboard className="absolute right-4 top-3.5 h-4 w-4 text-slate-400" /><input value={destination} onChange={(event) => setDestination(method === 'binance' ? event.target.value.replace(/\D/g, '') : event.target.value)} inputMode={method === 'binance' ? 'numeric' : 'text'} pattern={method === 'binance' ? '[0-9]*' : undefined} dir="ltr" placeholder={method === 'binance' ? 'مثال: 782946315' : '0x...'} data-testid={method === 'binance' ? 'input-withdraw-binance-id' : 'input-withdraw-address'} className="w-full rounded-xl border border-slate-200 bg-[#fbfcff] py-3 pl-4 pr-11 text-left text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" /></div>{destination && !validDestination && <span className="mt-2 block text-[10px] font-medium text-rose-500">{method === 'binance' ? 'أدخل Binance ID رقميًا فقط (3 إلى 20 رقمًا).' : 'أدخل عنوان BEP20 صحيحاً مكوناً من 42 رمزاً.'}</span>}</label>
@@ -1667,7 +1715,7 @@ function DepositHistoryPage({ records }: { records: DepositRecord[] }) {
           <div className="flex min-w-0 items-center gap-2.5"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-[#edf3ff] text-[#1557ee]"><ArrowDownLeft className="h-3.5 w-3.5" /></span><div className="min-w-0"><h2 className="truncate text-sm font-bold text-[#12234b]">عمليات الإيداع</h2><p className="mt-0.5 truncate text-[9px] text-slate-400">المبلغ · الطريقة · الوجهة · الحالة</p></div></div>
           <span className="rounded-lg bg-[#f4f8ff] px-2 py-1 text-[9px] font-bold text-[#1557ee]">{records.length} عمليات</span>
         </div>
-        {records.length > 0 ? records.map((record) => <CompactHistoryRow key={record.id} record={record} kind="deposit" />) : <div className="flex h-[60px] items-center justify-center text-[10px] text-slate-400">لا توجد عمليات إيداع بعد.</div>}
+        {records.length > 0 ? records.map((record) => <CompactHistoryRow key={record.id} record={record} kind="deposit" />) : <div className="flex flex-col items-center justify-center px-6 py-12 text-center"><WalletArtwork method="stars" size="md" /><div className="mt-2 text-sm font-bold text-[#12234b]">لا توجد عمليات إيداع بعد</div><p className="mt-1 max-w-xs text-[11px] leading-5 text-slate-400">ستظهر هنا كل فاتورة تمويل مع طريقة الدفع وحالة التحقق.</p></div>}
       </section>
     </main>
   );
@@ -1685,7 +1733,7 @@ function WithdrawHistoryPage({ records }: { records: WithdrawRecord[] }) {
           <div className="flex min-w-0 items-center gap-2.5"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-[#eafbf8] text-[#159b89]"><ArrowUpLeft className="h-3.5 w-3.5" /></span><div className="min-w-0"><h2 className="truncate text-sm font-bold text-[#12234b]">طلبات السحب</h2><p className="mt-0.5 truncate text-[9px] text-slate-400">المبلغ · الطريقة · الوجهة · الحالة</p></div></div>
           <span className="rounded-lg bg-[#eafbf8] px-2 py-1 text-[9px] font-bold text-[#159b89]">{records.length} طلبات</span>
         </div>
-        {records.length > 0 ? records.map((record) => <CompactHistoryRow key={record.id} record={record} kind="withdraw" />) : <div className="flex h-[60px] items-center justify-center text-[10px] text-slate-400">لا توجد طلبات سحب بعد.</div>}
+        {records.length > 0 ? records.map((record) => <CompactHistoryRow key={record.id} record={record} kind="withdraw" />) : <div className="flex flex-col items-center justify-center px-6 py-12 text-center"><WalletArtwork method="binance" size="md" /><div className="mt-2 text-sm font-bold text-[#12234b]">لا توجد طلبات سحب بعد</div><p className="mt-1 max-w-xs text-[11px] leading-5 text-slate-400">ستظهر هنا طلبات السحب مع وجهتها وحالة التحويل.</p></div>}
       </section>
     </main>
   );

@@ -37,25 +37,25 @@
 }
 
 :root {
-  --background: 210 33% 97%;
-  --foreground: 222 38% 13%;
-  --border: 216 26% 88%;
-  --input: 216 26% 86%;
-  --ring: 221 82% 56%;
+  --background: 220 32% 97%;
+  --foreground: 224 38% 14%;
+  --border: 220 24% 87%;
+  --input: 220 24% 85%;
+  --ring: 225 82% 56%;
   --card: 0 0% 100%;
-  --card-foreground: 222 38% 13%;
-  --card-border: 216 26% 89%;
+  --card-foreground: 224 38% 14%;
+  --card-border: 220 24% 88%;
   --popover: 0 0% 100%;
-  --popover-foreground: 222 38% 13%;
-  --popover-border: 216 26% 89%;
-  --primary: 221 82% 56%;
+  --popover-foreground: 224 38% 14%;
+  --popover-border: 220 24% 88%;
+  --primary: 225 82% 56%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 215 68% 95%;
-  --secondary-foreground: 222 72% 33%;
-  --muted: 213 30% 95%;
-  --muted-foreground: 218 15% 47%;
-  --accent: 184 74% 43%;
-  --accent-foreground: 222 55% 12%;
+  --secondary: 219 64% 94%;
+  --secondary-foreground: 225 68% 30%;
+  --muted: 219 27% 94%;
+  --muted-foreground: 220 14% 47%;
+  --accent: 43 96% 55%;
+  --accent-foreground: 224 38% 14%;
   --destructive: 2 72% 54%;
   --destructive-foreground: 0 0% 100%;
   --app-font-sans: 'IBM Plex Sans Arabic', sans-serif;
@@ -64,8 +64,8 @@
   --radius: 1rem;
   --elevate-1: rgba(20, 44, 95, .04);
   --elevate-2: rgba(20, 44, 95, .08);
-  --shadow-soft: 0 10px 35px rgba(31, 58, 108, .065);
-  --shadow-lift: 0 18px 46px rgba(36, 72, 150, .12);
+  --shadow-soft: 0 12px 35px rgba(18, 32, 77, .07);
+  --shadow-lift: 0 18px 46px rgba(24, 57, 147, .15);
 }
 
 .dark {
@@ -99,8 +99,8 @@
     @apply font-sans antialiased bg-background text-foreground;
     min-width: 320px;
     background-image:
-      radial-gradient(circle at 8% 4%, rgba(77, 205, 215, .06), transparent 23rem),
-      radial-gradient(circle at 92% 12%, rgba(55, 101, 225, .055), transparent 28rem);
+      radial-gradient(circle at 8% 4%, rgba(255, 193, 56, .08), transparent 23rem),
+      radial-gradient(circle at 92% 12%, rgba(55, 101, 225, .07), transparent 28rem);
   }
   button, input, textarea { font: inherit; }
   button { cursor: pointer; }
@@ -181,6 +181,19 @@ input[type='number']::-webkit-outer-spin-button {
 .grid-dots {
   background-image: radial-gradient(rgba(24, 91, 255, .17) 1px, transparent 1px);
   background-size: 13px 13px;
+}
+
+.wallet-artwork {
+  filter: drop-shadow(0 12px 15px rgba(18, 32, 77, .16));
+  object-fit: contain;
+  transition: transform .3s ease, filter .3s ease;
+}
+.wallet-artwork:hover {
+  filter: drop-shadow(0 16px 18px rgba(18, 32, 77, .22));
+  transform: translateY(-2px) rotate(-2deg);
+}
+.payment-method-card[data-selected="true"] .wallet-artwork {
+  transform: translateY(-2px) rotate(-2deg);
 }
 
 /* The browser watch surface uses a quieter transition language than the dashboard.
