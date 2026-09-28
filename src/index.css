@@ -188,9 +188,9 @@ input[type='number']::-webkit-outer-spin-button {
 .button-system {
   --button-depth: 4px;
   --button-face: hsl(var(--primary));
-  --button-edge: hsl(225 72% 38%);
+  --button-edge: hsl(222 52% 24%);
   --button-ink: hsl(var(--primary-foreground));
-  --button-glow: rgba(21, 87, 238, .18);
+  --button-glow: rgba(18, 32, 77, .15);
   isolation: isolate;
   min-width: 0;
   transform: translateY(0);
@@ -243,21 +243,25 @@ input[type='number']::-webkit-outer-spin-button {
   box-shadow: 0 1px 0 color-mix(in srgb, var(--button-edge) 45%, transparent);
   filter: saturate(.72);
 }
+.button-3d-primary {
+  --button-edge: hsl(222 55% 23%);
+  --button-glow: rgba(18, 32, 77, .16);
+}
 .button-3d-secondary {
-  --button-edge: hsl(220 34% 77%);
-  --button-glow: rgba(40, 72, 140, .10);
+  --button-edge: hsl(220 18% 51%);
+  --button-glow: rgba(20, 30, 58, .11);
 }
 .button-3d-success {
-  --button-edge: hsl(160 60% 34%);
-  --button-glow: rgba(21, 155, 137, .16);
+  --button-edge: hsl(160 61% 26%);
+  --button-glow: rgba(16, 100, 80, .14);
 }
 .button-3d-danger {
-  --button-edge: hsl(2 58% 38%);
-  --button-glow: rgba(220, 60, 60, .14);
+  --button-edge: hsl(2 58% 30%);
+  --button-glow: rgba(126, 30, 35, .14);
 }
 .button-3d-icon {
   --button-depth: 2px;
-  --button-edge: hsl(220 24% 82%);
+  --button-edge: hsl(220 18% 60%);
   --button-glow: rgba(20, 44, 95, .08);
 }
 .button-ghost,
