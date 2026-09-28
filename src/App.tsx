@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
+import { Button } from '@/components/ui/button';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
@@ -328,15 +329,17 @@ function IconButton({
   className?: string;
 }) {
   return (
-    <button
+    <Button
       type="button"
       aria-label={label}
       data-testid={`button-${label}`}
       onClick={onClick}
-      className={`grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-600 ${className}`}
+      variant="icon"
+      size="icon"
+      className={`grid place-items-center rounded-xl ${className}`}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -442,41 +445,47 @@ function Sidebar({
         </IconButton>
       </div>
       <div className="mt-10 rounded-[18px] border border-blue-100 bg-[#f4f8ff] p-1.5">
-        <button
+        <Button
           type="button"
           data-testid="button-switch-creator"
           onClick={() => { onModeChange('creator'); onClose?.(); }}
+          variant="unstyled"
+          size="fit"
           className={`flex w-full items-center gap-3 rounded-[13px] px-3 py-3 text-right text-sm font-semibold transition ${mode === 'creator' ? 'bg-white text-[#1557ee] shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
         >
           <LayoutDashboard className="h-[18px] w-[18px]" />
           <span>نشر إعلان</span>
           {mode === 'creator' && <span className="mr-auto h-1.5 w-1.5 rounded-full bg-[#1557ee]" />}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           data-testid="button-switch-viewer"
           onClick={() => { onModeChange('viewer'); onClose?.(); }}
+          variant="unstyled"
+          size="fit"
           className={`flex w-full items-center gap-3 rounded-[13px] px-3 py-3 text-right text-sm font-semibold transition ${mode === 'viewer' ? 'bg-white text-[#1557ee] shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
         >
           <Eye className="h-[18px] w-[18px]" />
           <span>اربح</span>
           {mode === 'viewer' && <span className="mr-auto h-1.5 w-1.5 rounded-full bg-[#1557ee]" />}
-        </button>
+        </Button>
       </div>
       <div className="mt-8">
         <div className="mb-3 px-3 text-[10px] font-bold tracking-[.16em] text-slate-400">{mode === 'creator' ? 'إدارة الإعلانات' : 'مساحة الربح'}</div>
         <nav className="space-y-1 pb-4">
           {navItems.map(({ icon: NavIcon, label, screen: itemScreen }, index) => (
-            <button
+            <Button
               type="button"
               key={label}
               data-testid={`button-side-${index}`}
               onClick={() => { onNavigate(itemScreen); onClose?.(); }}
+              variant="unstyled"
+              size="fit"
               className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-right text-sm font-medium transition ${screen === itemScreen ? 'bg-[#edf3ff] font-bold text-[#1557ee]' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
             >
               <NavIcon className="h-[17px] w-[17px]" />
               <span>{label}</span>
-            </button>
+            </Button>
           ))}
         </nav>
       </div>
@@ -488,9 +497,9 @@ function Sidebar({
           </div>
           <p className="text-sm font-bold">{mode === 'creator' ? 'موّل إعلانك بسهولة' : 'ابدأ بجمع أرباحك'}</p>
           <p className="mt-1 text-[11px] leading-5 text-blue-100/65">{mode === 'creator' ? 'أضف إعلاناً جديداً وحدد ميزانيته.' : 'أكمل المشاهدة وأضف الأرباح إلى رصيدك.'}</p>
-           <button type="button" data-testid="button-sidebar-add" onClick={() => mode === 'creator' ? onAdd() : onNavigate('watch')} className="mt-4 flex items-center gap-1 text-xs font-bold text-cyan-300">
+           <Button type="button" data-testid="button-sidebar-add" onClick={() => mode === 'creator' ? onAdd() : onNavigate('watch')} variant="unstyled" size="fit" className="mt-4 flex items-center gap-1 text-xs font-bold text-cyan-300">
              {mode === 'creator' ? 'أضف إعلان الآن' : 'اذهب إلى المشاهدة'} <ArrowUpLeft className="h-3.5 w-3.5" />
-          </button>
+           </Button>
         </div>
         <div className="flex items-center gap-3 border-t border-slate-100 pt-4">
           <UserAvatar user={telegramUser} className="bg-[#dbe8ff] text-[#1557ee] ring-0" />
@@ -526,9 +535,9 @@ function ToastViewport({ toasts, onDismiss }: { toasts: ToastMessage[]; onDismis
             <div className="text-xs font-bold text-white">{toast.title}</div>
             <div className="mt-1 text-[11px] leading-5 text-blue-100/75">{toast.message}</div>
           </div>
-          <button type="button" data-testid={`button-dismiss-toast-${toast.id}`} onClick={() => onDismiss(toast.id)} className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-blue-100/60 transition hover:bg-white/10 hover:text-white" aria-label="إغلاق التنبيه">
+           <Button type="button" data-testid={`button-dismiss-toast-${toast.id}`} onClick={() => onDismiss(toast.id)} variant="ghost" size="icon" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-blue-100/60 transition hover:bg-white/10 hover:text-white" aria-label="إغلاق التنبيه">
             <X className="h-3.5 w-3.5" />
-          </button>
+           </Button>
         </div>
       ))}
     </div>
@@ -578,9 +587,9 @@ function Header({
       </div>
       <div className="flex items-center gap-2.5">
         {mode === 'creator' && (
-          <button type="button" data-testid="button-header-add" onClick={onAdd} className="hidden items-center gap-2 rounded-xl bg-[#1557ee] px-4 py-2.5 text-xs font-bold text-white shadow-[0_8px_18px_rgba(21,87,238,.2)] transition hover:-translate-y-0.5 hover:bg-[#0f48d0] sm:flex">
+          <Button type="button" data-testid="button-header-add" onClick={onAdd} variant="primary" size="sm" className="hidden items-center gap-2 text-xs font-bold sm:flex">
             <Plus className="h-4 w-4" /> إضافة إعلان
-          </button>
+          </Button>
         )}
         <div className="hidden h-9 w-px bg-slate-200 sm:block" />
         <UserAvatar user={telegramUser} />
@@ -674,9 +683,9 @@ function CampaignsPage({
           </h1>
           <p className="mt-2 text-sm text-slate-500">هذه لمحة سريعة عن أثر إعلاناتك اليوم.</p>
         </div>
-        <button type="button" data-testid="button-add-video-main" onClick={onAdd} className="flex items-center justify-center gap-2 rounded-xl bg-[#1557ee] px-5 py-3 text-sm font-bold text-white shadow-[0_9px_22px_rgba(21,87,238,.2)] transition hover:-translate-y-0.5 hover:bg-[#0f48d0]">
+        <Button type="button" data-testid="button-add-video-main" onClick={onAdd} variant="primary" size="lg" className="flex items-center justify-center gap-2 text-sm font-bold">
           <Plus className="h-4 w-4" /> أضف إعلان جديد
-        </button>
+        </Button>
       </section>
 
       <section className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
@@ -714,7 +723,7 @@ function CampaignsPage({
             </div>
             <div className="flex rounded-lg bg-slate-50 p-1 text-xs font-semibold">
               {([['all', 'الكل'], ['active', 'نشطة'], ['drafts', 'مسودات']] as const).map(([value, label]) => (
-                <button type="button" key={value} data-testid={`button-tab-${value}`} onClick={() => onTab(value)} className={`rounded-md px-3 py-2 transition ${tab === value ? 'bg-white text-[#1557ee] shadow-sm' : 'text-slate-400 hover:text-slate-700'}`}>{label}</button>
+                <Button type="button" key={value} data-testid={`button-tab-${value}`} onClick={() => onTab(value)} variant="unstyled" size="fit" className={`rounded-md px-3 py-2 transition ${tab === value ? 'bg-white text-[#1557ee] shadow-sm' : 'text-slate-400 hover:text-slate-700'}`}>{label}</Button>
               ))}
             </div>
           </div>
@@ -724,7 +733,7 @@ function CampaignsPage({
                 <div className="grid h-14 w-14 place-items-center rounded-2xl bg-[#edf3ff] text-[#1557ee]"><FileText className="h-6 w-6" /></div>
                 <h3 className="mt-4 text-sm font-bold text-slate-800">لا توجد إعلانات هنا بعد</h3>
                 <p className="mt-1 max-w-xs text-xs leading-5 text-slate-400">ابدأ بإضافة إعلان جديد وامنح المشاهدين تجربة تستحق وقتهم.</p>
-                <button type="button" data-testid="button-empty-add" onClick={onAdd} className="mt-4 text-xs font-bold text-[#1557ee]">إضافة أول إعلان</button>
+                <Button type="button" data-testid="button-empty-add" onClick={onAdd} variant="ghost" size="fit" className="mt-4 text-xs font-bold text-[#1557ee]">إضافة أول إعلان</Button>
               </div>
             ) : visibleVideos.map((video, index) => (
               <div key={video.id} data-testid={`row-video-${video.id}`} className="group flex items-center gap-3 p-4 transition hover:bg-[#fbfcff] md:gap-4 md:p-5">
@@ -745,13 +754,13 @@ function CampaignsPage({
                   <div className="text-sm font-bold text-[#12234b]">{video.reward}</div>
                   <div className="mt-1 text-[10px] text-slate-400">لكل إكمال</div>
                 </div>
-                <button type="button" data-testid={`button-video-menu-${video.id}`} onClick={() => onWatch(video)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-400 opacity-60 transition hover:bg-[#edf3ff] hover:text-[#1557ee] group-hover:opacity-100"><MoreHorizontal className="h-4 w-4" /></button>
+                <Button type="button" data-testid={`button-video-menu-${video.id}`} onClick={() => onWatch(video)} variant="ghost" size="icon" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-400 opacity-60 transition hover:bg-[#edf3ff] hover:text-[#1557ee] group-hover:opacity-100" aria-label="خيارات الإعلان"><MoreHorizontal className="h-4 w-4" /></Button>
               </div>
             ))}
           </div>
           <div className="flex items-center justify-between border-t border-slate-100 px-5 py-4">
             <span className="text-[11px] text-slate-400">عرض {visibleVideos.length} من {videos.length} فيديوهات</span>
-            <button type="button" data-testid="button-view-all-videos" onClick={() => onTab('all')} className="flex items-center gap-1 text-xs font-bold text-[#1557ee]">عرض الكل <ArrowDownLeft className="h-3.5 w-3.5" /></button>
+            <Button type="button" data-testid="button-view-all-videos" onClick={() => onTab('all')} variant="ghost" size="fit" className="flex items-center gap-1 text-xs font-bold text-[#1557ee]">عرض الكل <ArrowDownLeft className="h-3.5 w-3.5" /></Button>
           </div>
         </div>
 
@@ -761,7 +770,7 @@ function CampaignsPage({
           <div className="relative">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-blue-100">ملخص الإنفاق</span>
-               <button type="button" data-testid="button-spend-period" onClick={() => setSpendPeriod((current) => current === 'آخر ٧ أيام' ? 'آخر ٣٠ يومًا' : 'آخر ٧ أيام')} className="rounded-lg border border-white/15 px-2.5 py-1.5 text-[10px] text-blue-100 transition hover:border-cyan-200/40 hover:text-cyan-200">{spendPeriod} <ChevronLeft className="mr-1 inline h-3 w-3 rotate-[-90deg]" /></button>
+               <Button type="button" data-testid="button-spend-period" onClick={() => setSpendPeriod((current) => current === 'آخر ٧ أيام' ? 'آخر ٣٠ يومًا' : 'آخر ٧ أيام')} variant="unstyled" size="fit" className="rounded-lg border border-white/15 px-2.5 py-1.5 text-[10px] text-blue-100 transition hover:border-cyan-200/40 hover:text-cyan-200">{spendPeriod} <ChevronLeft className="mr-1 inline h-3 w-3 rotate-[-90deg]" /></Button>
             </div>
             <div className="mt-7 flex items-end justify-between">
               <div>
@@ -824,9 +833,9 @@ function CreatorOverview({
           </h1>
           <p className="mt-2 text-sm text-slate-500">ملخص أداء حملاتك ورصيدك في مكان واحد.</p>
         </div>
-        <button type="button" data-testid="button-add-video-main" onClick={onAdd} className="flex items-center justify-center gap-2 rounded-xl bg-[#1557ee] px-5 py-3 text-sm font-bold text-white shadow-[0_9px_22px_rgba(21,87,238,.2)] transition hover:-translate-y-0.5 hover:bg-[#0f48d0]">
+        <Button type="button" data-testid="button-add-video-main" onClick={onAdd} variant="primary" size="lg" className="flex items-center justify-center gap-2 text-sm font-bold">
           <Plus className="h-4 w-4" /> أضف إعلان جديد
-        </button>
+        </Button>
       </section>
 
       <section className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
@@ -852,9 +861,9 @@ function CreatorOverview({
             <WalletArtwork method="web3" size="xs" />
             <span className="text-[10px] font-bold text-slate-600">جاهز للتحويل عبر Web3 · Polygon</span>
           </div>
-          <button type="button" data-testid="button-overview-deposit" onClick={onDeposit} className="mt-6 flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-bold text-[#1557ee] shadow-sm transition hover:-translate-y-0.5">
+          <Button type="button" data-testid="button-overview-deposit" onClick={onDeposit} variant="secondary" size="sm" className="mt-6 flex items-center gap-2 bg-white text-xs font-bold text-[#1557ee]">
             <Plus className="h-4 w-4" /> إيداع رصيد جديد
-          </button>
+          </Button>
         </div>
         <div className="rounded-[22px] bg-[#0e2452] p-6 text-white shadow-[0_15px_34px_rgba(14,36,82,.16)]">
           <div className="flex items-center justify-between"><span className="text-xs font-bold text-blue-100">أداء هذا الشهر</span><BarChart3 className="h-5 w-5 text-cyan-300" /></div>
@@ -876,10 +885,10 @@ function CreatorOverview({
             { number: '02', title: 'موّل حملتك', description: 'أنشئ فاتورة إيداع آمنة عبر Stars أو Web3.', action: onDeposit },
             { number: '03', title: 'راجع الأداء', description: 'تابع المشاهدات والإكمالات من صفحة الإعلانات.' },
           ] as Array<{ number: string; title: string; description: string; action?: () => void }>).map(({ number, title, description, action }) => (
-            <button type="button" key={number} onClick={typeof action === 'function' ? action : undefined} className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-[#fbfcff] p-4 text-right transition hover:border-blue-100 hover:bg-[#f4f8ff]">
+            <Button type="button" key={number} onClick={typeof action === 'function' ? action : undefined} variant="unstyled" size="fit" className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-[#fbfcff] p-4 text-right transition hover:border-blue-100 hover:bg-[#f4f8ff]">
               <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#edf3ff] text-[10px] font-bold text-[#1557ee]">{number}</span>
               <span><span className="block text-xs font-bold text-[#12234b]">{title}</span><span className="mt-1 block text-[11px] leading-5 text-slate-400">{description}</span></span>
-            </button>
+            </Button>
           ))}
         </div>
       </section>
@@ -942,9 +951,9 @@ function ViewerView({
             <div className="mt-1 text-2xl font-bold tracking-tight text-[#12234b]">{formatUsd(balance)}</div>
           </div>
         </div>
-        <button type="button" data-testid="button-withdraw" onClick={onWithdraw} disabled={balance <= 0} className="flex items-center justify-center gap-2 rounded-xl border border-[#1557ee] px-5 py-3 text-xs font-bold text-[#1557ee] transition hover:bg-[#edf3ff] disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300">
+        <Button type="button" data-testid="button-withdraw" onClick={onWithdraw} disabled={balance <= 0} variant="secondary" size="default" className="flex items-center justify-center gap-2 border-[#1557ee] text-xs font-bold text-[#1557ee] disabled:border-slate-200 disabled:text-slate-300">
           <WalletArtwork method="balance" size="xs" className="h-7 w-7" /> سحب الأرباح
-        </button>
+        </Button>
       </section>
       {insideTelegram ? (
         <section className="animate-rise mx-auto mt-8 flex min-h-[340px] max-w-3xl flex-col items-center justify-center rounded-[26px] border border-blue-100 bg-white px-6 py-10 text-center shadow-[var(--shadow-soft)] md:px-10">
@@ -952,9 +961,9 @@ function ViewerView({
           <h2 className="mt-5 font-display text-2xl font-bold text-[#12234b]">شاهد واربح من المتصفح</h2>
           <p className="mt-3 max-w-md text-sm leading-7 text-slate-500">مشغلات YouTube لا تظهر داخل Telegram. افتح صفحة المشاهدة في المتصفح لمشاهدة الفيديوهات مباشرةً دون قوائم التطبيق.</p>
           {activeVideos[0] ? (
-            <button type="button" data-testid="button-open-browser-watch" onClick={() => onOpenBrowser(activeVideos[0])} className="mt-7 flex items-center justify-center gap-2 rounded-xl bg-[#1557ee] px-6 py-4 text-sm font-bold text-white shadow-[0_10px_20px_rgba(21,87,238,.2)] transition hover:-translate-y-0.5 hover:bg-[#0f48d0]">
+            <Button type="button" data-testid="button-open-browser-watch" onClick={() => onOpenBrowser(activeVideos[0])} variant="primary" size="lg" className="mt-7 flex items-center justify-center gap-2 text-sm font-bold">
               <ExternalLink className="h-4 w-4" /> اذهب للمتصفح للمشاهدة والربح
-            </button>
+            </Button>
           ) : (
             <p className="mt-7 rounded-xl bg-slate-50 px-5 py-3 text-sm font-semibold text-slate-500">لا توجد فيديوهات جديدة للمشاهدة حاليًا.</p>
           )}
@@ -987,7 +996,7 @@ function ViewerView({
         </div>
       ) : <div className="browser-watch-list mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {activeVideos.map((video, index) => (
-          <button type="button" key={video.id} data-testid={`card-reward-${video.id}`} onClick={() => onSelect(video)} className="group overflow-hidden rounded-[20px] border border-slate-200 bg-white text-right shadow-[var(--shadow-soft)] transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-[var(--shadow-lift)]">
+          <Button type="button" key={video.id} data-testid={`card-reward-${video.id}`} onClick={() => onSelect(video)} variant="unstyled" size="fit" className="group w-full overflow-hidden rounded-[20px] border border-slate-200 bg-white text-right shadow-[var(--shadow-soft)] transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-[var(--shadow-lift)]">
             <VideoArtwork video={video} />
             <div className="p-4">
               <div className="flex items-center justify-between">
@@ -1000,7 +1009,7 @@ function ViewerView({
                 <span className="text-sm font-bold text-[#159b89]">+ {video.reward}</span>
               </div>
             </div>
-          </button>
+          </Button>
         ))}
       </div>}
         </>
@@ -1054,9 +1063,9 @@ function WatchPanel({
                 <div className="grid h-14 w-14 place-items-center rounded-2xl border border-white/30 bg-white/15 backdrop-blur-sm"><PlaySquare className="h-7 w-7" /></div>
                 <div className="mt-4 text-sm font-bold">الفيديو جاهز للمشاهدة</div>
                 <p className="mt-1 max-w-[260px] text-[11px] leading-5 text-white/70">افتح الفيديو على YouTube ثم عد إلى هنا لإكمال التحقق.</p>
-                <button type="button" data-testid="button-open-youtube" onClick={openVideo} className="mt-4 flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-bold text-[#12234b] transition hover:-translate-y-0.5 hover:bg-cyan-50">
+                <Button type="button" data-testid="button-open-youtube" onClick={openVideo} variant="secondary" size="sm" className="mt-4 flex items-center gap-2 bg-white text-xs font-bold text-[#12234b]">
                   <ExternalLink className="h-3.5 w-3.5" /> فتح الفيديو على YouTube
-                </button>
+                </Button>
               </div>
             </div>
             <div className="mt-5 flex items-start justify-between gap-4">
@@ -1075,7 +1084,7 @@ function WatchPanel({
                 <h3 className="mt-5 text-xl font-bold text-[#12234b]">أحسنت، تمت المشاهدة</h3>
                 <p className="mt-2 max-w-[230px] text-xs leading-6 text-slate-400">أضيفت الأرباح إلى رصيدك بنجاح.</p>
                 <div className="mt-5 rounded-xl bg-white px-7 py-3 text-lg font-bold text-[#159b89] shadow-sm">+ {video.reward}</div>
-                <button type="button" data-testid="button-close-complete" onClick={onClose} className="mt-5 text-xs font-bold text-[#1557ee]">مشاهدة فيديو آخر</button>
+                <Button type="button" data-testid="button-close-complete" onClick={onClose} variant="ghost" size="fit" className="mt-5 text-xs font-bold text-[#1557ee]">مشاهدة فيديو آخر</Button>
               </div>
             ) : (
               <>
@@ -1089,9 +1098,9 @@ function WatchPanel({
                    <div className="flex items-center justify-between text-xs"><span className="text-slate-500">حالة المشاهدة</span><span className={`font-bold ${isPlaying ? 'text-[#1557ee]' : completed ? 'text-[#159b89]' : hasOpenedVideo ? 'text-amber-600' : 'text-slate-400'}`}>{isPlaying ? 'الفيديو مفتوح — الوقت يُحتسب' : completed ? 'اكتملت المدة — جاهز للتحقق' : hasOpenedVideo ? 'المدة غير مكتملة' : 'افتح الفيديو أولاً'}</span></div>
                 </div>
                  {!completed && hasOpenedVideo && !isPlaying && <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 p-3 text-[10px] leading-5 text-amber-700">لم تكتمل المدة بعد. ارجع إلى الفيديو وأكمل الوقت المطلوب؛ لن تُصرف المكافأة قبل إكماله.</div>}
-                <button type="button" data-testid="button-start-watch" onClick={() => { if (completed && !isPlaying) { onComplete(); setRewardClaimed(true); } }} disabled={isPlaying || !hasOpenedVideo || !completed} className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1557ee] py-3.5 text-sm font-bold text-white shadow-[0_10px_20px_rgba(21,87,238,.2)] transition hover:bg-[#0f48d0] disabled:cursor-not-allowed disabled:opacity-60">
+                <Button type="button" data-testid="button-start-watch" onClick={() => { if (completed && !isPlaying) { onComplete(); setRewardClaimed(true); } }} disabled={isPlaying || !hasOpenedVideo || !completed} variant="primary" size="lg" className="mt-7 flex w-full items-center justify-center gap-2 text-sm font-bold">
                   <Check className="h-4 w-4" /> {completed ? 'تحقق واستلم المكافأة' : 'تحقق بعد إكمال مدة المشاهدة'}
-                </button>
+                </Button>
                 <div className="mt-5 flex items-center gap-2 text-[10px] leading-5 text-slate-400"><ShieldCheck className="h-4 w-4 shrink-0 text-[#159b89]" /> يُحتسب الوقت أثناء وجود التطبيق بالخلفية، وتُصرف المكافأة بعد العودة والتحقق.</div>
               </>
             )}
@@ -1142,7 +1151,7 @@ function AddVideo({
           <h1 className="mt-2 font-display text-2xl font-bold text-[#12234b] md:text-3xl">فيديوك جاهز للوصول إلى جمهور جديد</h1>
           <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-slate-500">أصبح الفيديو نشطاً الآن. سيظهر للمشاهدين الذين يبحثون عن محتوى جديد مع مكافآت عادلة.</p>
           <div className="mx-auto mt-7 flex max-w-sm items-center justify-between rounded-2xl bg-[#f5f8fe] p-4 text-right"><div><div className="text-xs font-bold text-[#12234b]">{title}</div><div className="mt-1 text-[10px] text-slate-400">{duration} ثانية · CPM ${selected.cpm}</div></div><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#1557ee] text-white"><Film className="h-4 w-4" /></div></div>
-          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row"><button type="button" data-testid="button-success-back" onClick={onBack} className="rounded-xl bg-[#1557ee] px-6 py-3 text-sm font-bold text-white">العودة إلى لوحة التحكم</button><button type="button" data-testid="button-success-another" onClick={() => { setSubmitted(false); setTitle(''); setLink(''); }} className="rounded-xl border border-slate-200 px-6 py-3 text-sm font-bold text-slate-600">إضافة إعلان آخر</button></div>
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row"><Button type="button" data-testid="button-success-back" onClick={onBack} variant="primary" size="lg" className="text-sm font-bold">العودة إلى لوحة التحكم</Button><Button type="button" data-testid="button-success-another" onClick={() => { setSubmitted(false); setTitle(''); setLink(''); }} variant="secondary" size="lg" className="border-slate-200 text-sm font-bold text-slate-600">إضافة إعلان آخر</Button></div>
         </div>
       </main>
     );
@@ -1150,7 +1159,7 @@ function AddVideo({
 
   return (
     <main className="mx-auto w-full max-w-[1180px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
-      <div className="mb-7 flex items-center gap-3"><button type="button" data-testid="button-back-add" onClick={onBack} className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:text-[#1557ee]"><ArrowDownLeft className="h-4 w-4" /></button><div><div className="text-xs font-semibold text-[#1557ee]">نشر إعلان / إعلان جديد</div><h1 className="mt-1 font-display text-2xl font-bold text-[#12234b]">انشر إعلانك</h1></div></div>
+      <div className="mb-7 flex items-center gap-3"><Button type="button" data-testid="button-back-add" onClick={onBack} variant="icon" size="icon" className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:border-blue-200 hover:text-[#1557ee]" aria-label="العودة"><ArrowDownLeft className="h-4 w-4" /></Button><div><div className="text-xs font-semibold text-[#1557ee]">نشر إعلان / إعلان جديد</div><h1 className="mt-1 font-display text-2xl font-bold text-[#12234b]">انشر إعلانك</h1></div></div>
       <div className="grid gap-5 xl:grid-cols-[1fr_400px]">
         <section className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)] md:p-7">
           <div className="mb-7"><h2 className="font-display text-lg font-bold text-[#12234b]">تفاصيل الفيديو</h2><p className="mt-1 text-xs text-slate-400">أخبر المشاهدين لماذا يستحق هذا الفيديو وقتهم.</p></div>
@@ -1159,11 +1168,11 @@ function AddVideo({
           <div className="mt-7">
             <div className="flex items-center justify-between"><div><h3 className="text-xs font-bold text-slate-700">المدة الإلزامية للمشاهدة</h3><p className="mt-1 text-[10px] text-slate-400">اختر الوقت الذي سيكمله المشاهد قبل احتساب المكافأة.</p></div><Clock3 className="h-5 w-5 text-[#1557ee]" /></div>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {durationOptions.map((option) => <button type="button" key={option.seconds} data-testid={`button-duration-${option.seconds}`} onClick={() => setDuration(option.seconds)} className={`rounded-xl border p-3 text-right transition ${duration === option.seconds ? 'border-[#1557ee] bg-[#edf3ff] text-[#1557ee] shadow-[0_0_0_2px_rgba(21,87,238,.08)]' : 'border-slate-200 text-slate-500 hover:border-blue-200'}`}><div className="text-sm font-bold">{option.label}</div><div className="mt-1 text-[10px] opacity-70">CPM ${option.cpm}</div></button>)}
+              {durationOptions.map((option) => <Button type="button" key={option.seconds} data-testid={`button-duration-${option.seconds}`} onClick={() => setDuration(option.seconds)} variant="unstyled" size="fit" className={`w-full rounded-xl border p-3 text-right transition ${duration === option.seconds ? 'border-[#1557ee] bg-[#edf3ff] text-[#1557ee] shadow-[0_0_0_2px_rgba(21,87,238,.08)]' : 'border-slate-200 text-slate-500 hover:border-blue-200'}`}><div className="text-sm font-bold">{option.label}</div><div className="mt-1 text-[10px] opacity-70">CPM ${option.cpm}</div></Button>)}
             </div>
           </div>
           <div className="mt-7 flex items-center justify-between rounded-2xl bg-[#f4f8ff] p-4"><div><div className="text-[11px] text-slate-500">تكلفة الألف مشاهدة (CPM)</div><div className="mt-1 text-2xl font-bold text-[#12234b]">${selected.cpm}</div></div><div className="text-left text-[10px] leading-5 text-slate-400">كلما زادت المدة،<br />زادت جودة التفاعل</div></div>
-           <button type="button" data-testid="button-submit-video" disabled={!valid} onClick={submit} className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1557ee] py-3.5 text-sm font-bold text-white shadow-[0_10px_20px_rgba(21,87,238,.18)] transition hover:bg-[#0f48d0] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"><Upload className="h-4 w-4" /> نشر الإعلان</button>
+            <Button type="button" data-testid="button-submit-video" disabled={!valid} onClick={submit} variant="primary" size="lg" className="mt-7 flex w-full items-center justify-center gap-2 text-sm font-bold disabled:bg-slate-200 disabled:text-slate-400"><Upload className="h-4 w-4" /> نشر الإعلان</Button>
         </section>
         <section className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)] md:p-6">
           <div className="flex items-center justify-between"><div><h2 className="font-display text-lg font-bold text-[#12234b]">المعاينة المباشرة</h2><p className="mt-1 text-xs text-slate-400">هكذا سيظهر الفيديو للمشاهدين.</p></div><span className="flex items-center gap-1 rounded-full bg-[#eafbf8] px-2.5 py-1 text-[10px] font-bold text-[#159b89]"><span className="h-1.5 w-1.5 rounded-full bg-current" /> مباشر</span></div>
@@ -1265,9 +1274,9 @@ function CopyableIdentifier({ label, value, tone = 'text-[#12234b]' }: { label: 
       <div className="text-[9px] font-bold text-slate-400">{label}</div>
       <div className="mt-1 flex min-w-0 items-center gap-1">
         <code dir="ltr" className={`min-w-0 flex-1 truncate text-[10px] font-bold ${tone}`} title={value}>{value}</code>
-        <button type="button" onClick={copy} className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-white hover:text-[#1557ee]" aria-label={`نسخ ${label}`}>
+        <Button type="button" onClick={copy} variant="ghost" size="icon" className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-white hover:text-[#1557ee]" aria-label={`نسخ ${label}`}>
           {copied ? <Check className="h-3 w-3 text-[#159b89]" /> : <Copy className="h-3 w-3" />}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -1348,9 +1357,9 @@ function CompactCopyableIdentifier({
       <div className="truncate text-[9px] font-semibold text-slate-400">{label}</div>
       <div className="mt-0.5 flex min-w-0 items-center gap-1">
         <code dir="ltr" className={`min-w-0 flex-1 truncate text-[10px] font-bold ${tone}`} title={value}>{value}</code>
-        <button type="button" onClick={copy} className="grid h-5 w-5 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-[#edf3ff] hover:text-[#1557ee]" aria-label={`نسخ ${label}`}>
+        <Button type="button" onClick={copy} variant="ghost" size="icon" className="grid h-5 w-5 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-[#edf3ff] hover:text-[#1557ee]" aria-label={`نسخ ${label}`}>
           {copied ? <Check className="h-2.5 w-2.5 text-[#159b89]" /> : <Copy className="h-2.5 w-2.5" />}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -1453,6 +1462,7 @@ function DepositPage({
   const [finalizedInvoiceId, setFinalizedInvoiceId] = useState('');
   const [copied, setCopied] = useState('');
   const [error, setError] = useState('');
+  const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const numericAmount = Number(amount);
   const validAmount = Number.isFinite(numericAmount) && numericAmount >= 1 && numericAmount <= 10000;
 
@@ -1464,6 +1474,7 @@ function DepositPage({
 
   const createInvoice = async () => {
     if (!validAmount) return;
+    setIsCreatingInvoice(true);
     setError('');
     const createdAt = Date.now();
     let destination = depositAddress;
@@ -1485,6 +1496,7 @@ function DepositPage({
         paymentPayload = data.payload || paymentPayload;
       } catch (requestError) {
         setError(requestError instanceof Error ? requestError.message : t('تعذر إنشاء فاتورة Stars.'));
+        setIsCreatingInvoice(false);
         return;
       }
     }
@@ -1512,6 +1524,7 @@ function DepositPage({
       createdAt: formatHistoryDate(new Date(createdAt)),
       status: 'قيد المعالجة',
     });
+    setIsCreatingInvoice(false);
   };
 
   useEffect(() => {
@@ -1574,18 +1587,18 @@ function DepositPage({
                      { value: 'stars', title: t('Stars') },
                      { value: 'web3', title: t('Web3') },
                   ] as Array<{ value: DepositMethod; title: string }>).map(({ value, title }) => (
-                   <button type="button" key={value} data-testid={`button-deposit-method-${value}`} data-selected={method === value} onClick={() => setMethod(value)} className={`flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2.5 text-right transition ${method === value ? 'border-[#1557ee] bg-[#eff4ff] text-[#1557ee]' : 'border-slate-200 text-slate-600 hover:border-blue-200'}`}>
+                   <Button type="button" key={value} data-testid={`button-deposit-method-${value}`} data-selected={method === value} onClick={() => setMethod(value)} variant="unstyled" size="fit" className={`flex w-full min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2.5 text-right transition ${method === value ? 'border-[#1557ee] bg-[#eff4ff] text-[#1557ee]' : 'border-slate-200 text-slate-600 hover:border-blue-200'}`}>
                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white"><WalletArtwork method={value} size="sm" className="h-[26px] w-[26px]" /></span>
                      <span className="truncate whitespace-nowrap text-[11px] font-bold">{title}</span>
                     {method === value && <CheckCircle2 className="mr-auto h-4 w-4" />}
-                  </button>
+                   </Button>
                 ))}
               </div>
             </div>
               <label className="mt-6 block text-xs font-bold text-slate-700">{t('المبلغ المطلوب (دولار)')}<div className="relative mt-2"><input value={amount} onChange={(event) => setAmount(event.target.value)} type="number" min="1" max="10000" step="0.01" placeholder="50.00" data-testid="input-deposit-amount" className="w-full rounded-xl border border-slate-200 bg-[#fbfcff] px-4 py-3 pl-16 text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" /><span className="absolute left-4 top-3 rounded-md bg-[#eafbf8] px-2 py-1 text-[10px] font-bold text-[#159b89]">USD</span></div></label>
               <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-[11px] leading-5 text-amber-800"><div className="flex items-center gap-2 font-bold"><ShieldCheck className="h-4 w-4" /> {t('تنبيه قبل الدفع')}</div><p className="mt-1">{method === 'stars' ? t(`كل 1 دولار = 100 نجمة. سيدفع المستخدم ${Math.round(numericAmount * 100 || 0).toLocaleString('en-US')} نجمة عبر Telegram.`) : t('استخدم شبكة Polygon فقط، وأرسل المبلغ نفسه الموضح في الفاتورة.')}</p></div>
              {error && <div className="mt-4 rounded-xl bg-rose-50 p-3 text-center text-xs font-bold leading-5 text-rose-600">{error}</div>}
-              <button type="button" data-testid="button-create-invoice" onClick={createInvoice} disabled={!validAmount} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1557ee] py-3.5 text-sm font-bold text-white transition hover:bg-[#0f48d0] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"><FileText className="h-4 w-4" /> {t('إنشاء فاتورة الإيداع')}</button>
+               <Button type="button" data-testid="button-create-invoice" onClick={createInvoice} disabled={!validAmount} loading={isCreatingInvoice} loadingLabel={t('جاري إنشاء الفاتورة...')} variant="primary" size="lg" className="mt-6 flex w-full items-center justify-center gap-2 text-sm font-bold disabled:bg-slate-200 disabled:text-slate-400"><FileText className="h-4 w-4" /> {t('إنشاء فاتورة الإيداع')}</Button>
           </section>
            <section className="relative overflow-hidden rounded-[24px] bg-[#0e2452] p-6 text-white shadow-[0_15px_34px_rgba(14,36,82,.16)] md:p-8">
               <div className="flex items-center justify-between"><span className="text-xs font-bold text-blue-100">{t('الرصيد الحالي')}</span><WalletArtwork method="balance" size="sm" className="h-12 w-12" /></div>
@@ -1609,14 +1622,14 @@ function DepositPage({
                       <CompactInvoiceValue
                        label={t('عنوان الإيداع (Polygon)')}
                    value={invoice.destination}
-                   action={<button type="button" data-testid="button-copy-deposit-destination" onClick={() => copyValue(invoice.destination, 'destination')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee] shadow-sm transition hover:bg-[#edf3ff]" aria-label="نسخ وجهة الإيداع">{copied === 'destination' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</button>}
+                    action={<Button type="button" data-testid="button-copy-deposit-destination" onClick={() => copyValue(invoice.destination, 'destination')} variant="icon" size="icon" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee]" aria-label="نسخ وجهة الإيداع">{copied === 'destination' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</Button>}
                  />
                  <div className="min-w-0">
                    <CompactInvoiceValue
                       label={t('Memo / Tag فريد لهذه العملية')}
                      value={invoice.memoTag}
                      tone="text-[#159b89]"
-                     action={<button type="button" data-testid="button-copy-deposit-memo" onClick={() => copyValue(invoice.memoTag, 'memo')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee] shadow-sm transition hover:bg-[#edf3ff]" aria-label="نسخ Memo Tag">{copied === 'memo' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</button>}
+                      action={<Button type="button" data-testid="button-copy-deposit-memo" onClick={() => copyValue(invoice.memoTag, 'memo')} variant="icon" size="icon" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#1557ee]" aria-label="نسخ Memo Tag">{copied === 'memo' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</Button>}
                    />
                     <p className="mt-1 px-1 text-[9px] font-semibold leading-4 text-slate-400">{t('الصق هذا الرمز في خانة الملاحظات عند إرسال الإيداع.')}</p>
                  </div>
@@ -1637,15 +1650,15 @@ function DepositPage({
                 <p className="text-[10px] font-semibold leading-4 text-slate-400">{invoice.method === 'stars' ? t('اضغط زر الدفع أسفل الفاتورة لإكمال الدفع داخل Telegram.') : t('استخدم شبكة Polygon وأرسل المبلغ المحدد.')}</p>
             </div>
           </div>
-            {invoice.method === 'stars' && invoiceStatus === 'pending' && <button type="button" data-testid="button-pay-stars" onClick={openStarsInvoice} aria-label={t('اضغط لفتح رابط دفع Telegram وإكمال الدفع')} className="payment-link-button group mt-5 flex w-full items-center gap-3 rounded-2xl border border-[#0f48d0] bg-[#1557ee] px-4 py-3.5 text-start text-white transition hover:bg-[#0f48d0]">
+            {invoice.method === 'stars' && invoiceStatus === 'pending' && <Button type="button" data-testid="button-pay-stars" onClick={openStarsInvoice} aria-label={t('اضغط لفتح رابط دفع Telegram وإكمال الدفع')} variant="primary" size="lg" className="payment-link-button group mt-5 flex w-full items-center gap-3 rounded-2xl border border-[#0f48d0] bg-[#1557ee] px-4 py-3.5 text-start text-white">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/15"><WalletArtwork method="stars" size="sm" className="h-8 w-8" /></span>
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-bold">{t('ادفع بالنجوم')}</span>
                  <span className="mt-0.5 flex items-center gap-1 text-[10px] font-medium text-blue-100"><ExternalLink className="h-3 w-3" /> {t('اضغط لفتح رابط الدفع')}</span>
               </span>
               <span className="shrink-0 rounded-lg bg-white/15 px-2.5 py-1.5 text-[10px] font-semibold">{invoice.stars?.toLocaleString('en-US')} {t('Stars')}</span>
-           </button>}
-          {invoiceStatus !== 'pending' && <div className="mt-7 flex justify-end border-t border-slate-100 pt-6"><button type="button" onClick={() => setInvoice(null)} className="flex items-center justify-center gap-2 rounded-xl bg-[#1557ee] px-5 py-3 text-xs font-bold text-white"><RefreshCw className="h-4 w-4" /> إنشاء فاتورة جديدة</button></div>}
+           </Button>}
+          {invoiceStatus !== 'pending' && <div className="mt-7 flex justify-end border-t border-slate-100 pt-6"><Button type="button" onClick={() => setInvoice(null)} variant="primary" size="default" className="flex items-center justify-center gap-2 text-xs font-bold"><RefreshCw className="h-4 w-4" /> إنشاء فاتورة جديدة</Button></div>}
         </section>
       )}
     </main>
@@ -1700,12 +1713,12 @@ function WithdrawPage({
               { value: 'binance', title: 'Binance ID' },
                { value: 'web3', title: t('Web3') },
              ] as Array<{ value: WithdrawMethod; title: string }>).map(({ value, title }) => (
-              <button type="button" key={value} data-testid={`button-withdraw-method-${value}`} data-selected={method === value} onClick={() => setMethod(value)} className={`flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2.5 text-right transition ${method === value ? 'border-[#1557ee] bg-[#eff4ff] text-[#1557ee]' : 'border-slate-200 text-slate-600 hover:border-blue-200'}`}><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white"><WalletArtwork method={value} size="sm" className="h-[26px] w-[26px]" /></span><span className="truncate whitespace-nowrap text-[11px] font-bold">{title}</span>{method === value && <CheckCircle2 className="mr-auto h-4 w-4" />}</button>
+               <Button type="button" key={value} data-testid={`button-withdraw-method-${value}`} data-selected={method === value} onClick={() => setMethod(value)} variant="unstyled" size="fit" className={`flex w-full min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2.5 text-right transition ${method === value ? 'border-[#1557ee] bg-[#eff4ff] text-[#1557ee]' : 'border-slate-200 text-slate-600 hover:border-blue-200'}`}><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white"><WalletArtwork method={value} size="sm" className="h-[26px] w-[26px]" /></span><span className="truncate whitespace-nowrap text-[11px] font-bold">{title}</span>{method === value && <CheckCircle2 className="mr-auto h-4 w-4" />}</Button>
             ))}
           </div>
           <label className="mt-6 block text-xs font-bold text-slate-700">{method === 'binance' ? 'معرّف Binance الرقمي' : 'عنوان محفظة USDT (Polygon)'}<div className="relative mt-2"><Clipboard className="absolute right-4 top-3.5 h-4 w-4 text-slate-400" /><input value={destination} onChange={(event) => setDestination(method === 'binance' ? event.target.value.replace(/\D/g, '') : event.target.value)} inputMode={method === 'binance' ? 'numeric' : 'text'} pattern={method === 'binance' ? '[0-9]*' : undefined} dir="ltr" placeholder={method === 'binance' ? 'مثال: 782946315' : '0x...'} data-testid={method === 'binance' ? 'input-withdraw-binance-id' : 'input-withdraw-address'} className="w-full rounded-xl border border-slate-200 bg-[#fbfcff] py-3 pl-4 pr-11 text-left text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" /></div>{destination && !validDestination && <span className="mt-2 block text-[10px] font-medium text-rose-500">{method === 'binance' ? 'أدخل Binance ID رقميًا فقط (3 إلى 20 رقمًا).' : 'أدخل عنوان Polygon صحيحاً مكوناً من 42 رمزاً.'}</span>}</label>
           <label className="mt-5 block text-xs font-bold text-slate-700">المبلغ (USDT)<div className="relative mt-2"><input value={amount} onChange={(event) => setAmount(event.target.value)} type="number" min="1" max={viewerBalance} step="0.0001" placeholder={`المتاح: ${viewerBalance.toFixed(4)}`} data-testid="input-withdraw-amount" className="w-full rounded-xl border border-slate-200 bg-[#fbfcff] px-4 py-3 pl-16 text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" /><span className="absolute left-4 top-3 rounded-md bg-[#eafbf8] px-2 py-1 text-[10px] font-bold text-[#159b89]">USDT</span></div></label>
-          <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-[11px] leading-5 text-amber-800"><div className="flex items-center gap-2 font-bold"><ShieldCheck className="h-4 w-4" /> راجع البيانات قبل الإرسال</div><p className="mt-1">ستظهر العملية في سجل السحب بحالة قيد المعالجة، ولا يمكن إلغاؤها بعد بدء التحويل.</p></div><button type="button" data-testid="button-submit-withdraw" onClick={submit} disabled={!valid} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1557ee] py-3.5 text-sm font-bold text-white transition hover:bg-[#0f48d0] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"><ArrowUpLeft className="h-4 w-4" /> إرسال طلب السحب</button>{message && <div className="mt-4 rounded-xl bg-[#eafbf8] p-3 text-center text-xs font-bold leading-5 text-[#159b89]">{message}</div>}</section>
+          <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-[11px] leading-5 text-amber-800"><div className="flex items-center gap-2 font-bold"><ShieldCheck className="h-4 w-4" /> راجع البيانات قبل الإرسال</div><p className="mt-1">ستظهر العملية في سجل السحب بحالة قيد المعالجة، ولا يمكن إلغاؤها بعد بدء التحويل.</p></div><Button type="button" data-testid="button-submit-withdraw" onClick={submit} disabled={!valid} variant="primary" size="lg" className="mt-6 flex w-full items-center justify-center gap-2 text-sm font-bold disabled:bg-slate-200 disabled:text-slate-400"><ArrowUpLeft className="h-4 w-4" /> إرسال طلب السحب</Button>{message && <div className="mt-4 rounded-xl bg-[#eafbf8] p-3 text-center text-xs font-bold leading-5 text-[#159b89]">{message}</div>}</section>
       </div>
     </main>
   );
@@ -1968,7 +1981,7 @@ function Home() {
     <div className="min-h-[100dvh] bg-[#f7f9fc] text-[#12234b]">
       <div className={`flex min-h-[100dvh] ${browserEarningPage ? '' : 'lg:gap-5 lg:p-5'}`}>
         {!browserEarningPage && <Sidebar mode={mode} screen={screen} telegramUser={telegramUser} onModeChange={(nextMode) => { setMode(nextMode); setScreen(nextMode === 'creator' ? 'overview' : 'watch'); }} onNavigate={setScreen} onAdd={() => { setMode('creator'); setScreen('add'); }} open={mobileMenu} onClose={() => setMobileMenu(false)} />}
-        {!browserEarningPage && mobileMenu && <button type="button" aria-label="إغلاق خلفية القائمة" data-testid="button-close-menu-overlay" onClick={() => setMobileMenu(false)} className="fixed inset-0 z-40 bg-[#061333]/30 backdrop-blur-sm lg:hidden" />}
+        {!browserEarningPage && mobileMenu && <Button type="button" aria-label="إغلاق خلفية القائمة" data-testid="button-close-menu-overlay" onClick={() => setMobileMenu(false)} variant="unstyled" size="fit" className="fixed inset-0 z-40 bg-[#061333]/30 backdrop-blur-sm lg:hidden" />}
         <div className={`min-w-0 flex-1 ${browserEarningPage ? '' : 'overflow-hidden rounded-none bg-[#f7f9fc] lg:rounded-[26px] lg:border lg:border-slate-200/80 lg:bg-[#fbfcfe]'}`}>
           {!browserEarningPage && <Header mode={mode} screen={screen} telegramUser={telegramUser} onMenu={() => setMobileMenu(true)} onAdd={() => { setMode('creator'); setScreen('add'); }} />}
           {screen === 'add' && mode === 'creator' ? <AddVideo telegramUser={telegramUser} onBack={() => setScreen('campaigns')} onSubmit={(video) => { addVideo(video); notify('success', 'تم نشر الإعلان', 'أصبح الفيديو نشطًا ويمكن للمشاهدين اكتشافه الآن.'); }} />
@@ -1983,16 +1996,16 @@ function Home() {
             <div className="mx-auto flex max-w-md justify-around">
               {mode === 'creator' ? (
                 <>
-                  <button type="button" data-testid="button-mobile-creator" onClick={() => setScreen('campaigns')} className={`flex flex-col items-center gap-1 px-5 py-1.5 text-[10px] font-bold ${screen === 'campaigns' ? 'text-[#1557ee]' : 'text-slate-400'}`}><LayoutDashboard className="h-5 w-5" /> إعلاناتي</button>
-                  <button type="button" data-testid="button-mobile-add" onClick={() => setScreen('add')} className="grid h-11 w-11 -translate-y-4 place-items-center rounded-2xl bg-[#1557ee] text-white shadow-[0_8px_20px_rgba(21,87,238,.25)]"><Plus className="h-5 w-5" /></button>
-                   <button type="button" data-testid="button-mobile-ad-wallet" onClick={() => setScreen('deposit')} className={`flex flex-col items-center gap-1 px-4 py-1.5 text-[10px] font-bold ${screen === 'deposit' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> إيداع رصيد</button>
-                   <button type="button" data-testid="button-mobile-deposit-history" onClick={() => setScreen('deposit-history')} className={`flex flex-col items-center gap-1 px-3 py-1.5 text-[10px] font-bold ${screen === 'deposit-history' ? 'text-[#1557ee]' : 'text-slate-400'}`}><History className="h-5 w-5" /> سجل الإيداع</button>
+                   <Button type="button" data-testid="button-mobile-creator" onClick={() => setScreen('campaigns')} variant="unstyled" size="fit" className={`flex flex-col items-center gap-1 px-5 py-1.5 text-[10px] font-bold ${screen === 'campaigns' ? 'text-[#1557ee]' : 'text-slate-400'}`}><LayoutDashboard className="h-5 w-5" /> إعلاناتي</Button>
+                   <Button type="button" data-testid="button-mobile-add" onClick={() => setScreen('add')} variant="primary" size="icon" className="grid h-11 w-11 -translate-y-4 place-items-center rounded-2xl"><Plus className="h-5 w-5" /></Button>
+                    <Button type="button" data-testid="button-mobile-ad-wallet" onClick={() => setScreen('deposit')} variant="unstyled" size="fit" className={`flex flex-col items-center gap-1 px-4 py-1.5 text-[10px] font-bold ${screen === 'deposit' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> إيداع رصيد</Button>
+                    <Button type="button" data-testid="button-mobile-deposit-history" onClick={() => setScreen('deposit-history')} variant="unstyled" size="fit" className={`flex flex-col items-center gap-1 px-3 py-1.5 text-[10px] font-bold ${screen === 'deposit-history' ? 'text-[#1557ee]' : 'text-slate-400'}`}><History className="h-5 w-5" /> سجل الإيداع</Button>
                 </>
               ) : (
                 <>
-                   <button type="button" data-testid="button-mobile-earn" onClick={() => setScreen('watch')} className={`flex flex-col items-center gap-1 px-4 py-1.5 text-[10px] font-bold ${screen === 'watch' ? 'text-[#1557ee]' : 'text-slate-400'}`}><Eye className="h-5 w-5" /> شاهد واربح</button>
-                   <button type="button" data-testid="button-mobile-earnings" onClick={() => setScreen('withdraw')} className={`flex flex-col items-center gap-1 px-4 py-1.5 text-[10px] font-bold ${screen === 'withdraw' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> سحب الأرباح</button>
-                   <button type="button" data-testid="button-mobile-withdraw-history" onClick={() => setScreen('withdraw-history')} className={`flex flex-col items-center gap-1 px-4 py-1.5 text-[10px] font-bold ${screen === 'withdraw-history' ? 'text-[#1557ee]' : 'text-slate-400'}`}><History className="h-5 w-5" /> سجل السحب</button>
+                    <Button type="button" data-testid="button-mobile-earn" onClick={() => setScreen('watch')} variant="unstyled" size="fit" className={`flex flex-col items-center gap-1 px-4 py-1.5 text-[10px] font-bold ${screen === 'watch' ? 'text-[#1557ee]' : 'text-slate-400'}`}><Eye className="h-5 w-5" /> شاهد واربح</Button>
+                    <Button type="button" data-testid="button-mobile-earnings" onClick={() => setScreen('withdraw')} variant="unstyled" size="fit" className={`flex flex-col items-center gap-1 px-4 py-1.5 text-[10px] font-bold ${screen === 'withdraw' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> سحب الأرباح</Button>
+                    <Button type="button" data-testid="button-mobile-withdraw-history" onClick={() => setScreen('withdraw-history')} variant="unstyled" size="fit" className={`flex flex-col items-center gap-1 px-4 py-1.5 text-[10px] font-bold ${screen === 'withdraw-history' ? 'text-[#1557ee]' : 'text-slate-400'}`}><History className="h-5 w-5" /> سجل السحب</Button>
                 </>
               )}
             </div>
@@ -2087,7 +2100,7 @@ function ExternalWatchPage() {
               </div>
             </div>
             {validVideoId && (
-              <a href={`https://www.youtube.com/watch?v=${videoId}`} target="_blank" rel="noreferrer" className="flex shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 px-4 py-3 text-xs font-bold text-white transition hover:bg-white/10">
+              <a href={`https://www.youtube.com/watch?v=${videoId}`} target="_blank" rel="noreferrer" className="button-system button-3d-secondary flex shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 bg-transparent px-4 py-3 text-xs font-bold text-white transition hover:bg-white/10">
                 <ExternalLink className="h-4 w-4" /> فتح في YouTube
               </a>
             )}

@@ -183,6 +183,101 @@ input[type='number']::-webkit-outer-spin-button {
   background-size: 13px 13px;
 }
 
+/* Shared premium button language: shallow depth, a restrained highlight, and a
+   fast press-in state that stays comfortable on touch screens. */
+.button-system {
+  --button-depth: 4px;
+  --button-face: hsl(var(--primary));
+  --button-edge: hsl(225 72% 38%);
+  --button-ink: hsl(var(--primary-foreground));
+  --button-glow: rgba(21, 87, 238, .18);
+  isolation: isolate;
+  min-width: 0;
+  transform: translateY(0);
+  box-shadow:
+    0 var(--button-depth) 0 var(--button-edge),
+    0 calc(var(--button-depth) + 7px) 16px var(--button-glow),
+    inset 0 1px 0 rgba(255, 255, 255, .24);
+  transition:
+    transform .14s cubic-bezier(.22, .75, .22, 1),
+    box-shadow .14s cubic-bezier(.22, .75, .22, 1),
+    background-color .14s ease,
+    border-color .14s ease,
+    color .14s ease,
+    filter .14s ease,
+    opacity .14s ease;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.button-system::before {
+  content: '';
+  position: absolute;
+  inset: 1px 1px auto;
+  height: 34%;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255,255,255,.18), transparent);
+  pointer-events: none;
+  z-index: -1;
+}
+.button-system:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.025);
+  box-shadow:
+    0 calc(var(--button-depth) + 1px) 0 var(--button-edge),
+    0 calc(var(--button-depth) + 9px) 18px var(--button-glow),
+    inset 0 1px 0 rgba(255, 255, 255, .28);
+}
+.button-system:active:not(:disabled) {
+  transform: translateY(3px);
+  filter: brightness(.98);
+  box-shadow:
+    0 1px 0 var(--button-edge),
+    0 4px 9px var(--button-glow),
+    inset 0 1px 0 rgba(255, 255, 255, .18);
+}
+.button-system:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 3px;
+}
+.button-system:disabled {
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--button-edge) 45%, transparent);
+  filter: saturate(.72);
+}
+.button-3d-secondary {
+  --button-edge: hsl(220 34% 77%);
+  --button-glow: rgba(40, 72, 140, .10);
+}
+.button-3d-success {
+  --button-edge: hsl(160 60% 34%);
+  --button-glow: rgba(21, 155, 137, .16);
+}
+.button-3d-danger {
+  --button-edge: hsl(2 58% 38%);
+  --button-glow: rgba(220, 60, 60, .14);
+}
+.button-3d-icon {
+  --button-depth: 2px;
+  --button-edge: hsl(220 24% 82%);
+  --button-glow: rgba(20, 44, 95, .08);
+}
+.button-ghost,
+.button-system-unstyled {
+  transition:
+    transform .14s ease,
+    background-color .14s ease,
+    border-color .14s ease,
+    color .14s ease,
+    opacity .14s ease;
+}
+.button-ghost:active:not(:disabled),
+.button-system-unstyled:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.button-system-unstyled::before,
+.button-ghost::before {
+  display: none;
+}
+
 .wallet-artwork {
   filter: drop-shadow(0 12px 15px rgba(18, 32, 77, .16));
   object-fit: contain;
@@ -197,17 +292,10 @@ input[type='number']::-webkit-outer-spin-button {
 }
 
 .payment-link-button {
-  isolation: isolate;
-  position: relative;
+  --button-depth: 5px;
+  --button-edge: #0b3aa8;
+  --button-glow: rgba(21, 87, 238, .24);
   overflow: hidden;
-  transform: perspective(800px) translateY(0) rotateX(0deg);
-  box-shadow:
-    0 7px 0 #0b3aa8,
-    0 14px 26px rgba(21, 87, 238, .28);
-  transition:
-    transform .18s cubic-bezier(.22, .75, .22, 1),
-    box-shadow .18s cubic-bezier(.22, .75, .22, 1),
-    background-color .18s ease;
 }
 .payment-link-button::before {
   content: '';
@@ -225,16 +313,10 @@ input[type='number']::-webkit-outer-spin-button {
   z-index: 1;
 }
 .payment-link-button:hover {
-  transform: perspective(800px) translateY(-3px) rotateX(2deg);
-  box-shadow:
-    0 10px 0 #0b3aa8,
-    0 20px 30px rgba(21, 87, 238, .34);
+  transform: translateY(-1px);
 }
 .payment-link-button:active {
-  transform: perspective(800px) translateY(4px) rotateX(-1deg);
-  box-shadow:
-    0 2px 0 #0b3aa8,
-    0 6px 13px rgba(21, 87, 238, .2);
+  transform: translateY(3px);
 }
 .payment-link-button:focus-visible {
   outline: 3px solid rgba(21, 87, 238, .28);
@@ -245,6 +327,15 @@ input[type='number']::-webkit-outer-spin-button {
   60%, 100% { transform: rotate(24deg) translateX(470%); }
 }
 @media (prefers-reduced-motion: reduce) {
+  .button-system,
+  .button-system:hover:not(:disabled),
+  .button-system:active:not(:disabled),
+  .payment-link-button,
+  .payment-link-button:hover,
+  .payment-link-button:active {
+    transform: none;
+    transition: none;
+  }
   .payment-link-button::before { animation: none; }
 }
 
