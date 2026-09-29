@@ -37,25 +37,26 @@
 }
 
 :root {
-  --background: 220 32% 97%;
-  --foreground: 224 38% 14%;
-  --border: 220 24% 87%;
-  --input: 220 24% 85%;
-  --ring: 225 82% 56%;
+  /* VidReward palette: midnight ink, electric cobalt, and a warm reward-gold. */
+  --background: 218 42% 97%;
+  --foreground: 224 42% 13%;
+  --border: 218 28% 87%;
+  --input: 218 28% 85%;
+  --ring: 225 84% 56%;
   --card: 0 0% 100%;
-  --card-foreground: 224 38% 14%;
-  --card-border: 220 24% 88%;
+  --card-foreground: 224 42% 13%;
+  --card-border: 218 28% 88%;
   --popover: 0 0% 100%;
-  --popover-foreground: 224 38% 14%;
-  --popover-border: 220 24% 88%;
-  --primary: 225 82% 56%;
+  --popover-foreground: 224 42% 13%;
+  --popover-border: 218 28% 88%;
+  --primary: 225 84% 56%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 219 64% 94%;
-  --secondary-foreground: 225 68% 30%;
-  --muted: 219 27% 94%;
-  --muted-foreground: 220 14% 47%;
-  --accent: 43 96% 55%;
-  --accent-foreground: 224 38% 14%;
+  --secondary: 218 62% 94%;
+  --secondary-foreground: 225 68% 29%;
+  --muted: 218 31% 94%;
+  --muted-foreground: 220 16% 46%;
+  --accent: 42 94% 57%;
+  --accent-foreground: 224 42% 13%;
   --destructive: 2 72% 54%;
   --destructive-foreground: 0 0% 100%;
   --app-font-sans: 'IBM Plex Sans Arabic', sans-serif;
@@ -98,14 +99,36 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
     min-width: 320px;
+    min-height: 100dvh;
     background-image:
-      radial-gradient(circle at 8% 4%, rgba(255, 193, 56, .08), transparent 23rem),
-      radial-gradient(circle at 92% 12%, rgba(55, 101, 225, .07), transparent 28rem);
+      radial-gradient(circle at 8% 4%, rgba(255, 193, 56, .11), transparent 23rem),
+      radial-gradient(circle at 92% 12%, rgba(55, 101, 225, .09), transparent 28rem),
+      linear-gradient(180deg, rgba(255,255,255,.22), transparent 22rem);
+    overflow-x: hidden;
   }
   button, input, textarea { font: inherit; }
   button { cursor: pointer; }
 }
 .font-display { font-family: var(--app-font-serif); }
+
+.safe-card-copy {
+  overflow-wrap: anywhere;
+  word-break: normal;
+  text-wrap: balance;
+}
+
+/* A quiet paper grain keeps the light surface from feeling sterile without
+   competing with the content or affecting pointer interaction. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: .22;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.16'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+}
 
 ::selection {
   background: rgba(21, 87, 238, .16);
