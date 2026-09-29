@@ -186,17 +186,17 @@ input[type='number']::-webkit-outer-spin-button {
 /* Shared premium button language: shallow depth, a restrained highlight, and a
    fast press-in state that stays comfortable on touch screens. */
 .button-system {
-  --button-depth: 4px;
+  --button-depth: 3px;
   --button-face: hsl(var(--primary));
   --button-edge: hsl(222 52% 24%);
   --button-ink: hsl(var(--primary-foreground));
-  --button-glow: rgba(18, 32, 77, .15);
+  --button-glow: rgba(18, 32, 77, .10);
   isolation: isolate;
   min-width: 0;
   transform: translateY(0);
   box-shadow:
     0 var(--button-depth) 0 var(--button-edge),
-    0 calc(var(--button-depth) + 7px) 16px var(--button-glow),
+    0 calc(var(--button-depth) + 3px) 6px var(--button-glow),
     inset 0 1px 0 rgba(255, 255, 255, .24);
   transition:
     transform .14s cubic-bezier(.22, .75, .22, 1),
@@ -224,15 +224,15 @@ input[type='number']::-webkit-outer-spin-button {
   filter: brightness(1.025);
   box-shadow:
     0 calc(var(--button-depth) + 1px) 0 var(--button-edge),
-    0 calc(var(--button-depth) + 9px) 18px var(--button-glow),
+    0 calc(var(--button-depth) + 3px) 7px var(--button-glow),
     inset 0 1px 0 rgba(255, 255, 255, .28);
 }
 .button-system:active:not(:disabled) {
-  transform: translateY(3px);
+  transform: translateY(2px);
   filter: brightness(.98);
   box-shadow:
     0 1px 0 var(--button-edge),
-    0 4px 9px var(--button-glow),
+    0 2px 4px var(--button-glow),
     inset 0 1px 0 rgba(255, 255, 255, .18);
 }
 .button-system:focus-visible {
@@ -245,24 +245,24 @@ input[type='number']::-webkit-outer-spin-button {
 }
 .button-3d-primary {
   --button-edge: hsl(222 55% 23%);
-  --button-glow: rgba(18, 32, 77, .16);
+  --button-glow: rgba(18, 32, 77, .11);
 }
 .button-3d-secondary {
   --button-edge: hsl(220 18% 51%);
-  --button-glow: rgba(20, 30, 58, .11);
+  --button-glow: rgba(20, 30, 58, .07);
 }
 .button-3d-success {
   --button-edge: hsl(160 61% 26%);
-  --button-glow: rgba(16, 100, 80, .14);
+  --button-glow: rgba(16, 100, 80, .09);
 }
 .button-3d-danger {
   --button-edge: hsl(2 58% 30%);
-  --button-glow: rgba(126, 30, 35, .14);
+  --button-glow: rgba(126, 30, 35, .09);
 }
 .button-3d-icon {
   --button-depth: 2px;
   --button-edge: hsl(220 18% 60%);
-  --button-glow: rgba(20, 44, 95, .08);
+  --button-glow: rgba(20, 44, 95, .04);
 }
 .button-ghost,
 .button-system-unstyled {
@@ -320,9 +320,9 @@ input[type='number']::-webkit-outer-spin-button {
 }
 
 .payment-link-button {
-  --button-depth: 5px;
+  --button-depth: 3px;
   --button-edge: #0b3aa8;
-  --button-glow: rgba(21, 87, 238, .24);
+  --button-glow: rgba(21, 87, 238, .12);
   overflow: hidden;
 }
 .payment-link-button::before {

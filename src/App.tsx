@@ -2094,9 +2094,11 @@ function ExternalWatchPage() {
               </div>
             </div>
             {validVideoId && (
-              <a href={`https://www.youtube.com/watch?v=${videoId}`} target="_blank" rel="noreferrer" className="button-system button-3d-secondary flex shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 bg-transparent px-4 py-3 text-xs font-bold text-white transition hover:bg-white/10">
-                <ExternalLink className="h-4 w-4" /> فتح في YouTube
-              </a>
+              <Button asChild variant="secondary" size="default" className="flex shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 bg-transparent px-4 py-3 text-xs font-bold text-white transition hover:bg-white/10">
+                <a href={`https://www.youtube.com/watch?v=${videoId}`} target="_blank" rel="noreferrer">
+                  <ExternalLink className="h-4 w-4" /> فتح في YouTube
+                </a>
+              </Button>
             )}
           </div>
         </section>
