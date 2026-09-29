@@ -894,9 +894,9 @@ function CreatorOverview({
             { number: '02', title: t('موّل حملتك'), description: t('أنشئ فاتورة إيداع آمنة عبر Stars أو Web3.'), action: onDeposit },
             { number: '03', title: t('راجع الأداء'), description: t('تابع المشاهدات والإكمالات من صفحة الإعلانات.') },
           ] as Array<{ number: string; title: string; description: string; action?: () => void }>).map(({ number, title, description, action }) => (
-            <Button type="button" key={number} onClick={typeof action === 'function' ? action : undefined} variant="unstyled" size="fit" dir={dir} className={`flex w-full min-w-0 items-start gap-3 rounded-2xl border border-slate-100 bg-[#fbfcff] p-4 transition hover:border-blue-100 hover:bg-[#f4f8ff] ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>
+            <Button type="button" key={number} onClick={typeof action === 'function' ? action : undefined} variant="unstyled" size="fit" dir={dir} className={`flex w-full min-w-0 items-start gap-3 whitespace-normal overflow-hidden rounded-2xl border border-slate-100 bg-[#fbfcff] p-4 transition hover:border-blue-100 hover:bg-[#f4f8ff] ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>
               <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#edf3ff] text-[10px] font-bold text-[#1557ee]">{number}</span>
-              <span className={`min-w-0 flex-1 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}><span className="block break-words text-xs font-bold leading-5 text-[#12234b]">{title}</span><span className="mt-1 block break-words text-[11px] leading-5 text-slate-400">{description}</span></span>
+              <span className={`min-w-0 flex-1 overflow-hidden ${dir === 'rtl' ? 'text-right' : 'text-left'}`}><span className="block break-words text-xs font-bold leading-5 text-[#12234b]">{title}</span><span className="mt-1 block break-words text-[11px] leading-5 text-slate-400">{description}</span></span>
             </Button>
           ))}
         </div>
@@ -2313,24 +2313,24 @@ function ExternalWatchPage() {
         </header>
         <section className="browser-video-card overflow-hidden rounded-[24px] border border-white/10 bg-[#0d2041] shadow-2xl">
           {validVideoId ? (
-            <div className="browser-video-stage aspect-video w-full bg-black">
+            <div className="browser-video-stage min-w-0 max-w-full overflow-hidden aspect-video w-full bg-black" dir="ltr">
               <iframe
                 title={title}
                 src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1`}
-                className="h-full w-full border-0"
+                className="block h-full max-w-full w-full border-0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 referrerPolicy="strict-origin-when-cross-origin"
                 allowFullScreen
               />
             </div>
           ) : (
-            <div className="browser-video-stage flex aspect-video flex-col items-center justify-center px-6 text-center">
+            <div className="browser-video-stage flex min-w-0 max-w-full aspect-video flex-col items-center justify-center overflow-hidden px-6 text-center">
               <PlaySquare className="h-12 w-12 text-cyan-300" />
               <h1 className="mt-4 text-lg font-bold">تعذّر العثور على فيديو YouTube</h1>
               <p className="mt-2 text-sm leading-6 text-blue-100/60">ارجع إلى VidReward واختر فيديو YouTube نشطًا ثم افتحه في المتصفح.</p>
             </div>
           )}
-          <div className="browser-video-details flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-7">
+          <div className="browser-video-details flex min-w-0 flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-7">
             <div className="min-w-0">
               <h1 className="text-lg font-bold leading-7">{title}</h1>
               <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-blue-100/60">
