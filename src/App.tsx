@@ -20,7 +20,6 @@ import {
   ExternalLink,
   FileText,
   Film,
-  Download,
   History,
   Image as ImageIcon,
   LayoutDashboard,
@@ -1026,9 +1025,9 @@ function PublishingSystemPage({ telegramUser }: { telegramUser: TelegramUser | n
   const [status, setStatus] = useState<PublishStatus>('pending');
   const [proofImages, setProofImages] = useState<string[]>([]);
 
-  const referralCode = telegramUser?.id ? `tg${telegramUser.id}` : 'demo48291';
-  const promotionalLink = `https://t.me/VidRewardBot?start=ref_${referralCode}`;
-  const promotionalPost = `تجربتي مع VidReward بدأت من مشاهدة فيديوهات قصيرة، وكل مشاهدة مكتملة تضيف لي مكافأة إلى رصيدي. والأجمل أنني عندما أشارك المنصة مع أصدقائي، أحصل على 20% من أرباح كل مستخدم يدخل من رابط الإحالة الخاص بي. إذا تحب تربح من وقتك، جرّبها من هنا:\n${promotionalLink}`;
+  const referralCode = telegramUser?.id ? String(telegramUser.id) : '00000';
+  const promotionalLink = `https://t.me/youTubeVieewBot/ads?startapp=ref_${referralCode}`;
+  const promotionalPost = `بصراحة تجربة VidReward عجبتني 😄 بدأت أشاهد فيديوهات قصيرة في وقت فراغي، وكل مشاهدة مكتملة تضيف لي مكافأة على رصيدي 💸\n\nوالأجمل أنني أربح 20% من أرباح أي شخص يدخل عن طريق رابط الإحالة الخاص بي. إذا تحب تجربها وتربح من وقتك، ادخل من هنا 👇\n${promotionalLink}`;
   const invitedUsers = 24;
   const referralEarnings = '$1.84';
   const statusConfig: Record<PublishStatus, {
@@ -1089,14 +1088,6 @@ function PublishingSystemPage({ telegramUser }: { telegramUser: TelegramUser | n
 
   const removeProofImage = (index: number) => {
     setProofImages((current) => current.filter((_, imageIndex) => imageIndex !== index));
-  };
-
-  const downloadPromotionalImage = () => {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720"><rect width="1200" height="720" rx="48" fill="#0e2452"/><circle cx="1030" cy="120" r="180" fill="#1557ee" opacity=".5"/><circle cx="160" cy="610" r="220" fill="#16b9c5" opacity=".12"/><text x="1080" y="205" text-anchor="end" fill="#7de3eb" font-family="Arial" font-size="28" font-weight="700">VIDREWARD</text><text x="1080" y="310" text-anchor="end" fill="white" font-family="Arial" font-size="58" font-weight="700">شاهد، شارك، واربح</text><text x="1080" y="380" text-anchor="end" fill="#c6d8ff" font-family="Arial" font-size="28">مكافآت يومية على وقتك ومشاركتك</text><rect x="840" y="470" width="240" height="72" rx="20" fill="#1557ee"/><text x="960" y="517" text-anchor="middle" fill="white" font-family="Arial" font-size="26" font-weight="700">ابدأ الآن</text></svg>`;
-    const link = document.createElement('a');
-    link.href = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-    link.download = 'vidreward-promotional-image.svg';
-    link.click();
   };
 
   return (
@@ -1171,26 +1162,13 @@ function PublishingSystemPage({ telegramUser }: { telegramUser: TelegramUser | n
          </div>
        </section>
 
-       <section className="mt-5 grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
+       <section className="mt-5">
         <div className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-[0_4px_14px_rgba(18,32,77,.05)] md:p-6">
-           <div className="flex items-center justify-between gap-3"><div><h2 className="font-display text-lg font-bold text-[#12234b]">منشور ترويجي جاهز</h2><p className="mt-1 text-[11px] text-slate-400">تجربة مستخدم سعيدة مع رابطك المباشر</p></div><Clipboard className="h-5 w-5 text-[#1557ee]" /></div>
+           <div className="flex items-center justify-between gap-3"><div><h2 className="font-display text-lg font-bold text-[#12234b]">منشور ترويجي جاهز</h2><p className="mt-1 text-[11px] text-slate-400">نص بسيط وطبيعي للمشاركة مع رابطك المباشر</p></div><Clipboard className="h-5 w-5 text-[#1557ee]" /></div>
            <div className="mt-5 whitespace-pre-line rounded-[18px] border border-slate-200 bg-[#fbfcff] p-4 text-sm leading-7 text-slate-600">{promotionalPost}</div>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button type="button" variant="primary" size="sm" onClick={() => copyText(promotionalPost, 'post')} className="flex items-center gap-2 text-xs font-bold"><Copy className="h-3.5 w-3.5" />{copied === 'post' ? 'تم النسخ' : 'نسخ المنشور'}</Button>
-             <Button type="button" variant="secondary" size="sm" onClick={() => copyText(promotionalLink, 'link')} className="flex items-center gap-2 bg-[#f4f8ff] text-xs font-bold text-[#1557ee]"><Link2 className="h-3.5 w-3.5" />نسخ الرابط</Button>
           </div>
-        </div>
-        <div className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-[0_4px_14px_rgba(18,32,77,.05)] md:p-6">
-          <div className="flex items-center justify-between gap-3"><div><h2 className="font-display text-lg font-bold text-[#12234b]">الصورة الترويجية</h2><p className="mt-1 text-[11px] text-slate-400">معاينة جاهزة للمشاركة</p></div><ImageIcon className="h-5 w-5 text-[#1557ee]" /></div>
-          <div className="relative mt-5 aspect-[1.7] overflow-hidden rounded-[18px] bg-[#0e2452] p-5 text-white shadow-[0_3px_10px_rgba(14,36,82,.12)] sm:p-7">
-            <div className="grid-dots absolute inset-0 opacity-20" /><div className="absolute -left-10 -top-12 h-36 w-36 rounded-full border border-cyan-200/15" />
-            <div className="relative flex h-full flex-col justify-between">
-              <div className="flex items-center gap-2 text-[10px] font-bold text-cyan-300"><span className="grid h-7 w-7 place-items-center rounded-lg bg-white/10"><Share2 className="h-3.5 w-3.5" /></span> VIDREWARD</div>
-              <div><div className="font-display text-xl font-bold leading-tight sm:text-2xl">شاهد، شارك،<br /><span className="text-cyan-300">واربح.</span></div><div className="mt-2 text-[10px] text-blue-100/65">مكافآت يومية على وقتك ومشاركتك</div></div>
-              <div className="flex items-center justify-between text-[10px] text-blue-100/60"><span>ابدأ اليوم</span><span className="rounded-lg bg-[#1557ee] px-2.5 py-1.5 font-bold text-white">$0.02</span></div>
-            </div>
-          </div>
-          <Button type="button" variant="secondary" size="sm" onClick={downloadPromotionalImage} className="mt-4 flex w-full items-center justify-center gap-2 bg-[#f4f8ff] text-xs font-bold text-[#1557ee]"><Download className="h-4 w-4" /> تحميل الصورة</Button>
         </div>
       </section>
 
