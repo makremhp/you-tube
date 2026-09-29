@@ -156,11 +156,15 @@ type Video = {
   link: string;
 };
 
+function formatDuration(seconds: number) {
+  return `${seconds}s`;
+}
+
 const durationOptions = [
-  { seconds: 10, cpm: '1.5', label: '10 ثوانٍ' },
-  { seconds: 20, cpm: '2', label: '20 ثانية' },
-  { seconds: 40, cpm: '2.8', label: '40 ثانية' },
-  { seconds: 80, cpm: '3.2', label: '80 ثانية' },
+  { seconds: 10, cpm: '1.5', label: formatDuration(10) },
+  { seconds: 20, cpm: '2', label: formatDuration(20) },
+  { seconds: 40, cpm: '2.8', label: formatDuration(40) },
+  { seconds: 80, cpm: '3.2', label: formatDuration(80) },
 ];
 
 type TransactionStatus = 'تم' | 'قيد المعالجة' | 'تم الإلغاء' | 'مرفوض';
@@ -347,8 +351,9 @@ function IconButton({
 }
 
 function BrandMark() {
+  const { dir } = useLanguage();
   return (
-    <div className="flex items-center gap-3" dir="rtl">
+    <div className="flex items-center gap-3" dir={dir}>
       <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-[13px] bg-[#1557ee] shadow-[0_8px_20px_rgba(21,87,238,.24)]">
         <img src="/assets/vidreward-mark.png" alt="VidReward" className="h-full w-full object-contain" />
       </div>
@@ -423,6 +428,7 @@ function Sidebar({
   onClose?: () => void;
   open?: boolean;
 }) {
+  const { dir } = useLanguage();
   const navItems = mode === 'creator'
     ? [
         { icon: BarChart3, label: 'نظرة عامة', screen: 'overview' as AppScreen },
@@ -440,7 +446,7 @@ function Sidebar({
   return (
     <aside
       className={`${open ? 'translate-x-0' : 'translate-x-full'} fixed inset-y-0 right-0 z-50 flex min-h-0 w-[236px] flex-col overflow-y-auto overscroll-contain border-l border-slate-200 bg-white p-4 shadow-2xl transition-transform duration-300 lg:static lg:z-auto lg:w-[224px] lg:translate-x-0 lg:rounded-l-[28px] lg:border lg:shadow-none`}
-      dir="rtl"
+      dir={dir}
     >
       <div className="flex items-center justify-between lg:block">
         <BrandMark />
@@ -528,8 +534,9 @@ type ToastMessage = {
 };
 
 function ToastViewport({ toasts, onDismiss }: { toasts: ToastMessage[]; onDismiss: (id: number) => void }) {
+  const { dir } = useLanguage();
   return (
-    <div className="pointer-events-none fixed inset-x-4 top-4 z-[90] flex flex-col items-center gap-3 sm:inset-x-auto sm:right-6 sm:items-end" dir="rtl" aria-live="polite">
+    <div className="pointer-events-none fixed inset-x-4 top-4 z-[90] flex flex-col items-center gap-3 sm:inset-x-auto sm:right-6 sm:items-end" dir={dir} aria-live="polite">
       {toasts.map((toast) => (
         <div key={toast.id} data-testid={`toast-${toast.id}`} className="pointer-events-auto flex w-full max-w-[390px] items-start gap-3 rounded-2xl border border-white/10 bg-[#0e2452] p-4 text-right text-white shadow-[0_16px_40px_rgba(14,36,82,.28)] backdrop-blur-md animate-rise">
           <span className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl ${toast.tone === 'success' ? 'bg-emerald-400/15 text-emerald-300' : toast.tone === 'warning' ? 'bg-amber-300/15 text-amber-300' : 'bg-cyan-300/15 text-cyan-200'}`}>
@@ -671,9 +678,10 @@ function CampaignsPage({
   onWatch: (video: Video) => void;
 }) {
   const [spendPeriod, setSpendPeriod] = useState<'آخر ٧ أيام' | 'آخر ٣٠ يومًا'>('آخر ٧ أيام');
+  const { dir } = useLanguage();
   const visibleVideos = videos.filter((video) => tab === 'all' || (tab === 'active' ? video.status === 'نشط' : video.status === 'مسودة'));
   return (
-    <main className="mx-auto w-full max-w-[1370px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
+    <main className="mx-auto w-full max-w-[1370px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir={dir}>
       <section className="animate-rise flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#1557ee]"><span className="h-1.5 w-1.5 rounded-full bg-[#23bdc9]" /> الثلاثاء، ٢٤ ديسمبر ٢٠٢٤</div>
@@ -747,7 +755,7 @@ function CampaignsPage({
                   <h3 className="mt-1 truncate text-sm font-bold text-slate-800">{video.title}</h3>
                   <div className="mt-2 flex items-center gap-3 text-[10px] text-slate-400">
                     <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> {video.views}</span>
-                    <span className="flex items-center gap-1"><Clock3 className="h-3 w-3" /> {video.duration} ثانية</span>
+                    <span className="flex items-center gap-1"><Clock3 className="h-3 w-3" /> {formatDuration(video.duration)}</span>
                   </div>
                 </div>
                 <div className="hidden text-left sm:block">
@@ -822,8 +830,9 @@ function CreatorOverview({
   onAdd: () => void;
   onDeposit: () => void;
 }) {
+  const { dir } = useLanguage();
   return (
-    <main className="mx-auto w-full max-w-[1370px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
+    <main className="mx-auto w-full max-w-[1370px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir={dir}>
       <section className="animate-rise flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#1557ee]"><span className="h-1.5 w-1.5 rounded-full bg-[#23bdc9]" /> الأربعاء، ٢٣ سبتمبر ٢٠٢٦</div>
@@ -885,7 +894,7 @@ function CreatorOverview({
             { number: '02', title: 'موّل حملتك', description: 'أنشئ فاتورة إيداع آمنة عبر Stars أو Web3.', action: onDeposit },
             { number: '03', title: 'راجع الأداء', description: 'تابع المشاهدات والإكمالات من صفحة الإعلانات.' },
           ] as Array<{ number: string; title: string; description: string; action?: () => void }>).map(({ number, title, description, action }) => (
-            <Button type="button" key={number} onClick={typeof action === 'function' ? action : undefined} variant="unstyled" size="fit" className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-[#fbfcff] p-4 text-right transition hover:border-blue-100 hover:bg-[#f4f8ff]">
+            <Button type="button" key={number} onClick={typeof action === 'function' ? action : undefined} variant="unstyled" size="fit" className={`flex items-start gap-3 rounded-2xl border border-slate-100 bg-[#fbfcff] p-4 transition hover:border-blue-100 hover:bg-[#f4f8ff] ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>
               <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#edf3ff] text-[10px] font-bold text-[#1557ee]">{number}</span>
               <span><span className="block text-xs font-bold text-[#12234b]">{title}</span><span className="mt-1 block text-[11px] leading-5 text-slate-400">{description}</span></span>
             </Button>
@@ -915,10 +924,11 @@ function ViewerView({
   completedVideoIds: Set<number>;
   browserMode?: boolean;
 }) {
+  const { dir } = useLanguage();
   const activeVideos = videos.filter((video) => video.status === 'نشط' && !completedVideoIds.has(video.id));
   const totalVideoRewards = activeVideos.reduce((total, video) => total + calculateViewerReward(video.cpm), 0);
   return (
-    <main className={`browser-watch-shell mx-auto w-full max-w-[1370px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12 ${browserMode ? 'browser-watch-page' : ''}`} dir="rtl">
+    <main className={`browser-watch-shell mx-auto w-full max-w-[1370px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12 ${browserMode ? 'browser-watch-page' : ''}`} dir={dir}>
       {browserMode && (
         <section className="browser-orientation mb-4 flex items-center gap-3 rounded-2xl border border-blue-100 bg-white px-3 py-2.5 text-right shadow-[var(--shadow-soft)]" aria-label="إرشادات المشاهدة">
           <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-[#edf3ff] text-[#1557ee]"><PlaySquare className="h-3.5 w-3.5" /></span>
@@ -996,12 +1006,12 @@ function ViewerView({
         </div>
       ) : <div className="browser-watch-list mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {activeVideos.map((video, index) => (
-          <Button type="button" key={video.id} data-testid={`card-reward-${video.id}`} onClick={() => onSelect(video)} variant="unstyled" size="fit" className="group w-full overflow-hidden rounded-[20px] border border-slate-200 bg-white text-right shadow-[var(--shadow-soft)] transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-[var(--shadow-lift)]">
+          <Button type="button" key={video.id} data-testid={`card-reward-${video.id}`} onClick={() => onSelect(video)} variant="unstyled" size="fit" className={`group w-full overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[var(--shadow-soft)] transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-[var(--shadow-lift)] ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>
             <VideoArtwork video={video} />
             <div className="p-4">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-slate-400">فيديو {String(index + 1).padStart(2, '0')}</span>
-                <span className="flex items-center gap-1 rounded-md bg-[#edf3ff] px-2 py-1 text-[10px] font-bold text-[#1557ee]"><Clock3 className="h-3 w-3" /> {video.duration} ثانية</span>
+                <span className="flex items-center gap-1 rounded-md bg-[#edf3ff] px-2 py-1 text-[10px] font-bold text-[#1557ee]"><Clock3 className="h-3 w-3" /> {formatDuration(video.duration)}</span>
               </div>
               <h3 className="mt-3 line-clamp-2 text-sm font-bold leading-6 text-[#12234b]">{video.title}</h3>
               <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
@@ -1021,7 +1031,7 @@ function ViewerView({
 type PublishStatus = 'pending' | 'approved' | 'rejected';
 
 function PublishingSystemPage({ telegramUser }: { telegramUser: TelegramUser | null }) {
-  const { isArabic } = useLanguage();
+  const { isArabic, dir } = useLanguage();
   const [copied, setCopied] = useState<'post' | 'link' | ''>('');
   const [status, setStatus] = useState<PublishStatus>('pending');
   const [proofImages, setProofImages] = useState<string[]>([]);
@@ -1094,7 +1104,7 @@ function PublishingSystemPage({ telegramUser }: { telegramUser: TelegramUser | n
   };
 
   return (
-    <main className="mx-auto w-full max-w-[1180px] overflow-hidden px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
+    <main className="mx-auto w-full max-w-[1180px] overflow-hidden px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir={dir}>
       <section className="animate-rise relative overflow-hidden rounded-[26px] bg-[#0e2452] px-5 py-7 text-white shadow-[0_5px_16px_rgba(14,36,82,.12)] md:px-8 md:py-8">
         <div className="grid-dots absolute inset-0 opacity-15" />
         <div className="absolute -left-14 -top-20 h-56 w-56 rounded-full border border-cyan-200/15" />
@@ -1258,6 +1268,7 @@ function WatchPanel({
   onComplete: () => void;
   onClose: () => void;
 }) {
+  const { dir } = useLanguage();
   const [hasOpenedVideo, setHasOpenedVideo] = useState(false);
   const [rewardClaimed, setRewardClaimed] = useState(Boolean(session?.credited));
   const percent = Math.min(100, (progress / video.duration) * 100);
@@ -1269,7 +1280,7 @@ function WatchPanel({
   };
 
   return (
-    <div className="watch-modal-backdrop fixed inset-0 z-[60] flex items-end justify-center bg-[#061333]/45 p-0 backdrop-blur-sm sm:items-center sm:p-5" dir="rtl">
+    <div className="watch-modal-backdrop fixed inset-0 z-[60] flex items-end justify-center bg-[#061333]/45 p-0 backdrop-blur-sm sm:items-center sm:p-5" dir={dir}>
       <div className="watch-modal-card max-h-[94vh] w-full max-w-[920px] overflow-y-auto rounded-t-[26px] bg-white shadow-2xl sm:rounded-[26px]">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 md:px-7">
           <div className="min-w-0">
@@ -1294,7 +1305,7 @@ function WatchPanel({
               <span className="shrink-0 rounded-lg bg-[#eafbf8] px-2.5 py-2 text-sm font-bold text-[#159b89]">+ {video.reward}</span>
             </div>
             <div className="mt-5">
-              <div className="mb-2 flex justify-between text-[10px] text-slate-400"><span>تقدم المشاهدة</span><span>{progress} / {video.duration} ثانية</span></div>
+              <div className="mb-2 flex justify-between text-[10px] text-slate-400"><span>تقدم المشاهدة</span><span>{progress} / {formatDuration(video.duration)}</span></div>
               <div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-[#1557ee] transition-all duration-500" style={{ width: `${percent}%` }} /></div>
             </div>
           </div>
@@ -1311,7 +1322,7 @@ function WatchPanel({
               <>
                 <div className="flex items-center justify-between"><span className="text-xs font-bold text-[#12234b]">أكمل المدة المطلوبة</span><Clock3 className="h-4 w-4 text-[#1557ee]" /></div>
                 <div className="mt-5 rounded-2xl border border-blue-100 bg-[#eff4ff] p-4">
-                  <div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-white text-[#1557ee]"><Clock3 className="h-5 w-5" /></div><div><div className="text-[11px] text-slate-500">المدة المطلوبة</div><div className="mt-0.5 text-xl font-bold text-[#12234b]">{video.duration} ثانية</div></div></div>
+                  <div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-white text-[#1557ee]"><Clock3 className="h-5 w-5" /></div><div><div className="text-[11px] text-slate-500">المدة المطلوبة</div><div className="mt-0.5 text-xl font-bold text-[#12234b]">{formatDuration(video.duration)}</div></div></div>
                   <p className="mt-3 text-[11px] leading-5 text-slate-500">سيتم احتساب المكافأة بعد إكمال المشاهدة دون تخطي.</p>
                 </div>
                 <div className="mt-5 space-y-3">
@@ -1341,6 +1352,7 @@ function AddVideo({
   onSubmit: (video: Omit<Video, 'id' | 'views' | 'status' | 'created' | 'art'>) => void;
   telegramUser: TelegramUser | null;
 }) {
+  const { dir } = useLanguage();
   const [title, setTitle] = useState('');
   const [link, setLink] = useState('');
   const [duration, setDuration] = useState(20);
@@ -1365,13 +1377,13 @@ function AddVideo({
 
   if (submitted) {
     return (
-      <main className="mx-auto flex min-h-[calc(100vh-80px)] w-full max-w-[780px] items-center justify-center px-4 py-12" dir="rtl">
+      <main className="mx-auto flex min-h-[calc(100vh-80px)] w-full max-w-[780px] items-center justify-center px-4 py-12" dir={dir}>
         <div className="animate-rise w-full rounded-[26px] border border-slate-200 bg-white p-7 text-center shadow-[var(--shadow-lift)] md:p-12">
           <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-[#eafbf8] text-[#159b89]"><Check className="h-9 w-9" /></div>
           <div className="mt-6 text-xs font-bold text-[#159b89]">تم النشر بنجاح</div>
           <h1 className="mt-2 font-display text-2xl font-bold text-[#12234b] md:text-3xl">فيديوك جاهز للوصول إلى جمهور جديد</h1>
           <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-slate-500">أصبح الفيديو نشطاً الآن. سيظهر للمشاهدين الذين يبحثون عن محتوى جديد مع مكافآت عادلة.</p>
-          <div className="mx-auto mt-7 flex max-w-sm items-center justify-between rounded-2xl bg-[#f5f8fe] p-4 text-right"><div><div className="text-xs font-bold text-[#12234b]">{title}</div><div className="mt-1 text-[10px] text-slate-400">{duration} ثانية · CPM ${selected.cpm}</div></div><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#1557ee] text-white"><Film className="h-4 w-4" /></div></div>
+          <div className={`mx-auto mt-7 flex max-w-sm items-center justify-between rounded-2xl bg-[#f5f8fe] p-4 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}><div><div className="text-xs font-bold text-[#12234b]">{title}</div><div className="mt-1 text-[10px] text-slate-400">{formatDuration(duration)} · CPM ${selected.cpm}</div></div><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#1557ee] text-white"><Film className="h-4 w-4" /></div></div>
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row"><Button type="button" data-testid="button-success-back" onClick={onBack} variant="primary" size="lg" className="text-sm font-bold">العودة إلى لوحة التحكم</Button><Button type="button" data-testid="button-success-another" onClick={() => { setSubmitted(false); setTitle(''); setLink(''); }} variant="secondary" size="lg" className="border-slate-200 text-sm font-bold text-slate-600">إضافة إعلان آخر</Button></div>
         </div>
       </main>
@@ -1379,7 +1391,7 @@ function AddVideo({
   }
 
   return (
-    <main className="mx-auto w-full max-w-[1180px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
+    <main className="mx-auto w-full max-w-[1180px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir={dir}>
       <div className="mb-7 flex items-center gap-3"><Button type="button" data-testid="button-back-add" onClick={onBack} variant="icon" size="icon" className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:border-blue-200 hover:text-[#1557ee]" aria-label="العودة"><ArrowDownLeft className="h-4 w-4" /></Button><div><div className="text-xs font-semibold text-[#1557ee]">نشر إعلان / إعلان جديد</div><h1 className="mt-1 font-display text-2xl font-bold text-[#12234b]">انشر إعلانك</h1></div></div>
       <div className="grid gap-5 xl:grid-cols-[1fr_400px]">
         <section className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)] md:p-7">
@@ -1389,7 +1401,7 @@ function AddVideo({
           <div className="mt-7">
             <div className="flex items-center justify-between"><div><h3 className="text-xs font-bold text-slate-700">المدة الإلزامية للمشاهدة</h3><p className="mt-1 text-[10px] text-slate-400">اختر الوقت الذي سيكمله المشاهد قبل احتساب المكافأة.</p></div><Clock3 className="h-5 w-5 text-[#1557ee]" /></div>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {durationOptions.map((option) => <Button type="button" key={option.seconds} data-testid={`button-duration-${option.seconds}`} onClick={() => setDuration(option.seconds)} variant="unstyled" size="fit" className={`w-full rounded-xl border p-3 text-right transition ${duration === option.seconds ? 'border-[#1557ee] bg-[#edf3ff] text-[#1557ee] shadow-[0_0_0_2px_rgba(21,87,238,.08)]' : 'border-slate-200 text-slate-500 hover:border-blue-200'}`}><div className="text-sm font-bold">{option.label}</div><div className="mt-1 text-[10px] opacity-70">CPM ${option.cpm}</div></Button>)}
+              {durationOptions.map((option) => <Button type="button" key={option.seconds} data-testid={`button-duration-${option.seconds}`} onClick={() => setDuration(option.seconds)} variant="unstyled" size="fit" className={`w-full rounded-xl border p-3 transition ${dir === 'rtl' ? 'text-right' : 'text-left'} ${duration === option.seconds ? 'border-[#1557ee] bg-[#edf3ff] text-[#1557ee] shadow-[0_0_0_2px_rgba(21,87,238,.08)]' : 'border-slate-200 text-slate-500 hover:border-blue-200'}`}><div className="text-sm font-bold">{option.label}</div><div className="mt-1 text-[10px] opacity-70">CPM ${option.cpm}</div></Button>)}
             </div>
           </div>
           <div className="mt-7 flex items-center justify-between rounded-2xl bg-[#f4f8ff] p-4"><div><div className="text-[11px] text-slate-500">تكلفة الألف مشاهدة (CPM)</div><div className="mt-1 text-2xl font-bold text-[#12234b]">${selected.cpm}</div></div><div className="text-left text-[10px] leading-5 text-slate-400">كلما زادت المدة،<br />زادت جودة التفاعل</div></div>
@@ -1399,7 +1411,7 @@ function AddVideo({
           <div className="flex items-center justify-between"><div><h2 className="font-display text-lg font-bold text-[#12234b]">المعاينة المباشرة</h2><p className="mt-1 text-xs text-slate-400">هكذا سيظهر الفيديو للمشاهدين.</p></div><span className="flex items-center gap-1 rounded-full bg-[#eafbf8] px-2.5 py-1 text-[10px] font-bold text-[#159b89]"><span className="h-1.5 w-1.5 rounded-full bg-current" /> مباشر</span></div>
           <div className="mt-5 overflow-hidden rounded-2xl bg-[#0e2452]">
             <div className="aspect-video">{embedUrl ? <iframe title="معاينة الفيديو" src={embedUrl} className="h-full w-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /> : <div className="media-art relative grid h-full place-items-center"><div className="text-center text-white/80"><div className="mx-auto grid h-12 w-12 place-items-center rounded-full border border-white/30 bg-white/15"><Play className="h-5 w-5 fill-current" /></div><p className="mt-3 text-[11px]">ستظهر المعاينة هنا</p></div></div>}</div>
-            <div className="border-t border-white/10 bg-[#0b1e47] p-4"><h3 className="truncate text-sm font-bold text-white">{title || 'عنوان الفيديو سيظهر هنا'}</h3><div className="mt-2 flex items-center justify-between text-[10px] text-blue-100/60"><span dir={telegramUser?.username ? 'ltr' : 'rtl'}>{publisherName}</span><span className="flex items-center gap-1"><Clock3 className="h-3 w-3" /> {duration} ثانية</span></div></div>
+            <div className="border-t border-white/10 bg-[#0b1e47] p-4"><h3 className="truncate text-sm font-bold text-white">{title || 'عنوان الفيديو سيظهر هنا'}</h3><div className="mt-2 flex items-center justify-between text-[10px] text-blue-100/60"><span dir={telegramUser?.username ? 'ltr' : dir}>{publisherName}</span><span className="flex items-center gap-1"><Clock3 className="h-3 w-3" /> {formatDuration(duration)}</span></div></div>
           </div>
           <div className="mt-5 rounded-xl border border-dashed border-slate-200 p-4 text-[11px] leading-6 text-slate-400"><div className="mb-1 flex items-center gap-2 font-bold text-slate-600"><PlaySquare className="h-4 w-4 text-[#f04444]" /> روابط مدعومة</div>يمكنك استخدام روابط YouTube أو أي رابط فيديو مباشر قابل للتشغيل.</div>
         </section>
@@ -1674,7 +1686,7 @@ function DepositPage({
   onDepositCompleted: (id: string) => void;
   onDepositExpired: (id: string) => void;
 }) {
-  const { t, language } = useLanguage();
+  const { t, language, dir } = useLanguage();
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<DepositMethod>('stars');
   const [invoice, setInvoice] = useState<{ id: string; amount: number; method: DepositMethod; destination: string; memoTag: string; telegramUserId: number | null; expiresAt: number; stars?: number } | null>(null);
@@ -1790,7 +1802,7 @@ function DepositPage({
   const statusLabel = invoiceStatus === 'completed' ? t('تم التأكيد تلقائيًا') : invoiceStatus === 'expired' ? t('انتهت صلاحية الفاتورة') : t('جاري المعالجة');
 
   return (
-    <main className="mx-auto w-full max-w-[1080px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
+    <main className="mx-auto w-full max-w-[1080px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir={dir}>
       <div className="mb-7">
         <div className="text-xs font-semibold text-[#1557ee]">{t('إدارة الإعلانات')} / {t('إيداع')}</div>
         <h1 className="mt-2 font-display text-2xl font-bold text-[#12234b] md:text-3xl">{t('إيداع رصيد الإعلانات')}</h1>
@@ -1895,7 +1907,7 @@ function WithdrawPage({
   telegramUser: TelegramUser | null;
   onWithdraw: (record: WithdrawRecord) => void;
 }) {
-  const { t, language } = useLanguage();
+  const { t, language, dir } = useLanguage();
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<WithdrawMethod>('binance');
   const [destination, setDestination] = useState('');
@@ -1924,7 +1936,7 @@ function WithdrawPage({
   };
 
   return (
-    <main className="mx-auto w-full max-w-[980px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
+    <main className="mx-auto w-full max-w-[980px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir={dir}>
       <div className="mb-7"><div className="text-xs font-semibold text-[#1557ee]">مساحة الربح / السحب</div><h1 className="mt-2 font-display text-2xl font-bold text-[#12234b] md:text-3xl">سحب الأرباح</h1><p className="mt-2 text-sm leading-6 text-slate-500">اختر Binance ID أو محفظة Web3 لاستلام أرباحك، ثم أرسل الطلب للمراجعة.</p></div>
       <div className="grid gap-5 lg:grid-cols-[.8fr_1.2fr]">
          <section className="relative overflow-hidden rounded-[24px] bg-[#0e2452] p-6 text-white shadow-[0_15px_34px_rgba(14,36,82,.16)] md:p-8"><div className="flex items-center justify-between"><span className="text-xs font-bold text-blue-100">الرصيد المتاح</span><WalletArtwork method="balance" size="sm" className="h-12 w-12" /></div><div className="mt-7 text-4xl font-bold tracking-tight">{formatUsd(viewerBalance)}</div><p className="mt-2 text-xs leading-5 text-blue-100/65">الحد الأدنى للسحب 1 USDT. يتم خصم الرصيد عند إرسال الطلب للمراجعة.</p><div className="mt-8 border-t border-white/10 pt-5"><div className="flex items-center gap-2 text-xs font-bold text-cyan-300"><ShieldCheck className="h-4 w-4" /> تحويل آمن</div><p className="mt-2 text-[11px] leading-5 text-blue-100/60">{method === 'binance' ? 'أرسل الأرباح إلى Binance ID مباشرة دون استخدام عنوان محفظة.' : 'استخدم عنوانًا صحيحًا على شبكة Polygon (USDT).'}</p></div><div className="mt-5 flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-[10px] font-bold text-blue-100/75"><WalletArtwork method="binance" size="xs" className="h-7 w-7" />تحويلات Binance سريعة وواضحة</div></section>
@@ -1946,10 +1958,11 @@ function WithdrawPage({
 }
 
 function DepositHistoryPage({ records }: { records: DepositRecord[] }) {
+  const { dir } = useLanguage();
   const completedTotal = records.filter((record) => record.status === 'تم').reduce((total, record) => total + record.amount, 0);
   const pendingCount = records.filter((record) => record.status === 'قيد المعالجة').length;
   return (
-    <main className="mx-auto w-full max-w-[1080px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
+    <main className="mx-auto w-full max-w-[1080px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir={dir}>
       <div className="mb-6"><div className="text-[10px] font-bold tracking-wide text-[#1557ee]">إدارة الإعلانات / سجل الإيداع</div><h1 className="mt-1 font-display text-2xl font-bold tracking-tight text-[#12234b] md:text-3xl">سجل الإيداع</h1><p className="mt-1.5 text-xs leading-5 text-slate-500">تابع عمليات تمويل الإعلانات بسرعة ووضوح.</p></div>
       <div className="mb-4 grid gap-2.5 sm:grid-cols-3"><HistoryStat label="إجمالي العمليات" value={String(records.length)} /><HistoryStat label="الإيداعات المكتملة" value={`$${completedTotal.toFixed(2)}`} tone="text-[#159b89]" /><HistoryStat label="قيد المراجعة" value={String(pendingCount)} tone="text-amber-600" /></div>
       <section className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[var(--shadow-soft)]">
@@ -1964,10 +1977,11 @@ function DepositHistoryPage({ records }: { records: DepositRecord[] }) {
 }
 
 function WithdrawHistoryPage({ records }: { records: WithdrawRecord[] }) {
+  const { dir } = useLanguage();
   const completedTotal = records.filter((record) => record.status === 'تم').reduce((total, record) => total + record.amount, 0);
   const pendingCount = records.filter((record) => record.status === 'قيد المعالجة').length;
   return (
-    <main className="mx-auto w-full max-w-[1080px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
+    <main className="mx-auto w-full max-w-[1080px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir={dir}>
       <div className="mb-6"><div className="text-[10px] font-bold tracking-wide text-[#1557ee]">مساحة الربح / سجل السحب</div><h1 className="mt-1 font-display text-2xl font-bold tracking-tight text-[#12234b] md:text-3xl">سجل السحب</h1><p className="mt-1.5 text-xs leading-5 text-slate-500">كل طلبات سحب الأرباح في عرض سريع ومنظم.</p></div>
       <div className="mb-4 grid gap-2.5 sm:grid-cols-3"><HistoryStat label="إجمالي الطلبات" value={String(records.length)} /><HistoryStat label="تم تحويله" value={`$${completedTotal.toFixed(4)}`} tone="text-[#159b89]" /><HistoryStat label="قيد المعالجة" value={String(pendingCount)} tone="text-amber-600" /></div>
       <section className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[var(--shadow-soft)]">
@@ -2250,6 +2264,7 @@ function Home() {
 }
 
 function ExternalWatchPage() {
+  const { dir } = useLanguage();
   const params = new URLSearchParams(window.location.search);
   const videoId = params.get('v') ?? '';
   const validVideoId = /^[\w-]{11}$/.test(videoId);
@@ -2280,7 +2295,7 @@ function ExternalWatchPage() {
   }
 
   return (
-    <main className="browser-watch-shell browser-watch-page min-h-[100dvh] bg-[#071632] px-4 py-6 text-white sm:px-8 sm:py-10" dir="rtl">
+    <main className="browser-watch-shell browser-watch-page min-h-[100dvh] bg-[#071632] px-4 py-6 text-white sm:px-8 sm:py-10" dir={dir}>
       <div className="mx-auto w-full max-w-5xl">
         <header className="browser-orientation mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/[.04] px-4 py-4 sm:px-6">
           <div className="flex items-center gap-3">
@@ -2318,7 +2333,7 @@ function ExternalWatchPage() {
               <h1 className="text-lg font-bold leading-7">{title}</h1>
               <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-blue-100/60">
                 <span>{creator}</span>
-                <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" /> {duration} ثانية</span>
+                <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" /> {formatDuration(duration)}</span>
                 {reward && <span className="font-bold text-cyan-300">المكافأة المعروضة: {reward}</span>}
               </div>
             </div>
