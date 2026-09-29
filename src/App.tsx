@@ -20,7 +20,9 @@ import {
   ExternalLink,
   FileText,
   Film,
+  Download,
   History,
+  Image as ImageIcon,
   LayoutDashboard,
   Link2,
   Menu,
@@ -30,10 +32,13 @@ import {
   QrCode,
   RefreshCw,
   Settings2,
+  Send,
+  Share2,
   ShieldCheck,
   Sparkles,
   Target,
   Timer,
+  Trash2,
   TrendingUp,
   Upload,
   Users,
@@ -41,6 +46,7 @@ import {
   X,
   PlaySquare,
   Info,
+  Globe2,
 } from 'lucide-react';
 import { Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
 import { LanguageProvider, useLanguage } from '@/i18n';
@@ -164,7 +170,7 @@ type TransactionStatus = 'تم' | 'قيد المعالجة' | 'تم الإلغا
 type PaymentMethod = 'stars' | 'binance' | 'web3';
 type DepositMethod = 'stars' | 'web3';
 type WithdrawMethod = 'binance' | 'web3';
-type AppScreen = 'overview' | 'campaigns' | 'watch' | 'add' | 'deposit' | 'withdraw' | 'deposit-history' | 'withdraw-history';
+type AppScreen = 'overview' | 'campaigns' | 'watch' | 'publish' | 'add' | 'deposit' | 'withdraw' | 'deposit-history' | 'withdraw-history';
 
 type DepositRecord = {
   id: string;
@@ -429,6 +435,7 @@ function Sidebar({
       ]
     : [
         { icon: Eye, label: 'شاهد واربح', screen: 'watch' as AppScreen },
+        { icon: Share2, label: 'نظام النشر', screen: 'publish' as AppScreen },
         { icon: WalletCards, label: 'سحب الأرباح', screen: 'withdraw' as AppScreen },
         { icon: History, label: 'سجل السحب', screen: 'withdraw-history' as AppScreen },
       ];
@@ -571,6 +578,8 @@ function Header({
           ? 'إعلاناتي'
           : screen === 'watch'
             ? 'شاهد واربح'
+        : screen === 'publish'
+          ? 'نظام النشر'
             : mode === 'creator' ? 'نظرة عامة' : 'شاهد واربح';
 
   return (
@@ -1008,6 +1017,244 @@ function ViewerView({
       </div>}
         </>
       )}
+    </main>
+  );
+}
+
+type PublishStatus = 'pending' | 'approved' | 'rejected';
+type ProofChannel = 'telegram' | 'other';
+
+function PublishingSystemPage() {
+  const [copied, setCopied] = useState<'post' | 'link' | ''>('');
+  const [status, setStatus] = useState<PublishStatus>('pending');
+  const [proofImages, setProofImages] = useState<Record<ProofChannel, string[]>>({
+    telegram: [],
+    other: [],
+  });
+
+  const promotionalPost = 'شارك VidReward مع مجتمعك المفضل، وشاهد كيف تتحول المشاهدة إلى فرصة ربح يومية. ابدأ اليوم وكن جزءًا من مجتمع يكافئ وقتك.';
+  const promotionalLink = 'https://t.me/VidRewardBot?start=share-demo';
+  const statusConfig: Record<PublishStatus, {
+    title: string;
+    description: string;
+    amount: string;
+    icon: typeof Clock3;
+    className: string;
+    iconClassName: string;
+  }> = {
+    pending: {
+      title: 'قيد المراجعة',
+      description: 'بانتظار مراجعة فريق الإدارة',
+      amount: '$0.02',
+      icon: Clock3,
+      className: 'border-amber-100 bg-[#fff9ef]',
+      iconClassName: 'bg-[#fff0cf] text-[#c98017]',
+    },
+    approved: {
+      title: 'تمت الموافقة',
+      description: 'تم اعتماد المهمة وإضافة المكافأة',
+      amount: '$0.02',
+      icon: CheckCircle2,
+      className: 'border-emerald-100 bg-[#f2fcf8]',
+      iconClassName: 'bg-[#e1f8ef] text-[#159b89]',
+    },
+    rejected: {
+      title: 'تحتاج إلى تعديل',
+      description: 'راجع الإثبات وأرسله مرة أخرى',
+      amount: '$0.02',
+      icon: Info,
+      className: 'border-rose-100 bg-[#fff5f5]',
+      iconClassName: 'bg-[#ffe4e4] text-[#d95757]',
+    },
+  };
+  const currentStatus = statusConfig[status];
+  const StatusIcon = currentStatus.icon;
+
+  const copyText = async (value: string, key: 'post' | 'link') => {
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      // Clipboard access can be unavailable in an embedded preview.
+    }
+    setCopied(key);
+    window.setTimeout(() => setCopied(''), 1600);
+  };
+
+  const addProofImage = (channel: ProofChannel, file?: File) => {
+    if (!file || proofImages[channel].length >= 5) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') return;
+      setProofImages((current) => ({
+        ...current,
+        [channel]: [...current[channel], reader.result as string].slice(0, 5),
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeProofImage = (channel: ProofChannel, index: number) => {
+    setProofImages((current) => ({
+      ...current,
+      [channel]: current[channel].filter((_, imageIndex) => imageIndex !== index),
+    }));
+  };
+
+  const downloadPromotionalImage = () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720"><rect width="1200" height="720" rx="48" fill="#0e2452"/><circle cx="1030" cy="120" r="180" fill="#1557ee" opacity=".5"/><circle cx="160" cy="610" r="220" fill="#16b9c5" opacity=".12"/><text x="1080" y="205" text-anchor="end" fill="#7de3eb" font-family="Arial" font-size="28" font-weight="700">VIDREWARD</text><text x="1080" y="310" text-anchor="end" fill="white" font-family="Arial" font-size="58" font-weight="700">شاهد، شارك، واربح</text><text x="1080" y="380" text-anchor="end" fill="#c6d8ff" font-family="Arial" font-size="28">مكافآت يومية على وقتك ومشاركتك</text><rect x="840" y="470" width="240" height="72" rx="20" fill="#1557ee"/><text x="960" y="517" text-anchor="middle" fill="white" font-family="Arial" font-size="26" font-weight="700">ابدأ الآن</text></svg>`;
+    const link = document.createElement('a');
+    link.href = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    link.download = 'vidreward-promotional-image.svg';
+    link.click();
+  };
+
+  const renderProofSlot = (channel: ProofChannel, label: string, Icon: typeof Share2) => (
+    <div className="rounded-[18px] border border-slate-200 bg-[#fbfcff] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#edf3ff] text-[#1557ee]"><Icon className="h-4 w-4" /></span>
+          <div className="min-w-0">
+            <div className="truncate text-xs font-bold text-[#12234b]">{label}</div>
+            <div className="mt-0.5 text-[10px] text-slate-400">{proofImages[channel].length} / 5</div>
+          </div>
+        </div>
+        <label className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-xl border border-dashed border-[#b8c8e8] text-[#1557ee] transition hover:bg-[#edf3ff]" aria-label={`إضافة صورة ${label}`}>
+          <Upload className="h-4 w-4" />
+          <input
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            onChange={(event) => {
+              addProofImage(channel, event.currentTarget.files?.[0]);
+              event.currentTarget.value = '';
+            }}
+          />
+        </label>
+      </div>
+      {proofImages[channel].length > 0 ? (
+        <div className="mt-3 grid grid-cols-5 gap-1.5">
+          {proofImages[channel].map((image, index) => (
+            <div key={`${channel}-${image.slice(-12)}`} className="group relative aspect-square overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <img src={image} alt="" className="h-full w-full object-cover" />
+              <Button type="button" variant="danger" size="icon" onClick={() => removeProofImage(channel, index)} className="absolute right-1 top-1 grid h-6 w-6 min-h-0 rounded-md p-0 opacity-0 transition group-hover:opacity-100" aria-label={`حذف صورة ${label}`}>
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-xl border border-dashed border-slate-200 px-3 py-2.5 text-center text-[10px] text-slate-400">إضافة صورة إثبات</div>
+      )}
+    </div>
+  );
+
+  return (
+    <main className="mx-auto w-full max-w-[1180px] overflow-hidden px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir="rtl">
+      <section className="animate-rise relative overflow-hidden rounded-[26px] bg-[#0e2452] px-5 py-7 text-white shadow-[0_5px_16px_rgba(14,36,82,.12)] md:px-8 md:py-8">
+        <div className="grid-dots absolute inset-0 opacity-15" />
+        <div className="absolute -left-14 -top-20 h-56 w-56 rounded-full border border-cyan-200/15" />
+        <div className="relative flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+          <div className="max-w-xl">
+            <div className="mb-3 flex items-center gap-2 text-xs font-bold text-cyan-300"><Share2 className="h-4 w-4" /> مساحة المشاركة</div>
+            <h1 className="font-display text-[27px] font-bold leading-tight tracking-[-.04em] md:text-[36px]">نظام النشر</h1>
+            <p className="mt-3 max-w-md text-sm leading-7 text-blue-100/70">شارك المنصة مع مجتمعات مناسبة واحصل على مكافأتك اليومية.</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-3 rounded-2xl border border-white/10 bg-white/[.07] px-4 py-3">
+            <span className="grid h-11 w-11 place-items-center rounded-xl bg-cyan-300/15 text-cyan-300"><Share2 className="h-5 w-5" /></span>
+            <div>
+              <div className="text-[10px] font-semibold text-blue-100/60">المكافأة اليومية</div>
+              <div className="mt-0.5 text-2xl font-bold tracking-tight">$0.02</div>
+            </div>
+            <span className="mr-1 rounded-full bg-emerald-300/15 px-2.5 py-1 text-[10px] font-bold text-emerald-200">متاحة اليوم</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-5 grid gap-4 md:grid-cols-[.85fr_1.15fr]">
+        <div className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-[0_4px_14px_rgba(18,32,77,.05)] md:p-6">
+          <div className="flex items-center justify-between">
+            <div><h2 className="font-display text-lg font-bold text-[#12234b]">مهمتك اليوم</h2><p className="mt-1 text-[11px] text-slate-400">أكمل خطوات بسيطة لاستلام المكافأة</p></div>
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#edf3ff] text-[#1557ee]"><Target className="h-5 w-5" /></span>
+          </div>
+          <div className="mt-6 space-y-5">
+            {[
+              { label: 'Telegram', value: 0, Icon: Send, color: 'bg-[#1557ee]' },
+              { label: 'Facebook / Other', value: 0, Icon: Globe2, color: 'bg-[#159b89]' },
+            ].map(({ label, value, Icon, color }) => (
+              <div key={label}>
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <span className="flex items-center gap-2 font-semibold text-slate-600"><span className="grid h-7 w-7 place-items-center rounded-lg bg-slate-50 text-slate-500"><Icon className="h-3.5 w-3.5" /></span>{label}</span>
+                  <strong className="tabular-nums text-[#12234b]">{value} / 5</strong>
+                </div>
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${(value / 5) * 100}%` }} /></div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-[22px] border border-blue-100 bg-[#f4f8ff] p-5 md:p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div><div className="text-xs font-bold text-[#1557ee]">كيف تعمل؟</div><h2 className="mt-1 font-display text-lg font-bold text-[#12234b]">انشر بصدق، واكسب بثبات</h2><p className="mt-2 max-w-lg text-xs leading-6 text-slate-500">استخدم المنشور الجاهز، شاركه في مجتمعات مناسبة، ثم أرفق صور الإثبات للمراجعة.</p></div>
+            <span className="hidden h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white text-[#1557ee] shadow-[0_2px_6px_rgba(18,32,77,.06)] sm:grid"><CheckCircle2 className="h-6 w-6" /></span>
+          </div>
+          <div className="mt-5 grid grid-cols-3 gap-2 text-center text-[10px] font-semibold text-slate-500">
+            <div className="rounded-xl border border-blue-100 bg-white px-2 py-3"><span className="mx-auto mb-2 grid h-7 w-7 place-items-center rounded-lg bg-[#edf3ff] text-[#1557ee]">1</span>انسخ</div>
+            <div className="rounded-xl border border-blue-100 bg-white px-2 py-3"><span className="mx-auto mb-2 grid h-7 w-7 place-items-center rounded-lg bg-[#eafbf8] text-[#159b89]">2</span>انشر</div>
+            <div className="rounded-xl border border-blue-100 bg-white px-2 py-3"><span className="mx-auto mb-2 grid h-7 w-7 place-items-center rounded-lg bg-[#fff6e8] text-[#c98017]">3</span>أثبت</div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-5 grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
+        <div className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-[0_4px_14px_rgba(18,32,77,.05)] md:p-6">
+          <div className="flex items-center justify-between gap-3"><div><h2 className="font-display text-lg font-bold text-[#12234b]">المنشور الترويجي</h2><p className="mt-1 text-[11px] text-slate-400">نص تجريبي جاهز للنسخ والمشاركة</p></div><Clipboard className="h-5 w-5 text-[#1557ee]" /></div>
+          <div className="mt-5 rounded-[18px] border border-slate-200 bg-[#fbfcff] p-4 text-sm leading-7 text-slate-600">{promotionalPost}</div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button type="button" variant="primary" size="sm" onClick={() => copyText(promotionalPost, 'post')} className="flex items-center gap-2 text-xs font-bold"><Copy className="h-3.5 w-3.5" />{copied === 'post' ? 'تم النسخ' : 'نسخ المنشور'}</Button>
+            <Button type="button" variant="secondary" size="sm" onClick={() => copyText(promotionalLink, 'link')} className="flex items-center gap-2 bg-[#f4f8ff] text-xs font-bold text-[#1557ee]"><Link2 className="h-3.5 w-3.5" />{copied === 'link' ? 'تم نسخ الرابط' : 'نسخ الرابط'}</Button>
+          </div>
+        </div>
+        <div className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-[0_4px_14px_rgba(18,32,77,.05)] md:p-6">
+          <div className="flex items-center justify-between gap-3"><div><h2 className="font-display text-lg font-bold text-[#12234b]">الصورة الترويجية</h2><p className="mt-1 text-[11px] text-slate-400">معاينة جاهزة للمشاركة</p></div><ImageIcon className="h-5 w-5 text-[#1557ee]" /></div>
+          <div className="relative mt-5 aspect-[1.7] overflow-hidden rounded-[18px] bg-[#0e2452] p-5 text-white shadow-[0_3px_10px_rgba(14,36,82,.12)] sm:p-7">
+            <div className="grid-dots absolute inset-0 opacity-20" /><div className="absolute -left-10 -top-12 h-36 w-36 rounded-full border border-cyan-200/15" />
+            <div className="relative flex h-full flex-col justify-between">
+              <div className="flex items-center gap-2 text-[10px] font-bold text-cyan-300"><span className="grid h-7 w-7 place-items-center rounded-lg bg-white/10"><Share2 className="h-3.5 w-3.5" /></span> VIDREWARD</div>
+              <div><div className="font-display text-xl font-bold leading-tight sm:text-2xl">شاهد، شارك،<br /><span className="text-cyan-300">واربح.</span></div><div className="mt-2 text-[10px] text-blue-100/65">مكافآت يومية على وقتك ومشاركتك</div></div>
+              <div className="flex items-center justify-between text-[10px] text-blue-100/60"><span>ابدأ اليوم</span><span className="rounded-lg bg-[#1557ee] px-2.5 py-1.5 font-bold text-white">$0.02</span></div>
+            </div>
+          </div>
+          <Button type="button" variant="secondary" size="sm" onClick={downloadPromotionalImage} className="mt-4 flex w-full items-center justify-center gap-2 bg-[#f4f8ff] text-xs font-bold text-[#1557ee]"><Download className="h-4 w-4" /> تحميل الصورة</Button>
+        </div>
+      </section>
+
+      <section className="mt-5 rounded-[22px] border border-slate-200 bg-white p-5 shadow-[0_4px_14px_rgba(18,32,77,.05)] md:p-6">
+        <div className="flex items-center justify-between gap-3"><div><h2 className="font-display text-lg font-bold text-[#12234b]">إثبات النشر</h2><p className="mt-1 text-[11px] text-slate-400">أضف صورًا واضحة من المنشورات المنشورة</p></div><Upload className="h-5 w-5 text-[#1557ee]" /></div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          {renderProofSlot('telegram', 'Telegram', Send)}
+          {renderProofSlot('other', 'Other', Globe2)}
+        </div>
+        <Button type="button" variant="primary" size="lg" onClick={() => setStatus('pending')} className="mt-5 flex w-full items-center justify-center gap-2 text-sm font-bold"><Share2 className="h-4 w-4" /> إرسال للمراجعة</Button>
+      </section>
+
+      <section className={`mt-5 rounded-[22px] border p-5 shadow-[0_4px_14px_rgba(18,32,77,.05)] md:p-6 ${currentStatus.className}`}>
+        <div className="flex items-center gap-3">
+          <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${currentStatus.iconClassName}`}><StatusIcon className="h-5 w-5" /></span>
+          <div className="min-w-0 flex-1"><div className="text-[10px] font-bold text-slate-400">حالة المهمة الحالية</div><h2 className="mt-1 font-display text-lg font-bold text-[#12234b]">{currentStatus.title}</h2><p className="mt-1 text-xs text-slate-500">{currentStatus.description}</p></div>
+          <strong className="shrink-0 text-lg font-bold text-[#159b89]">{currentStatus.amount}</strong>
+        </div>
+      </section>
+
+      <section className="mt-5">
+        <div className="flex items-end justify-between"><div><h2 className="font-display text-lg font-bold text-[#12234b]">سجل المهام</h2><p className="mt-1 text-[11px] text-slate-400">آخر عمليات النشر التجريبية</p></div><History className="h-5 w-5 text-slate-400" /></div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {[['29 Sep', 'قيد المراجعة', 'text-[#c98017] bg-[#fff6e8]'], ['28 Sep', 'تمت الموافقة', 'text-[#159b89] bg-[#eafbf8]'], ['26 Sep', 'قيد المراجعة', 'text-[#c98017] bg-[#fff6e8]']].map(([date, taskStatus, tone]) => (
+            <div key={`${date}-${taskStatus}`} className="flex items-center justify-between rounded-[18px] border border-slate-200 bg-white px-4 py-3.5 shadow-[0_3px_10px_rgba(18,32,77,.04)]">
+              <div><div className="text-xs font-bold text-[#12234b]">{date}</div><div className="mt-1 text-[10px] text-slate-400">نشر تجريبي</div></div>
+              <div className="text-left"><div className="text-sm font-bold text-[#159b89]">$0.02</div><span className={`mt-1 inline-flex rounded-full px-2 py-1 text-[9px] font-bold ${tone}`}>{taskStatus}</span></div>
+            </div>
+          ))}
+        </div>
+      </section>
     </main>
   );
 }
@@ -1984,6 +2231,7 @@ function Home() {
                 : screen === 'withdraw' && mode === 'viewer' ? <WithdrawPage viewerBalance={viewerBalance} telegramUser={telegramUser} onWithdraw={withdrawEarnings} />
                   : screen === 'withdraw-history' && mode === 'viewer' ? <WithdrawHistoryPage records={withdrawHistory} />
                 : screen === 'campaigns' && mode === 'creator' ? <CampaignsPage videos={videos} telegramUser={telegramUser} tab={tab} onTab={setTab} onAdd={() => setScreen('add')} onWatch={selectVideo} />
+                : screen === 'publish' && mode === 'viewer' ? <PublishingSystemPage />
                 : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} balance={viewerBalance} onWithdraw={() => setScreen('withdraw')} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
                   : <CreatorOverview advertiserBalance={advertiserBalance} telegramUser={telegramUser} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
           {!browserEarningPage && <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 p-2 backdrop-blur lg:hidden">
@@ -1997,9 +2245,10 @@ function Home() {
                 </>
               ) : (
                 <>
-                    <Button type="button" data-testid="button-mobile-earn" onClick={() => setScreen('watch')} variant="unstyled" size="fit" className={`flex flex-col items-center gap-1 px-4 py-1.5 text-[10px] font-bold ${screen === 'watch' ? 'text-[#1557ee]' : 'text-slate-400'}`}><Eye className="h-5 w-5" /> شاهد واربح</Button>
-                    <Button type="button" data-testid="button-mobile-earnings" onClick={() => setScreen('withdraw')} variant="unstyled" size="fit" className={`flex flex-col items-center gap-1 px-4 py-1.5 text-[10px] font-bold ${screen === 'withdraw' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> سحب الأرباح</Button>
-                    <Button type="button" data-testid="button-mobile-withdraw-history" onClick={() => setScreen('withdraw-history')} variant="unstyled" size="fit" className={`flex flex-col items-center gap-1 px-4 py-1.5 text-[10px] font-bold ${screen === 'withdraw-history' ? 'text-[#1557ee]' : 'text-slate-400'}`}><History className="h-5 w-5" /> سجل السحب</Button>
+                    <Button type="button" data-testid="button-mobile-earn" onClick={() => setScreen('watch')} variant="unstyled" size="fit" className={`flex min-w-0 flex-col items-center gap-1 px-1 py-1.5 text-[9px] font-bold ${screen === 'watch' ? 'text-[#1557ee]' : 'text-slate-400'}`}><Eye className="h-5 w-5" /> شاهد واربح</Button>
+                    <Button type="button" data-testid="button-mobile-publish" onClick={() => setScreen('publish')} variant="unstyled" size="fit" className={`flex min-w-0 flex-col items-center gap-1 px-1 py-1.5 text-[9px] font-bold ${screen === 'publish' ? 'text-[#1557ee]' : 'text-slate-400'}`}><Share2 className="h-5 w-5" /> نظام النشر</Button>
+                    <Button type="button" data-testid="button-mobile-earnings" onClick={() => setScreen('withdraw')} variant="unstyled" size="fit" className={`flex min-w-0 flex-col items-center gap-1 px-1 py-1.5 text-[9px] font-bold ${screen === 'withdraw' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> سحب الأرباح</Button>
+                    <Button type="button" data-testid="button-mobile-withdraw-history" onClick={() => setScreen('withdraw-history')} variant="unstyled" size="fit" className={`flex min-w-0 flex-col items-center gap-1 px-1 py-1.5 text-[9px] font-bold ${screen === 'withdraw-history' ? 'text-[#1557ee]' : 'text-slate-400'}`}><History className="h-5 w-5" /> سجل السحب</Button>
                 </>
               )}
             </div>
