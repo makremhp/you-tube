@@ -830,37 +830,37 @@ function CreatorOverview({
   onAdd: () => void;
   onDeposit: () => void;
 }) {
-  const { dir } = useLanguage();
+  const { dir, t } = useLanguage();
   return (
     <main className="mx-auto w-full max-w-[1370px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir={dir}>
       <section className="animate-rise flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#1557ee]"><span className="h-1.5 w-1.5 rounded-full bg-[#23bdc9]" /> الأربعاء، ٢٣ سبتمبر ٢٠٢٦</div>
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#1557ee]"><span className="h-1.5 w-1.5 rounded-full bg-[#23bdc9]" /> {t('الأربعاء، ٢٣ سبتمبر ٢٠٢٦')}</div>
           <h1 data-testid="text-greeting-overview" className="creator-greeting flex items-baseline gap-2 whitespace-nowrap font-display text-[25px] font-bold leading-tight tracking-[-.04em] text-[#12234b] sm:text-[29px] md:text-[36px]">
-            <span>صباح الخير{' '}</span>
+            <span>{t('صباح الخير')}{' '}</span>
             <span className="text-[#1557ee]">{getGreetingName(telegramUser)}..</span>
           </h1>
-          <p className="mt-2 text-sm text-slate-500">ملخص أداء حملاتك ورصيدك في مكان واحد.</p>
+          <p className="mt-2 text-sm text-slate-500">{t('ملخص أداء حملاتك ورصيدك في مكان واحد.')}</p>
         </div>
         <Button type="button" data-testid="button-add-video-main" onClick={onAdd} variant="primary" size="lg" className="flex items-center justify-center gap-2 text-sm font-bold">
-          <Plus className="h-4 w-4" /> أضف إعلان جديد
+          <Plus className="h-4 w-4" /> {t('أضف إعلان جديد')}
         </Button>
       </section>
 
       <section className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
-        <div className="animate-rise"><StatCard icon={Eye} label="إجمالي المشاهدات" value="27,584" change="12.8%" tone="blue" /></div>
-        <div className="animate-rise delay-1"><StatCard icon={DollarSign} label="إجمالي الإنفاق" value="$124.80" change="8.4%" tone="cyan" /></div>
-        <div className="animate-rise delay-2"><StatCard icon={Users} label="مشاهدون جدد" value="1,892" change="18.2%" tone="navy" /></div>
-        <div className="animate-rise delay-3"><StatCard icon={TrendingUp} label="متوسط الإكمال" value="76.4%" change="4.6%" tone="sand" /></div>
+        <div className="animate-rise"><StatCard icon={Eye} label={t('إجمالي المشاهدات')} value="27,584" change="12.8%" tone="blue" /></div>
+        <div className="animate-rise delay-1"><StatCard icon={DollarSign} label={t('إجمالي الإنفاق')} value="$124.80" change="8.4%" tone="cyan" /></div>
+        <div className="animate-rise delay-2"><StatCard icon={Users} label={t('مشاهدون جدد')} value="1,892" change="18.2%" tone="navy" /></div>
+        <div className="animate-rise delay-3"><StatCard icon={TrendingUp} label={t('متوسط الإكمال')} value="76.4%" change="4.6%" tone="sand" /></div>
       </section>
 
       <section className="mt-5 grid gap-4 md:grid-cols-[1.1fr_.9fr]">
         <div className="relative overflow-hidden rounded-[22px] border border-blue-100 bg-[#eff4ff] p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-xs font-semibold text-slate-500">رصيد الإعلانات</div>
+              <div className="text-xs font-semibold text-slate-500">{t('رصيد الإعلانات')}</div>
               <div className="mt-1 text-3xl font-bold tracking-tight text-[#12234b]">${advertiserBalance.toFixed(2)}</div>
-              <div className="mt-2 text-[11px] text-slate-400">متاح لتمويل الحملات القادمة</div>
+              <div className="mt-2 text-[11px] text-slate-400">{t('متاح لتمويل الحملات القادمة')}</div>
             </div>
             <div className="relative grid h-16 w-16 place-items-center rounded-2xl bg-white/80 shadow-sm">
               <WalletArtwork method="balance" size="md" className="h-14 w-14" />
@@ -868,17 +868,17 @@ function CreatorOverview({
           </div>
           <div className="mt-4 flex items-center gap-2 rounded-xl border border-white/80 bg-white/60 px-3 py-2">
             <WalletArtwork method="web3" size="xs" />
-            <span className="text-[10px] font-bold text-slate-600">جاهز للتحويل عبر Web3 · Polygon</span>
+            <span className="text-[10px] font-bold text-slate-600">{t('جاهز للتحويل عبر Web3 · Polygon')}</span>
           </div>
           <Button type="button" data-testid="button-overview-deposit" onClick={onDeposit} variant="secondary" size="sm" className="mt-6 flex items-center gap-2 bg-white text-xs font-bold text-[#1557ee]">
-            <Plus className="h-4 w-4" /> إيداع رصيد جديد
+            <Plus className="h-4 w-4" /> {t('إيداع رصيد جديد')}
           </Button>
         </div>
         <div className="rounded-[22px] bg-[#0e2452] p-6 text-white shadow-[0_15px_34px_rgba(14,36,82,.16)]">
-          <div className="flex items-center justify-between"><span className="text-xs font-bold text-blue-100">أداء هذا الشهر</span><BarChart3 className="h-5 w-5 text-cyan-300" /></div>
+          <div className="flex items-center justify-between"><span className="text-xs font-bold text-blue-100">{t('أداء هذا الشهر')}</span><BarChart3 className="h-5 w-5 text-cyan-300" /></div>
           <div className="mt-6 flex items-end justify-between">
-            <div><div className="text-3xl font-bold">9,428</div><div className="mt-1 text-[11px] text-blue-100/60">إكمالات الفيديو</div></div>
-            <div className="text-left"><div className="text-xl font-bold text-cyan-300">+14.8%</div><div className="mt-1 text-[10px] text-blue-100/60">مقارنة بالأسبوع الماضي</div></div>
+            <div><div className="text-3xl font-bold">9,428</div><div className="mt-1 text-[11px] text-blue-100/60">{t('إكمالات الفيديو')}</div></div>
+            <div className="text-left"><div className="text-xl font-bold text-cyan-300">+14.8%</div><div className="mt-1 text-[10px] text-blue-100/60">{t('مقارنة بالأسبوع الماضي')}</div></div>
           </div>
           <div className="mt-7 flex h-16 items-end gap-2 border-b border-white/10">
             {[32, 46, 40, 64, 55, 74, 67, 86, 77, 96, 87, 100].map((height, i) => <div key={i} className="flex h-full flex-1 items-end"><div className={`w-full rounded-t-sm ${i === 11 ? 'bg-cyan-300' : 'bg-blue-300/30'}`} style={{ height: `${height}%` }} /></div>)}
@@ -887,16 +887,16 @@ function CreatorOverview({
       </section>
 
       <section className="mt-5 rounded-[22px] border border-slate-200 bg-white p-6 shadow-[var(--shadow-soft)]">
-        <div className="flex items-center justify-between"><div><h2 className="font-display text-lg font-bold text-[#12234b]">خطواتك التالية</h2><p className="mt-1 text-xs text-slate-400">أكمل هذه الخطوات لتحصل على أفضل نتيجة.</p></div><Sparkles className="h-5 w-5 text-[#1557ee]" /></div>
+        <div className="flex items-center justify-between gap-4"><div className="min-w-0"><h2 className="font-display text-lg font-bold text-[#12234b]">{t('خطواتك التالية')}</h2><p className="mt-1 text-xs text-slate-400">{t('أكمل هذه الخطوات لتحصل على أفضل نتيجة.')}</p></div><Sparkles className="h-5 w-5 shrink-0 text-[#1557ee]" /></div>
         <div className="mt-5 grid gap-3 md:grid-cols-3">
           {([
-            { number: '01', title: 'أضف إعلانك الأول', description: 'شارك فيديو يستحق وقت المشاهدين.', action: onAdd },
-            { number: '02', title: 'موّل حملتك', description: 'أنشئ فاتورة إيداع آمنة عبر Stars أو Web3.', action: onDeposit },
-            { number: '03', title: 'راجع الأداء', description: 'تابع المشاهدات والإكمالات من صفحة الإعلانات.' },
+            { number: '01', title: t('أضف إعلانك الأول'), description: t('شارك فيديو يستحق وقت المشاهدين.'), action: onAdd },
+            { number: '02', title: t('موّل حملتك'), description: t('أنشئ فاتورة إيداع آمنة عبر Stars أو Web3.'), action: onDeposit },
+            { number: '03', title: t('راجع الأداء'), description: t('تابع المشاهدات والإكمالات من صفحة الإعلانات.') },
           ] as Array<{ number: string; title: string; description: string; action?: () => void }>).map(({ number, title, description, action }) => (
-            <Button type="button" key={number} onClick={typeof action === 'function' ? action : undefined} variant="unstyled" size="fit" className={`flex items-start gap-3 rounded-2xl border border-slate-100 bg-[#fbfcff] p-4 transition hover:border-blue-100 hover:bg-[#f4f8ff] ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>
+            <Button type="button" key={number} onClick={typeof action === 'function' ? action : undefined} variant="unstyled" size="fit" dir={dir} className={`flex w-full min-w-0 items-start gap-3 rounded-2xl border border-slate-100 bg-[#fbfcff] p-4 transition hover:border-blue-100 hover:bg-[#f4f8ff] ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>
               <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#edf3ff] text-[10px] font-bold text-[#1557ee]">{number}</span>
-              <span><span className="block text-xs font-bold text-[#12234b]">{title}</span><span className="mt-1 block text-[11px] leading-5 text-slate-400">{description}</span></span>
+              <span className={`min-w-0 flex-1 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}><span className="block break-words text-xs font-bold leading-5 text-[#12234b]">{title}</span><span className="mt-1 block break-words text-[11px] leading-5 text-slate-400">{description}</span></span>
             </Button>
           ))}
         </div>
@@ -1352,7 +1352,8 @@ function AddVideo({
   onSubmit: (video: Omit<Video, 'id' | 'views' | 'status' | 'created' | 'art'>) => void;
   telegramUser: TelegramUser | null;
 }) {
-  const { dir } = useLanguage();
+  const { dir, t } = useLanguage();
+  const videoTitleMaxLength = 12;
   const [title, setTitle] = useState('');
   const [link, setLink] = useState('');
   const [duration, setDuration] = useState(20);
@@ -1365,7 +1366,7 @@ function AddVideo({
   const submit = () => {
     if (!valid) return;
     onSubmit({
-      title: title.trim(),
+      title: title.trim().slice(0, videoTitleMaxLength),
       link: link.trim(),
       duration,
       creator: publisherName,
@@ -1392,12 +1393,12 @@ function AddVideo({
 
   return (
     <main className="mx-auto w-full max-w-[1180px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir={dir}>
-      <div className="mb-7 flex items-center gap-3"><Button type="button" data-testid="button-back-add" onClick={onBack} variant="icon" size="icon" className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:border-blue-200 hover:text-[#1557ee]" aria-label="العودة"><ArrowDownLeft className="h-4 w-4" /></Button><div><div className="text-xs font-semibold text-[#1557ee]">نشر إعلان / إعلان جديد</div><h1 className="mt-1 font-display text-2xl font-bold text-[#12234b]">انشر إعلانك</h1></div></div>
+      <div className="mb-7 flex items-center gap-3"><Button type="button" data-testid="button-back-add" onClick={onBack} variant="icon" size="icon" className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:border-blue-200 hover:text-[#1557ee]" aria-label={t('العودة')}><ArrowDownLeft className="h-4 w-4" /></Button><div><div className="text-xs font-semibold text-[#1557ee]">{t('نشر إعلان / إعلان جديد')}</div><h1 className="mt-1 font-display text-2xl font-bold text-[#12234b]">{t('انشر إعلانك')}</h1></div></div>
       <div className="grid gap-5 xl:grid-cols-[1fr_400px]">
         <section className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)] md:p-7">
-          <div className="mb-7"><h2 className="font-display text-lg font-bold text-[#12234b]">تفاصيل الفيديو</h2><p className="mt-1 text-xs text-slate-400">أخبر المشاهدين لماذا يستحق هذا الفيديو وقتهم.</p></div>
-          <label className="block text-xs font-bold text-slate-700">عنوان الفيديو <span className="text-[#1557ee]">*</span><input value={title} onChange={(event) => setTitle(event.target.value)} data-testid="input-video-title" placeholder="مثال: كيف تبدأ مشروعك من الصفر؟" className="mt-2 w-full rounded-xl border border-slate-200 bg-[#fbfcff] px-4 py-3 text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" /></label>
-          <label className="mt-5 block text-xs font-bold text-slate-700">رابط الفيديو <span className="text-[#1557ee]">*</span><div className="relative mt-2"><Link2 className="absolute right-4 top-3.5 h-4 w-4 text-slate-400" /><input value={link} onChange={(event) => setLink(event.target.value)} data-testid="input-video-link" dir="ltr" placeholder="https://youtube.com/watch?v=..." className="w-full rounded-xl border border-slate-200 bg-[#fbfcff] py-3 pl-4 pr-11 text-left text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" /></div></label>
+          <div className="mb-7"><h2 className="font-display text-lg font-bold text-[#12234b]">{t('تفاصيل الفيديو')}</h2><p className="mt-1 text-xs text-slate-400">{t('أخبر المشاهدين لماذا يستحق هذا الفيديو وقتهم.')}</p></div>
+          <label className="block text-xs font-bold text-slate-700">{t('عنوان الفيديو')} <span className="text-[#1557ee]">*</span><span className="float-right font-normal text-slate-400">{title.length}/{videoTitleMaxLength}</span><input value={title} maxLength={videoTitleMaxLength} onChange={(event) => setTitle(event.target.value.slice(0, videoTitleMaxLength))} data-testid="input-video-title" placeholder={t('مثال: كيف تبدأ مشروعك من الصفر؟')} className="mt-2 w-full rounded-xl border border-slate-200 bg-[#fbfcff] px-4 py-3 text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" /><span className="mt-1 block text-[10px] font-normal text-slate-400">{t('12 حرفًا كحد أقصى')}</span></label>
+          <label className="mt-5 block text-xs font-bold text-slate-700">{t('رابط الفيديو')} <span className="text-[#1557ee]">*</span><div className="relative mt-2"><Link2 className="absolute right-4 top-3.5 h-4 w-4 text-slate-400" /><input value={link} onChange={(event) => setLink(event.target.value)} data-testid="input-video-link" dir="ltr" placeholder="https://youtube.com/watch?v=..." className="w-full rounded-xl border border-slate-200 bg-[#fbfcff] py-3 pl-4 pr-11 text-left text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" /></div></label>
           <div className="mt-7">
             <div className="flex items-center justify-between"><div><h3 className="text-xs font-bold text-slate-700">المدة الإلزامية للمشاهدة</h3><p className="mt-1 text-[10px] text-slate-400">اختر الوقت الذي سيكمله المشاهد قبل احتساب المكافأة.</p></div><Clock3 className="h-5 w-5 text-[#1557ee]" /></div>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -2007,6 +2008,7 @@ const initialWithdrawHistory: WithdrawRecord[] = [
 ];
 
 function Home() {
+  const { t } = useLanguage();
   const [browserEarningPage] = useState(() => new URLSearchParams(window.location.search).get('view') === 'earn');
   const [mode, setMode] = useState<'creator' | 'viewer'>(() => browserEarningPage ? 'viewer' : 'creator');
   const [screen, setScreen] = useState<AppScreen>(() => browserEarningPage ? 'watch' : 'overview');
@@ -2229,20 +2231,20 @@ function Home() {
                 : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} balance={viewerBalance} onWithdraw={() => setScreen('withdraw')} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
                   : <CreatorOverview advertiserBalance={advertiserBalance} telegramUser={telegramUser} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
           {!browserEarningPage && <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 p-2 backdrop-blur lg:hidden">
-            <div className="mx-auto flex max-w-md justify-around">
+            <div className="mx-auto grid max-w-md grid-cols-4 items-end gap-1">
               {mode === 'creator' ? (
                 <>
-                   <Button type="button" data-testid="button-mobile-creator" onClick={() => setScreen('campaigns')} variant="unstyled" size="fit" className={`flex flex-col items-center gap-1 px-5 py-1.5 text-[10px] font-bold ${screen === 'campaigns' ? 'text-[#1557ee]' : 'text-slate-400'}`}><LayoutDashboard className="h-5 w-5" /> إعلاناتي</Button>
-                   <Button type="button" data-testid="button-mobile-add" onClick={() => setScreen('add')} variant="primary" size="icon" className="grid h-11 w-11 -translate-y-4 place-items-center rounded-2xl"><Plus className="h-5 w-5" /></Button>
-                    <Button type="button" data-testid="button-mobile-ad-wallet" onClick={() => setScreen('deposit')} variant="unstyled" size="fit" className={`flex flex-col items-center gap-1 px-4 py-1.5 text-[10px] font-bold ${screen === 'deposit' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> إيداع رصيد</Button>
-                    <Button type="button" data-testid="button-mobile-deposit-history" onClick={() => setScreen('deposit-history')} variant="unstyled" size="fit" className={`flex flex-col items-center gap-1 px-3 py-1.5 text-[10px] font-bold ${screen === 'deposit-history' ? 'text-[#1557ee]' : 'text-slate-400'}`}><History className="h-5 w-5" /> سجل الإيداع</Button>
+                   <Button type="button" data-testid="button-mobile-creator" onClick={() => setScreen('campaigns')} variant="unstyled" size="fit" className={`flex w-full min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center text-[10px] font-bold leading-tight ${screen === 'campaigns' ? 'text-[#1557ee]' : 'text-slate-400'}`}><LayoutDashboard className="h-5 w-5" /> <span className="max-w-full truncate">{t('إعلاناتي')}</span></Button>
+                   <Button type="button" data-testid="button-mobile-add" onClick={() => setScreen('add')} variant="primary" size="icon" className="mx-auto grid h-11 w-11 -translate-y-4 place-items-center rounded-2xl"><Plus className="h-5 w-5" /></Button>
+                    <Button type="button" data-testid="button-mobile-ad-wallet" onClick={() => setScreen('deposit')} variant="unstyled" size="fit" className={`flex w-full min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center text-[10px] font-bold leading-tight ${screen === 'deposit' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> <span className="max-w-full truncate">{t('إيداع رصيد')}</span></Button>
+                    <Button type="button" data-testid="button-mobile-deposit-history" onClick={() => setScreen('deposit-history')} variant="unstyled" size="fit" className={`flex w-full min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center text-[10px] font-bold leading-tight ${screen === 'deposit-history' ? 'text-[#1557ee]' : 'text-slate-400'}`}><History className="h-5 w-5" /> <span className="max-w-full truncate">{t('سجل الإيداع')}</span></Button>
                 </>
               ) : (
                 <>
-                    <Button type="button" data-testid="button-mobile-earn" onClick={() => setScreen('watch')} variant="unstyled" size="fit" className={`flex min-w-0 flex-col items-center gap-1 px-1 py-1.5 text-[9px] font-bold ${screen === 'watch' ? 'text-[#1557ee]' : 'text-slate-400'}`}><Eye className="h-5 w-5" /> شاهد واربح</Button>
-                    <Button type="button" data-testid="button-mobile-publish" onClick={() => setScreen('publish')} variant="unstyled" size="fit" className={`flex min-w-0 flex-col items-center gap-1 px-1 py-1.5 text-[9px] font-bold ${screen === 'publish' ? 'text-[#1557ee]' : 'text-slate-400'}`}><Share2 className="h-5 w-5" /> نظام النشر</Button>
-                    <Button type="button" data-testid="button-mobile-earnings" onClick={() => setScreen('withdraw')} variant="unstyled" size="fit" className={`flex min-w-0 flex-col items-center gap-1 px-1 py-1.5 text-[9px] font-bold ${screen === 'withdraw' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> سحب الأرباح</Button>
-                    <Button type="button" data-testid="button-mobile-withdraw-history" onClick={() => setScreen('withdraw-history')} variant="unstyled" size="fit" className={`flex min-w-0 flex-col items-center gap-1 px-1 py-1.5 text-[9px] font-bold ${screen === 'withdraw-history' ? 'text-[#1557ee]' : 'text-slate-400'}`}><History className="h-5 w-5" /> سجل السحب</Button>
+                    <Button type="button" data-testid="button-mobile-earn" onClick={() => setScreen('watch')} variant="unstyled" size="fit" className={`flex w-full min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center text-[9px] font-bold leading-tight ${screen === 'watch' ? 'text-[#1557ee]' : 'text-slate-400'}`}><Eye className="h-5 w-5" /> <span className="max-w-full truncate">{t('شاهد واربح')}</span></Button>
+                    <Button type="button" data-testid="button-mobile-publish" onClick={() => setScreen('publish')} variant="unstyled" size="fit" className={`flex w-full min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center text-[9px] font-bold leading-tight ${screen === 'publish' ? 'text-[#1557ee]' : 'text-slate-400'}`}><Share2 className="h-5 w-5" /> <span className="max-w-full truncate">{t('نظام النشر')}</span></Button>
+                    <Button type="button" data-testid="button-mobile-earnings" onClick={() => setScreen('withdraw')} variant="unstyled" size="fit" className={`flex w-full min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center text-[9px] font-bold leading-tight ${screen === 'withdraw' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> <span className="max-w-full truncate">{t('سحب الأرباح')}</span></Button>
+                    <Button type="button" data-testid="button-mobile-withdraw-history" onClick={() => setScreen('withdraw-history')} variant="unstyled" size="fit" className={`flex w-full min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center text-[9px] font-bold leading-tight ${screen === 'withdraw-history' ? 'text-[#1557ee]' : 'text-slate-400'}`}><History className="h-5 w-5" /> <span className="max-w-full truncate">{t('سجل السحب')}</span></Button>
                 </>
               )}
             </div>

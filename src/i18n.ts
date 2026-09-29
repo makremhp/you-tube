@@ -296,6 +296,7 @@ const fragmentTranslations: Record<string, string> = {
   'تفاصيل الفيديو': 'Video details',
   'أخبر المشاهدين لماذا يستحق هذا الفيديو وقتهم.': 'Tell viewers why this video is worth their time.',
   'عنوان الفيديو': 'Video title',
+  '12 حرفًا كحد أقصى': '12 characters maximum',
   'رابط الفيديو': 'Video link',
   'المدة الإلزامية للمشاهدة': 'Required watch duration',
   'اختر الوقت الذي سيكمله المشاهد قبل احتساب المكافأة.': 'Choose the time viewers must complete before the reward is counted.',
