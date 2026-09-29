@@ -112,8 +112,10 @@
 .font-display { font-family: var(--app-font-serif); }
 
 .safe-card-copy {
+  min-width: 0;
+  max-width: 100%;
   overflow-wrap: anywhere;
-  word-break: normal;
+  word-break: break-word;
   text-wrap: balance;
 }
 
