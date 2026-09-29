@@ -95,6 +95,12 @@
 @layer base {
   * { @apply border-border; }
   html { direction: rtl; scroll-behavior: smooth; }
+  /*
+   * English strings are generally wider than their Arabic equivalents.
+   * Scale rem-based typography only when the browser language is English so
+   * labels keep their card layout without changing the Arabic experience.
+   */
+  html.language-en { font-size: 75%; }
   body {
     @apply font-sans antialiased bg-background text-foreground;
     min-width: 320px;

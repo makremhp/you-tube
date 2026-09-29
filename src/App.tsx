@@ -1021,13 +1021,16 @@ function ViewerView({
 type PublishStatus = 'pending' | 'approved' | 'rejected';
 
 function PublishingSystemPage({ telegramUser }: { telegramUser: TelegramUser | null }) {
+  const { isArabic } = useLanguage();
   const [copied, setCopied] = useState<'post' | 'link' | ''>('');
   const [status, setStatus] = useState<PublishStatus>('pending');
   const [proofImages, setProofImages] = useState<string[]>([]);
 
   const referralCode = telegramUser?.id ? String(telegramUser.id) : '00000';
   const promotionalLink = `https://t.me/youTubeVieewBot/ads?startapp=ref_${referralCode}`;
-  const promotionalPost = `بصراحة تجربة VidReward عجبتني 😄 بدأت أشاهد فيديوهات قصيرة في وقت فراغي، وكل مشاهدة مكتملة تضيف لي مكافأة على رصيدي 💸\n\nوالأجمل أنني أربح 20% من أرباح أي شخص يدخل عن طريق رابط الإحالة الخاص بي. إذا تحب تجربها وتربح من وقتك، ادخل من هنا 👇\n${promotionalLink}`;
+  const promotionalPost = isArabic
+    ? `بصراحة تجربة VidReward عجبتني 😄 بدأت أشاهد فيديوهات قصيرة في وقت فراغي، وكل مشاهدة مكتملة تضيف لي مكافأة على رصيدي 💸\n\nوالأجمل أنني أربح 20% من أرباح أي شخص يدخل عن طريق رابط الإحالة الخاص بي. إذا تحب تجربها وتربح من وقتك، ادخل من هنا 👇\n${promotionalLink}`
+    : `Honestly, I have been enjoying VidReward 😄 I started watching short videos in my free time, and every completed view adds a reward to my balance 💸\n\nEven better, I earn 20% of the rewards of anyone who joins through my referral link. If you want to try it and earn from your time, join here 👇\n${promotionalLink}`;
   const invitedUsers = 24;
   const referralEarnings = '$1.84';
   const statusConfig: Record<PublishStatus, {
@@ -1443,8 +1446,8 @@ function createBlockchainTxId() {
   return `0x${entropy.padEnd(64, '0').slice(0, 64)}`;
 }
 
-function formatHistoryDate(date = new Date()) {
-  return new Intl.DateTimeFormat('ar-TN', {
+function formatHistoryDate(date = new Date(), language: 'ar' | 'en' = 'ar') {
+  return new Intl.DateTimeFormat(language === 'ar' ? 'ar-TN' : 'en-US', {
     day: 'numeric',
     month: 'short',
     hour: 'numeric',
@@ -1671,7 +1674,7 @@ function DepositPage({
   onDepositCompleted: (id: string) => void;
   onDepositExpired: (id: string) => void;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<DepositMethod>('stars');
   const [invoice, setInvoice] = useState<{ id: string; amount: number; method: DepositMethod; destination: string; memoTag: string; telegramUserId: number | null; expiresAt: number; stars?: number } | null>(null);
@@ -1739,7 +1742,7 @@ function DepositPage({
       method: nextInvoice.method,
       destination: nextInvoice.destination,
       memoTag: nextInvoice.memoTag,
-      createdAt: formatHistoryDate(new Date(createdAt)),
+      createdAt: formatHistoryDate(new Date(createdAt), language),
       status: 'قيد المعالجة',
     });
     setIsCreatingInvoice(false);
@@ -1892,7 +1895,7 @@ function WithdrawPage({
   telegramUser: TelegramUser | null;
   onWithdraw: (record: WithdrawRecord) => void;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<WithdrawMethod>('binance');
   const [destination, setDestination] = useState('');
@@ -1912,7 +1915,7 @@ function WithdrawPage({
       method,
       destination: destination.trim(),
       memoTag: createMemoTag(telegramUser?.id),
-      createdAt: formatHistoryDate(),
+      createdAt: formatHistoryDate(new Date(), language),
       status: 'قيد المعالجة',
     });
     setMessage(`تم إنشاء طلب السحب بقيمة ${numericAmount.toFixed(4)} USDT. الحالة: قيد المعالجة.`);
