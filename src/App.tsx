@@ -846,18 +846,18 @@ function CreatorOverview({
       </section>
 
       <section className="mt-5 grid gap-4 md:grid-cols-[1.1fr_.9fr]">
-        <div className="relative overflow-hidden rounded-[22px] border border-blue-100 bg-[#eff4ff] p-6">
-          <div className="flex items-start justify-between gap-4">
+         <div className="relative overflow-hidden rounded-[22px] border border-blue-100 bg-[#eff4ff] p-6">
+           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="safe-card-copy text-xs font-semibold text-slate-500">رصيد الإعلانات</div>
               <div className="mt-1 text-3xl font-bold tracking-tight text-[#12234b]">${advertiserBalance.toFixed(2)}</div>
               <div className="safe-card-copy mt-2 text-[11px] leading-4 text-slate-400">متاح لتمويل الحملات القادمة</div>
             </div>
-            <div className="relative grid h-16 w-16 place-items-center rounded-2xl bg-white/80 shadow-sm">
-              <WalletArtwork method="balance" size="md" className="h-[2.8rem] w-[2.8rem]" />
+             <div className="relative grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-white/80 shadow-sm">
+               <WalletArtwork method="balance" size="md" className="h-10 w-10" />
             </div>
           </div>
-          <div className="mt-4 flex items-center gap-2 rounded-xl border border-white/80 bg-white/60 px-3 py-2">
+           <div className="mt-4 flex min-w-0 items-center gap-2 rounded-xl border border-white/80 bg-white/60 px-3 py-2">
             <WalletArtwork method="web3" size="xs" />
             <span className="safe-card-copy min-w-0 flex-1 text-[10px] font-bold leading-4 text-slate-600">جاهز للتحويل عبر Web3 · Polygon</span>
           </div>
@@ -866,10 +866,10 @@ function CreatorOverview({
           </Button>
         </div>
         <div className="rounded-[22px] bg-[#0e2452] p-6 text-white shadow-[0_15px_34px_rgba(14,36,82,.16)]">
-          <div className="flex items-center justify-between"><span className="text-xs font-bold text-blue-100">أداء هذا الشهر</span><BarChart3 className="h-5 w-5 text-cyan-300" /></div>
+           <div className="flex min-w-0 items-center justify-between gap-3"><span className="safe-card-copy min-w-0 text-xs font-bold text-blue-100">أداء هذا الشهر</span><BarChart3 className="h-5 w-5 shrink-0 text-cyan-300" /></div>
           <div className="mt-6 flex items-end justify-between">
-            <div><div className="text-3xl font-bold">9,428</div><div className="mt-1 text-[11px] text-blue-100/60">إكمالات الفيديو</div></div>
-            <div className="text-left"><div className="text-xl font-bold text-cyan-300">+14.8%</div><div className="mt-1 text-[10px] text-blue-100/60">مقارنة بالأسبوع الماضي</div></div>
+             <div className="min-w-0"><div className="text-3xl font-bold">9,428</div><div className="safe-card-copy mt-1 text-[11px] text-blue-100/60">إكمالات الفيديو</div></div>
+             <div className="min-w-0 text-left"><div className="text-xl font-bold text-cyan-300">+14.8%</div><div className="safe-card-copy mt-1 text-[10px] text-blue-100/60">مقارنة بالأسبوع الماضي</div></div>
           </div>
           <div className="mt-7 flex h-16 items-end gap-2 border-b border-white/10">
             {[32, 46, 40, 64, 55, 74, 67, 86, 77, 96, 87, 100].map((height, i) => <div key={i} className="flex h-full flex-1 items-end"><div className={`w-full rounded-t-sm ${i === 11 ? 'bg-cyan-300' : 'bg-blue-300/30'}`} style={{ height: `${height}%` }} /></div>)}
@@ -885,9 +885,9 @@ function CreatorOverview({
             { number: '02', title: 'موّل حملتك', description: 'أنشئ فاتورة إيداع آمنة عبر Stars أو Web3.', action: onDeposit },
             { number: '03', title: 'راجع الأداء', description: 'تابع المشاهدات والإكمالات من صفحة الإعلانات.' },
           ] as Array<{ number: string; title: string; description: string; action?: () => void }>).map(({ number, title, description, action }) => (
-            <Button type="button" key={number} onClick={typeof action === 'function' ? action : undefined} variant="unstyled" size="fit" className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-[#fbfcff] p-4 text-right transition hover:border-blue-100 hover:bg-[#f4f8ff]">
+             <Button type="button" key={number} onClick={typeof action === 'function' ? action : undefined} variant="unstyled" size="fit" className="flex min-w-0 items-start gap-3 rounded-2xl border border-slate-100 bg-[#fbfcff] p-4 text-right transition hover:border-blue-100 hover:bg-[#f4f8ff]">
               <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#edf3ff] text-[10px] font-bold text-[#1557ee]">{number}</span>
-              <span><span className="block text-xs font-bold text-[#12234b]">{title}</span><span className="mt-1 block text-[11px] leading-5 text-slate-400">{description}</span></span>
+               <span className="min-w-0 flex-1"><span className="safe-card-copy block text-xs font-bold text-[#12234b]">{title}</span><span className="safe-card-copy mt-1 block text-[11px] leading-5 text-slate-400">{description}</span></span>
             </Button>
           ))}
         </div>
@@ -2212,20 +2212,20 @@ function Home() {
                 : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} balance={viewerBalance} onWithdraw={() => setScreen('withdraw')} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
                   : <CreatorOverview advertiserBalance={advertiserBalance} telegramUser={telegramUser} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
           {!browserEarningPage && <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 p-2 backdrop-blur lg:hidden">
-            <div className="mx-auto flex max-w-md justify-around">
+             <div className="mx-auto grid max-w-md grid-cols-4">
               {mode === 'creator' ? (
                 <>
-                   <Button type="button" data-testid="button-mobile-creator" onClick={() => setScreen('campaigns')} variant="unstyled" size="fit" className={`flex flex-col items-center gap-1 px-5 py-1.5 text-[10px] font-bold ${screen === 'campaigns' ? 'text-[#1557ee]' : 'text-slate-400'}`}><LayoutDashboard className="h-5 w-5" /> إعلاناتي</Button>
-                   <Button type="button" data-testid="button-mobile-add" onClick={() => setScreen('add')} variant="primary" size="icon" className="grid h-11 w-11 -translate-y-4 place-items-center rounded-2xl"><Plus className="h-5 w-5" /></Button>
-                    <Button type="button" data-testid="button-mobile-ad-wallet" onClick={() => setScreen('deposit')} variant="unstyled" size="fit" className={`flex flex-col items-center gap-1 px-4 py-1.5 text-[10px] font-bold ${screen === 'deposit' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> إيداع رصيد</Button>
-                    <Button type="button" data-testid="button-mobile-deposit-history" onClick={() => setScreen('deposit-history')} variant="unstyled" size="fit" className={`flex flex-col items-center gap-1 px-3 py-1.5 text-[10px] font-bold ${screen === 'deposit-history' ? 'text-[#1557ee]' : 'text-slate-400'}`}><History className="h-5 w-5" /> سجل الإيداع</Button>
+                    <Button type="button" data-testid="button-mobile-creator" onClick={() => setScreen('campaigns')} variant="unstyled" size="fit" className={`flex min-w-0 max-w-full flex-col items-center gap-1 whitespace-normal px-1 py-1.5 text-center text-[10px] font-bold leading-3 ${screen === 'campaigns' ? 'text-[#1557ee]' : 'text-slate-400'}`}><LayoutDashboard className="h-5 w-5" /> إعلاناتي</Button>
+                    <Button type="button" data-testid="button-mobile-add" onClick={() => setScreen('add')} variant="primary" size="icon" className="justify-self-center grid h-11 w-11 -translate-y-4 place-items-center rounded-2xl"><Plus className="h-5 w-5" /></Button>
+                     <Button type="button" data-testid="button-mobile-ad-wallet" onClick={() => setScreen('deposit')} variant="unstyled" size="fit" className={`flex min-w-0 max-w-full flex-col items-center gap-1 whitespace-normal px-1 py-1.5 text-center text-[10px] font-bold leading-3 ${screen === 'deposit' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> إيداع رصيد</Button>
+                     <Button type="button" data-testid="button-mobile-deposit-history" onClick={() => setScreen('deposit-history')} variant="unstyled" size="fit" className={`flex min-w-0 max-w-full flex-col items-center gap-1 whitespace-normal px-1 py-1.5 text-center text-[10px] font-bold leading-3 ${screen === 'deposit-history' ? 'text-[#1557ee]' : 'text-slate-400'}`}><History className="h-5 w-5" /> سجل الإيداع</Button>
                 </>
               ) : (
                 <>
-                    <Button type="button" data-testid="button-mobile-earn" onClick={() => setScreen('watch')} variant="unstyled" size="fit" className={`flex min-w-0 flex-col items-center gap-1 px-1 py-1.5 text-[9px] font-bold ${screen === 'watch' ? 'text-[#1557ee]' : 'text-slate-400'}`}><Eye className="h-5 w-5" /> شاهد واربح</Button>
-                    <Button type="button" data-testid="button-mobile-publish" onClick={() => setScreen('publish')} variant="unstyled" size="fit" className={`flex min-w-0 flex-col items-center gap-1 px-1 py-1.5 text-[9px] font-bold ${screen === 'publish' ? 'text-[#1557ee]' : 'text-slate-400'}`}><Share2 className="h-5 w-5" /> نظام النشر</Button>
-                    <Button type="button" data-testid="button-mobile-earnings" onClick={() => setScreen('withdraw')} variant="unstyled" size="fit" className={`flex min-w-0 flex-col items-center gap-1 px-1 py-1.5 text-[9px] font-bold ${screen === 'withdraw' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> سحب الأرباح</Button>
-                    <Button type="button" data-testid="button-mobile-withdraw-history" onClick={() => setScreen('withdraw-history')} variant="unstyled" size="fit" className={`flex min-w-0 flex-col items-center gap-1 px-1 py-1.5 text-[9px] font-bold ${screen === 'withdraw-history' ? 'text-[#1557ee]' : 'text-slate-400'}`}><History className="h-5 w-5" /> سجل السحب</Button>
+                     <Button type="button" data-testid="button-mobile-earn" onClick={() => setScreen('watch')} variant="unstyled" size="fit" className={`flex min-w-0 max-w-full flex-col items-center gap-1 whitespace-normal px-1 py-1.5 text-center text-[9px] font-bold leading-3 ${screen === 'watch' ? 'text-[#1557ee]' : 'text-slate-400'}`}><Eye className="h-5 w-5" /> شاهد واربح</Button>
+                     <Button type="button" data-testid="button-mobile-publish" onClick={() => setScreen('publish')} variant="unstyled" size="fit" className={`flex min-w-0 max-w-full flex-col items-center gap-1 whitespace-normal px-1 py-1.5 text-center text-[9px] font-bold leading-3 ${screen === 'publish' ? 'text-[#1557ee]' : 'text-slate-400'}`}><Share2 className="h-5 w-5" /> نظام النشر</Button>
+                     <Button type="button" data-testid="button-mobile-earnings" onClick={() => setScreen('withdraw')} variant="unstyled" size="fit" className={`flex min-w-0 max-w-full flex-col items-center gap-1 whitespace-normal px-1 py-1.5 text-center text-[9px] font-bold leading-3 ${screen === 'withdraw' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> سحب الأرباح</Button>
+                     <Button type="button" data-testid="button-mobile-withdraw-history" onClick={() => setScreen('withdraw-history')} variant="unstyled" size="fit" className={`flex min-w-0 max-w-full flex-col items-center gap-1 whitespace-normal px-1 py-1.5 text-center text-[9px] font-bold leading-3 ${screen === 'withdraw-history' ? 'text-[#1557ee]' : 'text-slate-400'}`}><History className="h-5 w-5" /> سجل السحب</Button>
                 </>
               )}
             </div>
