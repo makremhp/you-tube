@@ -5,7 +5,11 @@ export type Language = 'ar' | 'en';
 export function getBrowserLanguage(): Language {
   if (typeof navigator === 'undefined') return 'en';
   const languages = navigator.languages?.length ? navigator.languages : [navigator.language];
-  return languages.some((value) => value?.toLowerCase().startsWith('ar')) ? 'ar' : 'en';
+  const preferredSupportedLanguage = languages.find((value) => {
+    const normalized = value?.toLowerCase() ?? '';
+    return normalized.startsWith('ar') || normalized.startsWith('en');
+  });
+  return preferredSupportedLanguage?.toLowerCase().startsWith('ar') ? 'ar' : 'en';
 }
 
 const exactTranslations: Record<string, string> = {
@@ -386,9 +390,27 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }), [language]);
 
   useEffect(() => {
-    const handleBrowserLanguageChange = () => setLanguage(getBrowserLanguage());
-    window.addEventListener('languagechange', handleBrowserLanguageChange);
-    return () => window.removeEventListener('languagechange', handleBrowserLanguageChange);
+    const syncBrowserLanguage = () => {
+      const nextLanguage = getBrowserLanguage();
+      setLanguage((currentLanguage) => currentLanguage === nextLanguage ? currentLanguage : nextLanguage);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') syncBrowserLanguage();
+    };
+
+    window.addEventListener('languagechange', syncBrowserLanguage);
+    window.addEventListener('focus', syncBrowserLanguage);
+    window.addEventListener('pageshow', syncBrowserLanguage);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    const languagePoll = window.setInterval(syncBrowserLanguage, 1000);
+
+    return () => {
+      window.removeEventListener('languagechange', syncBrowserLanguage);
+      window.removeEventListener('focus', syncBrowserLanguage);
+      window.removeEventListener('pageshow', syncBrowserLanguage);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.clearInterval(languagePoll);
+    };
   }, []);
 
   useEffect(() => {

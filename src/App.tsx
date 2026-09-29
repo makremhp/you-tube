@@ -702,7 +702,7 @@ function CampaignsPage({
             <div className="mt-1 text-2xl font-bold tracking-tight text-[#12234b]">$250.00</div>
             <div className="mt-1 text-[10px] text-slate-400">متاح لتمويل الحملات</div>
           </div>
-          <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white"><WalletArtwork method="balance" size="sm" className="h-9 w-9" /></div>
+           <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white"><WalletArtwork method="balance" size="sm" className="h-[29px] w-[29px]" /></div>
         </div>
         <div className="flex items-center justify-between rounded-[20px] border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)]">
           <div>
