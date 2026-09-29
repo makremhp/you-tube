@@ -301,10 +301,16 @@ function getVideoThumbnail(url: string) {
   return videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '';
 }
 
-function createBrowserWatchUrl(user: TelegramUser | null) {
+function createBrowserWatchUrl(video: Video, user: TelegramUser | null) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
   const url = new URL(`${basePath}/`, window.location.origin);
   url.searchParams.set('view', 'earn');
+  const videoId = getYoutubeVideoId(video.link);
+  if (videoId) url.searchParams.set('v', videoId);
+  url.searchParams.set('title', video.title);
+  url.searchParams.set('creator', video.creator);
+  url.searchParams.set('duration', String(video.duration));
+  url.searchParams.set('reward', video.reward);
   if (user) {
     // The fragment is not sent to the web server; it carries display-only profile context.
     url.hash = new URLSearchParams({
@@ -639,7 +645,7 @@ function VideoArtwork({ video, compact = false }: { video: Video; compact?: bool
   const thumbnail = getVideoThumbnail(video.link);
 
   return (
-    <div className={`relative aspect-video overflow-hidden ${compact ? 'w-full rounded-xl' : 'mr-1 mt-1 w-[calc(100%-0.25rem)] rounded-[20px]'} ${thumbnail ? 'bg-slate-900' : video.art}`}>
+    <div className={`relative aspect-video shrink-0 overflow-hidden ${compact ? 'w-full rounded-xl' : 'mr-1 mt-1 w-[calc(100%-0.25rem)] rounded-[20px]'} ${thumbnail ? 'bg-slate-900' : video.art}`}>
       {thumbnail ? (
         <img src={thumbnail} alt="" className="absolute inset-0 h-full w-full object-cover" />
       ) : (
@@ -846,22 +852,22 @@ function CreatorOverview({
       </section>
 
       <section className="mt-5 grid gap-4 md:grid-cols-[1.1fr_.9fr]">
-         <div className="relative overflow-hidden rounded-[22px] border border-blue-100 bg-[#eff4ff] p-6">
+         <div className="relative overflow-hidden rounded-[22px] border border-blue-100 bg-[#eff4ff] p-4">
            <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="safe-card-copy text-xs font-semibold text-slate-500">رصيد الإعلانات</div>
-              <div className="mt-1 text-3xl font-bold tracking-tight text-[#12234b]">${advertiserBalance.toFixed(2)}</div>
-              <div className="safe-card-copy mt-2 text-[11px] leading-4 text-slate-400">متاح لتمويل الحملات القادمة</div>
+              <div className="mt-1 text-2xl font-bold tracking-tight text-[#12234b]">${advertiserBalance.toFixed(2)}</div>
+              <div className="safe-card-copy mt-1.5 text-[10px] leading-4 text-slate-400">متاح لتمويل الحملات القادمة</div>
             </div>
-             <div className="relative grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-white/80 shadow-sm">
-               <WalletArtwork method="balance" size="md" className="h-10 w-10" />
+             <div className="relative grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/80 shadow-sm">
+               <WalletArtwork method="balance" size="md" className="h-7 w-7" />
             </div>
           </div>
            <div className="mt-4 flex min-w-0 items-center gap-2 rounded-xl border border-white/80 bg-white/60 px-3 py-2">
             <WalletArtwork method="web3" size="xs" />
             <span className="safe-card-copy min-w-0 flex-1 text-[10px] font-bold leading-4 text-slate-600">جاهز للتحويل عبر Web3 · Polygon</span>
           </div>
-          <Button type="button" data-testid="button-overview-deposit" onClick={onDeposit} variant="secondary" size="sm" className="mt-6 flex items-center gap-2 bg-white text-xs font-bold text-[#1557ee]">
+           <Button type="button" data-testid="button-overview-deposit" onClick={onDeposit} variant="secondary" size="sm" className="mt-4 flex items-center gap-2 bg-white text-xs font-bold text-[#1557ee]">
             <Plus className="h-4 w-4" /> إيداع رصيد جديد
           </Button>
         </div>
@@ -996,7 +1002,7 @@ function ViewerView({
         </div>
       ) : <div className="browser-watch-list mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {activeVideos.map((video, index) => (
-          <Button type="button" key={video.id} data-testid={`card-reward-${video.id}`} onClick={() => onSelect(video)} variant="unstyled" size="fit" className="group w-full overflow-hidden rounded-[20px] border border-slate-200 bg-white text-right shadow-[var(--shadow-soft)] transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-[var(--shadow-lift)]">
+           <Button type="button" key={video.id} data-testid={`card-reward-${video.id}`} onClick={() => onSelect(video)} variant="unstyled" size="fit" className="group w-full flex-col overflow-hidden rounded-[20px] border border-slate-200 bg-white text-right shadow-[var(--shadow-soft)] transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-[var(--shadow-lift)]">
             <VideoArtwork video={video} />
             <div className="p-4">
               <div className="flex items-center justify-between">
@@ -2185,8 +2191,8 @@ function Home() {
     notify('success', 'تمت إضافة المكافأة', `أضيفت ${video.reward} إلى رصيدك بعد إكمال المدة المطلوبة.`);
   };
 
-  const openWatchInBrowser = (_video: Video) => {
-    const url = createBrowserWatchUrl(telegramUser);
+  const openWatchInBrowser = (video: Video) => {
+    const url = createBrowserWatchUrl(video, telegramUser);
     const webApp = window.Telegram?.WebApp;
     if (webApp?.openLink) {
       webApp.openLink(url, { try_instant_view: false });
@@ -2247,6 +2253,7 @@ function Home() {
 }
 
 function ExternalWatchPage() {
+  const { t, dir } = useLanguage();
   const params = new URLSearchParams(window.location.search);
   const videoId = params.get('v') ?? '';
   const validVideoId = /^[\w-]{11}$/.test(videoId);
@@ -2277,12 +2284,12 @@ function ExternalWatchPage() {
   }
 
   return (
-    <main className="browser-watch-shell browser-watch-page min-h-[100dvh] bg-[#071632] px-4 py-6 text-white sm:px-8 sm:py-10" dir="rtl">
+    <main className="browser-watch-shell browser-watch-page min-h-[100dvh] bg-[#071632] px-4 py-6 text-white sm:px-8 sm:py-10" dir={dir}>
       <div className="mx-auto w-full max-w-5xl">
         <header className="browser-orientation mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/[.04] px-4 py-4 sm:px-6">
           <div className="flex items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#1557ee]"><Play className="h-4 w-4 fill-current" /></span>
-            <div><div className="font-display text-base font-bold">VidReward · المشاهدة</div><div className="mt-1 text-[10px] text-blue-100/60">صفحة فيديو مستقلة للمتصفح</div></div>
+             <div><div className="font-display text-base font-bold">VidReward · {t('مشاهدة الفيديو')}</div><div className="mt-1 text-[10px] text-blue-100/60">{t('صفحة فيديو مستقلة للمتصفح')}</div></div>
           </div>
           {telegramUser && (
             <div className="flex min-w-0 items-center gap-2.5 rounded-xl bg-white/[.06] px-3 py-2">
@@ -2306,29 +2313,29 @@ function ExternalWatchPage() {
           ) : (
             <div className="browser-video-stage flex aspect-video flex-col items-center justify-center px-6 text-center">
               <PlaySquare className="h-12 w-12 text-cyan-300" />
-              <h1 className="mt-4 text-lg font-bold">تعذّر العثور على فيديو YouTube</h1>
-              <p className="mt-2 text-sm leading-6 text-blue-100/60">ارجع إلى VidReward واختر فيديو YouTube نشطًا ثم افتحه في المتصفح.</p>
+               <h1 className="mt-4 text-lg font-bold">{t('تعذّر العثور على فيديو YouTube')}</h1>
+               <p className="mt-2 text-sm leading-6 text-blue-100/60">{t('ارجع إلى VidReward واختر فيديو YouTube نشطًا ثم افتحه في المتصفح.')}</p>
             </div>
           )}
           <div className="browser-video-details flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-7">
             <div className="min-w-0">
-              <h1 className="text-lg font-bold leading-7">{title}</h1>
+               <h1 className="text-lg font-bold leading-7">{t(title)}</h1>
               <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-blue-100/60">
-                <span>{creator}</span>
-                <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" /> {duration} ثانية</span>
-                {reward && <span className="font-bold text-cyan-300">المكافأة المعروضة: {reward}</span>}
+                 <span>{t(creator)}</span>
+                 <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" /> {t(`${duration} ثانية`)}</span>
+                 {reward && <span className="font-bold text-cyan-300">{t('المكافأة المعروضة:')} {reward}</span>}
               </div>
             </div>
             {validVideoId && (
               <Button asChild variant="secondary" size="default" className="flex shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 bg-transparent px-4 py-3 text-xs font-bold text-white transition hover:bg-white/10">
                 <a href={`https://www.youtube.com/watch?v=${videoId}`} target="_blank" rel="noreferrer">
-                  <ExternalLink className="h-4 w-4" /> فتح في YouTube
+                   <ExternalLink className="h-4 w-4" /> {t('فتح في YouTube')}
                 </a>
               </Button>
             )}
           </div>
         </section>
-        <p className="mx-auto mt-5 max-w-2xl text-center text-[11px] leading-6 text-blue-100/50">يمكنك مشاهدة هذا الفيديو هنا مباشرةً. بيانات Telegram المعروضة في الصفحة للتعريف فقط، ولا تُستخدم لتأكيد الهوية أو صرف الأرباح.</p>
+         <p className="mx-auto mt-5 max-w-2xl text-center text-[11px] leading-6 text-blue-100/50">{t('يمكنك مشاهدة هذا الفيديو هنا مباشرةً. بيانات Telegram المعروضة في الصفحة للتعريف فقط، ولا تُستخدم لتأكيد الهوية أو صرف الأرباح.')}</p>
       </div>
     </main>
   );
