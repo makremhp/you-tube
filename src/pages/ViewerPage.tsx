@@ -1,6 +1,7 @@
 import { Clock3, DollarSign, ExternalLink, Film, PlaySquare, ShieldCheck, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
+import { SiYoutube } from 'react-icons/si';
 import {
   calculateViewerReward, formatDuration, formatUsd, VideoArtwork, WalletArtwork,
   type Video,
@@ -107,17 +108,19 @@ export function ViewerView({
         </div>
       ) : <div className="browser-watch-list mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {activeVideos.map((video, index) => (
-          <Button type="button" key={video.id} data-testid={`card-reward-${video.id}`} onClick={() => onSelect(video)} variant="unstyled" size="fit" className={`group flex w-full flex-col items-stretch justify-start overflow-hidden whitespace-normal rounded-[20px] border border-slate-200 bg-white shadow-[var(--shadow-soft)] transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-[var(--shadow-lift)] ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>
-            <VideoArtwork video={video} />
-            <div className="p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-slate-400">فيديو {String(index + 1).padStart(2, '0')}</span>
-                <span className="flex items-center gap-1 rounded-md bg-[#edf3ff] px-2 py-1 text-[10px] font-bold text-[#1557ee]"><Clock3 className="h-3 w-3" /> {formatDuration(video.duration)}</span>
+          <Button type="button" key={video.id} data-testid={`card-reward-${video.id}`} onClick={() => onSelect(video)} variant="unstyled" size="fit" className={`group flex w-full items-stretch overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[var(--shadow-soft)] transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-[var(--shadow-lift)] md:block ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>
+            <div className="my-auto w-[38%] min-w-[112px] max-w-[168px] shrink-0 p-2 md:my-0 md:w-full md:max-w-none md:p-0">
+              <VideoArtwork video={video} compact />
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col justify-between p-3 md:p-4">
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <span className="truncate text-[10px] text-slate-400">فيديو {String(index + 1).padStart(2, '0')}</span>
+                <span className="flex shrink-0 items-center gap-1 rounded-md bg-[#edf3ff] px-2 py-1 text-[10px] font-bold text-[#1557ee]"><Clock3 className="h-3 w-3" /> {formatDuration(video.duration)}</span>
               </div>
-              <h3 className="mt-3 line-clamp-2 text-sm font-bold leading-6 text-[#12234b]">{video.title}</h3>
-              <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
-                <span className="text-[11px] text-slate-400">{video.creator}</span>
-                <span className="text-sm font-bold text-[#159b89]">+ {video.reward}</span>
+              <h3 className="mt-2 line-clamp-2 text-start text-sm font-bold leading-5 text-[#12234b] md:mt-3 md:leading-6">{video.title}</h3>
+              <div className="mt-2 flex min-w-0 items-center justify-between gap-2 border-t border-slate-100 pt-2 md:mt-4 md:pt-3">
+                <span className="min-w-0 truncate text-[10px] text-slate-400 md:text-[11px]">{video.creator}</span>
+                <span className="flex shrink-0 items-center gap-1 text-[12px] font-bold text-[#159b89] md:text-sm"><SiYoutube aria-hidden="true" className="h-3.5 w-3.5 text-[#ff0033]" /> + {video.reward}</span>
               </div>
             </div>
           </Button>
