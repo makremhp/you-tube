@@ -4,7 +4,6 @@ import {
   type ErrorInfo,
   type ReactNode,
 } from 'react';
-import { Button } from '@/components/ui/button';
 
 export interface ErrorFallbackProps {
   error: Error;
@@ -53,15 +52,13 @@ function DefaultFallback({ error, resetError }: ErrorFallbackProps) {
             {error.message || String(error)}
           </pre>
         ) : null}
-        <Button
+        <button
           type="button"
           onClick={resetError}
-          variant="primary"
-          size="sm"
-          className="mt-4 rounded bg-gray-900 text-sm text-white hover:bg-gray-700"
+          className="mt-4 rounded bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700"
         >
           Try again
-        </Button>
+        </button>
       </div>
     </div>
   );
