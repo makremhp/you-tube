@@ -64,7 +64,6 @@ type TelegramWebApp = {
   ready: () => void;
   expand: () => void;
   openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
-  openTelegramLink?: (url: string) => void;
   openInvoice?: (url: string, callback?: (status: 'paid' | 'cancelled' | 'failed' | 'pending') => void) => void;
 };
 
@@ -696,7 +695,7 @@ function VideoArtwork({ video, compact = false }: { video: Video; compact?: bool
   const thumbnail = getVideoThumbnail(video.link);
 
   return (
-    <div className={`relative aspect-video overflow-hidden ${compact ? 'w-full rounded-xl' : 'mr-1 mt-1 w-[calc(100%-0.25rem)] rounded-[20px]'} ${thumbnail ? 'bg-slate-900' : video.art}`}>
+    <div className={`relative aspect-video w-full overflow-hidden ${compact ? 'rounded-xl' : 'rounded-[20px]'} ${thumbnail ? 'bg-slate-900' : video.art}`}>
       {thumbnail ? (
         <img src={thumbnail} alt="" className="absolute inset-0 h-full w-full object-cover" />
       ) : (
