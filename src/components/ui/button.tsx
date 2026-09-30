@@ -12,16 +12,12 @@ const buttonVariants = cva(
         default: 'button-3d button-3d-primary bg-primary text-primary-foreground border border-primary-border',
         primary: 'button-3d button-3d-primary bg-primary text-primary-foreground border border-primary-border',
         primary3d: 'button-3d button-3d-primary bg-primary text-primary-foreground border border-primary-border',
-        destructive:
-          'button-3d button-3d-danger bg-destructive text-destructive-foreground border-destructive-border',
+        destructive: 'button-3d button-3d-danger bg-destructive text-destructive-foreground border-destructive-border',
         danger: 'button-3d button-3d-danger bg-destructive text-destructive-foreground border-destructive-border',
         success: 'button-3d button-3d-success bg-emerald-500 text-white border-emerald-600',
-        outline:
-          'button-3d button-3d-secondary border [border-color:var(--button-outline)] bg-transparent',
-        secondary:
-          'button-3d button-3d-secondary border bg-secondary text-secondary-foreground border-secondary-border',
-        secondary3d:
-          'button-3d button-3d-secondary border bg-secondary text-secondary-foreground border-secondary-border',
+        outline: 'button-3d button-3d-secondary border [border-color:var(--button-outline)] bg-transparent',
+        secondary: 'button-3d button-3d-secondary border bg-secondary text-secondary-foreground border-secondary-border',
+        secondary3d: 'button-3d button-3d-secondary border bg-secondary text-secondary-foreground border-secondary-border',
         ghost: 'button-ghost border border-transparent',
         icon: 'button-3d button-3d-icon border border-slate-200 bg-white text-slate-600',
         small3d: 'button-3d button-3d-secondary border bg-secondary text-secondary-foreground border-secondary-border',
@@ -68,9 +64,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       >
         {loading ? (
           <>
-            <span className="invisible inline-flex items-center gap-2" aria-hidden="true">
-              {children}
-            </span>
+            <span className="invisible inline-flex items-center gap-2" aria-hidden="true">{children}</span>
             <span className="absolute inset-0 inline-flex items-center justify-center gap-2">
               <Loader2 className="animate-spin" aria-hidden="true" />
               {loadingLabel ? <span>{loadingLabel}</span> : null}
