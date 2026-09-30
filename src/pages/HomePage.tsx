@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
 import {
   createBlockchainTxId, createBrowserWatchUrl, createUniqueIdentifier,
-  calculateViewerReward, getCompletedVideoIds, getTelegramUser,
+  calculateViewerReward, formatUsd, getCompletedVideoIds, getTelegramUser,
   getTelegramUserFromHash, initialVideos, readLocalState,
   promotionCampaignsStorageKey, taskProofsStorageKey, ToastViewport, Sidebar,
   Header, WatchPanel,
@@ -215,6 +215,11 @@ export function HomePage() {
     notify('info', 'الإثبات قيد المراجعة', 'تم تسجيل صورة الإثبات محليًا للمراجعة اليدوية.');
   };
 
+  const creditTelegramTask = (_campaignId: string, reward: number) => {
+    setViewerBalance((current) => Number((current + reward).toFixed(4)));
+    notify('success', 'تم التحقق من الاشتراك', `أضيفت ${formatUsd(reward)} إلى رصيدك.`);
+  };
+
   const withdrawEarnings = (record: WithdrawRecord) => {
     setViewerBalance((current) => Number(Math.max(0, current - record.amount).toFixed(4)));
     setWithdrawHistory((current) => [record, ...current]);
@@ -273,7 +278,7 @@ export function HomePage() {
                 : screen === 'withdraw' && mode === 'viewer' ? <WithdrawPage viewerBalance={viewerBalance} telegramUser={telegramUser} onWithdraw={withdrawEarnings} />
                   : screen === 'withdraw-history' && mode === 'viewer' ? <WithdrawHistoryPage records={withdrawHistory} />
                 : screen === 'campaigns' && mode === 'creator' ? <CampaignsPage videos={videos} platformCampaigns={platformCampaigns} telegramUser={telegramUser} tab={tab} onTab={setTab} onAdd={() => setScreen('add')} onWatch={selectVideo} />
-                  : screen === 'telegram-tasks' && mode === 'viewer' ? <PlatformTasksPage platform="telegram" campaigns={platformCampaigns} proofs={taskProofs} onSubmitProof={submitTaskProof} />
+                  : screen === 'telegram-tasks' && mode === 'viewer' ? <PlatformTasksPage platform="telegram" campaigns={platformCampaigns} proofs={taskProofs} onSubmitProof={submitTaskProof} onTaskVerified={creditTelegramTask} />
                     : screen === 'tiktok-tasks' && mode === 'viewer' ? <PlatformTasksPage platform="tiktok" campaigns={platformCampaigns} proofs={taskProofs} onSubmitProof={submitTaskProof} />
                  : screen === 'publish' && mode === 'viewer' ? <PublishingSystemPage telegramUser={telegramUser} />
                 : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} balance={viewerBalance} onWithdraw={() => setScreen('withdraw')} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
@@ -308,7 +313,7 @@ export function HomePage() {
         setWatchSession(null);
       }} />}
       <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
-      <span className="sr-only" data-testid="text-viewer-count">{viewerCount} فيديو متاح</span>
+      <span className="sr-only" data-testid="text-viewer-count">{`${viewerCount} فيديو متاح`}</span>
     </div>
   );
 }

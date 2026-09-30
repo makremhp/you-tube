@@ -19,7 +19,7 @@ export function CreatorOverview({
   onAdd: () => void;
   onDeposit: () => void;
 }) {
-  const { dir, t } = useLanguage();
+  const { dir, t, isArabic } = useLanguage();
   const telegramGoal = platformCampaigns.filter((campaign) => campaign.platform === 'telegram').reduce((total, campaign) => total + campaign.targetCount, 0);
   const tiktokGoal = platformCampaigns.filter((campaign) => campaign.platform === 'tiktok').reduce((total, campaign) => total + campaign.targetCount, 0);
   return (
@@ -45,8 +45,8 @@ export function CreatorOverview({
         <div className="animate-rise delay-3"><StatCard icon={TrendingUp} label={t('متوسط الإكمال')} value="76.4%" change="4.6%" tone="sand" /></div>
       </section>
       <section className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
-        <div className="animate-rise"><StatCard icon={Users} label="هدف مشتركي Telegram" value={telegramGoal.toLocaleString('ar')} change={`${platformCampaigns.filter((campaign) => campaign.platform === 'telegram').length} حملات`} tone="cyan" /></div>
-        <div className="animate-rise delay-1"><StatCard icon={Target} label="هدف متابعي TikTok" value={tiktokGoal.toLocaleString('ar')} change={`${platformCampaigns.filter((campaign) => campaign.platform === 'tiktok').length} حملات`} tone="navy" /></div>
+        <div className="animate-rise"><StatCard icon={Users} label="هدف مشتركي Telegram" value={telegramGoal.toLocaleString(isArabic ? 'ar' : 'en-US')} change={`${platformCampaigns.filter((campaign) => campaign.platform === 'telegram').length} حملات`} tone="cyan" /></div>
+        <div className="animate-rise delay-1"><StatCard icon={Target} label="هدف متابعي TikTok" value={tiktokGoal.toLocaleString(isArabic ? 'ar' : 'en-US')} change={`${platformCampaigns.filter((campaign) => campaign.platform === 'tiktok').length} حملات`} tone="navy" /></div>
       </section>
 
       <section className="mt-5 grid gap-4 md:grid-cols-[1.1fr_.9fr]">

@@ -23,7 +23,7 @@ export function AddPlatformCampaign({
   onBack: () => void;
   onSubmit: (campaign: PromotionCampaign) => void;
 }) {
-  const { dir } = useLanguage();
+  const { dir, isArabic } = useLanguage();
   const [title, setTitle] = useState('');
   const [link, setLink] = useState('');
   const [image, setImage] = useState('');
@@ -98,7 +98,7 @@ export function AddPlatformCampaign({
             <input value={title} onChange={(event) => setTitle(event.target.value)} data-testid="input-platform-campaign-title" maxLength={60} placeholder={isTelegram ? 'مثال: انضم إلى قناتنا التقنية' : 'مثال: تابع محتوى التصميم اليومي'} className="mt-2 w-full rounded-xl border border-slate-200 bg-[#fbfcff] px-4 py-3 text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" />
           </label>
           <label className="mt-5 block text-xs font-bold text-slate-700">
-            رابط {isTelegram ? 'القناة' : 'حساب TikTok'} <span className="text-[#1557ee]">*</span>
+            {isTelegram ? 'رابط القناة' : 'رابط حساب TikTok'} <span className="text-[#1557ee]">*</span>
             <div className="relative mt-2">
               <Link2 className="absolute right-4 top-3.5 h-4 w-4 text-slate-400" />
               <input value={link} onChange={(event) => setLink(event.target.value)} data-testid="input-platform-campaign-link" dir="ltr" placeholder={isTelegram ? 'https://t.me/yourchannel' : 'https://www.tiktok.com/@username'} className="w-full rounded-xl border border-slate-200 bg-[#fbfcff] py-3 pl-4 pr-11 text-left text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" />
@@ -113,7 +113,7 @@ export function AddPlatformCampaign({
             {image && <button type="button" onClick={() => setImage('')} className="mt-2 text-[10px] font-bold text-[#1557ee]">إزالة الصورة</button>}
           </label>
           <div className="mt-7">
-            <div className="flex items-center justify-between"><div><h3 className="text-xs font-bold text-slate-700">باقة {isTelegram ? 'المشتركين' : 'المتابعين'}</h3><p className="mt-1 text-[10px] text-slate-400">اختر الباقة المناسبة لحملتك.</p></div>{isTelegram ? <Users className="h-5 w-5 text-[#168fb8]" /> : <Target className="h-5 w-5 text-[#1557ee]" />}</div>
+            <div className="flex items-center justify-between"><div><h3 className="text-xs font-bold text-slate-700">{isTelegram ? 'باقة المشتركين' : 'باقة المتابعين'}</h3><p className="mt-1 text-[10px] text-slate-400">اختر الباقة المناسبة لحملتك.</p></div>{isTelegram ? <Users className="h-5 w-5 text-[#168fb8]" /> : <Target className="h-5 w-5 text-[#1557ee]" />}</div>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
               {packages.map((item) => <Button key={item.count} type="button" data-testid={`button-package-${platform}-${item.count}`} onClick={() => setSelectedCount(item.count)} variant="unstyled" size="fit" aria-pressed={selectedCount === item.count} className={`w-full rounded-xl border p-3 text-right transition ${selectedCount === item.count ? 'border-[#1557ee] bg-[#edf3ff] text-[#1557ee]' : 'border-slate-200 text-slate-500 hover:border-blue-200'}`}><div className="text-sm font-bold">{item.count}</div><div className="mt-1 text-[10px] opacity-70">${item.price.toFixed(2)}</div></Button>)}
             </div>
@@ -137,7 +137,7 @@ export function AddPlatformCampaign({
               مستخدم حقيقي سيتابع الحساب ويرسل إثباتًا بصورة شاشة. الحسابات المكررة ممنوعة، وسيُراجع إثبات المتابعة يدويًا قبل اعتماد المكافأة.
             </div>
           )}
-          <div className="mt-6 flex items-center justify-between rounded-2xl bg-[#f4f8ff] p-4"><div><div className="text-[11px] text-slate-500">ميزانية الحملة</div><div className="mt-1 text-2xl font-bold text-[#12234b]">${selectedPackage.price.toFixed(2)}</div></div><div className="text-left text-[10px] leading-5 text-slate-400">{selectedPackage.count.toLocaleString('ar')} {isTelegram ? 'مشترك' : 'متابع'}</div></div>
+          <div className="mt-6 flex items-center justify-between rounded-2xl bg-[#f4f8ff] p-4"><div><div className="text-[11px] text-slate-500">ميزانية الحملة</div><div className="mt-1 text-2xl font-bold text-[#12234b]">${selectedPackage.price.toFixed(2)}</div></div><div className="text-left text-[10px] leading-5 text-slate-400">{selectedPackage.count.toLocaleString(isArabic ? 'ar' : 'en-US')} {isTelegram ? 'مشترك' : 'متابع'}</div></div>
           <Button type="button" data-testid={`button-submit-${platform}-campaign`} disabled={!canSubmit} onClick={submit} variant="primary" size="lg" className="mt-7 flex w-full items-center justify-center gap-2 text-sm font-bold disabled:bg-slate-200 disabled:text-slate-400"><Upload className="h-4 w-4" /> نشر الإعلان</Button>
         </section>
 
@@ -148,7 +148,7 @@ export function AddPlatformCampaign({
             <div className="p-4">
               <div className="flex items-start justify-between gap-3"><h3 className="text-sm font-bold text-slate-800">{title || (isTelegram ? 'عنوان القناة' : 'عنوان الحملة')}</h3><span className="shrink-0 rounded-full bg-[#eaf8fd] px-2 py-1 text-[9px] font-bold text-[#168fb8]">{isTelegram ? 'Telegram' : 'TikTok'}</span></div>
               <p className="mt-2 truncate text-[10px] text-slate-400" dir="ltr">{link || (isTelegram ? 't.me/yourchannel' : 'tiktok.com/@username')}</p>
-              <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-[10px]"><span className="font-bold text-[#159b89]">{isTelegram ? '$0.02' : '$0.01'}</span><span className="text-slate-400">{selectedPackage.count.toLocaleString('ar')} {isTelegram ? 'مشترك' : 'متابع'}</span></div>
+              <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-[10px]"><span className="font-bold text-[#159b89]">{isTelegram ? '$0.02' : '$0.01'}</span><span className="text-slate-400">{selectedPackage.count.toLocaleString(isArabic ? 'ar' : 'en-US')} {isTelegram ? 'مشترك' : 'متابع'}</span></div>
             </div>
           </div>
         </section>

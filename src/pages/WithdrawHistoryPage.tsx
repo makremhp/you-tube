@@ -17,7 +17,7 @@ export function WithdrawHistoryPage({ records }: { records: WithdrawRecord[] }) 
       <section className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[var(--shadow-soft)]">
         <div className="flex h-[60px] items-center justify-between border-b border-slate-100 px-5 md:px-6">
           <div className="flex min-w-0 items-center gap-2.5"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-[#eafbf8] text-[#159b89]"><ArrowUpLeft className="h-3.5 w-3.5" /></span><div className="min-w-0"><h2 className="truncate text-sm font-bold text-[#12234b]">طلبات السحب</h2><p className="mt-0.5 truncate text-[9px] text-slate-400">المبلغ · الطريقة · الوجهة · الحالة</p></div></div>
-          <span className="rounded-lg bg-[#eafbf8] px-2 py-1 text-[9px] font-bold text-[#159b89]">{records.length} طلبات</span>
+          <span className="rounded-lg bg-[#eafbf8] px-2 py-1 text-[9px] font-bold text-[#159b89]">{`${records.length} طلبات`}</span>
         </div>
         {records.length > 0 ? records.map((record) => <CompactHistoryRow key={record.id} record={record} kind="withdraw" />) : <div className="flex flex-col items-center justify-center px-6 py-12 text-center"><WalletArtwork method="binance" size="md" /><div className="mt-2 text-sm font-bold text-[#12234b]">لا توجد طلبات سحب بعد</div><p className="mt-1 max-w-xs text-[11px] leading-5 text-slate-400">ستظهر هنا طلبات السحب مع وجهتها وحالة التحويل.</p></div>}
       </section>

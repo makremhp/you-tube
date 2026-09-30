@@ -28,7 +28,7 @@ export function CampaignsPage({
   onWatch: (video: Video) => void;
 }) {
   const [spendPeriod, setSpendPeriod] = useState<'آخر ٧ أيام' | 'آخر ٣٠ يومًا'>('آخر ٧ أيام');
-  const { dir } = useLanguage();
+  const { dir, isArabic } = useLanguage();
   const visibleVideos = videos.filter((video) => tab === 'all' || (tab === 'active' ? video.status === 'نشط' : video.status === 'مسودة'));
   const visiblePlatformCampaigns = platformCampaigns.filter((campaign) => tab === 'all' || (tab === 'active' ? campaign.status === 'نشط' : campaign.status !== 'نشط'));
   return (
@@ -129,7 +129,7 @@ export function CampaignsPage({
                   <h3 className="mt-1 truncate text-sm font-bold text-slate-800">{campaign.title}</h3>
                   <div className="mt-2 flex items-center gap-3 text-[10px] text-slate-400">
                     <span>{campaign.platform === 'telegram' ? 'Telegram' : 'TikTok'}</span>
-                    <span>{campaign.targetCount.toLocaleString('ar')} {campaign.platform === 'telegram' ? 'مشترك' : 'متابع'}</span>
+                    <span>{campaign.targetCount.toLocaleString(isArabic ? 'ar' : 'en-US')} {campaign.platform === 'telegram' ? 'مشترك' : 'متابع'}</span>
                   </div>
                 </div>
                 <div className="hidden text-left sm:block">
@@ -143,7 +143,7 @@ export function CampaignsPage({
             )))}
           </div>
           <div className="flex items-center justify-between border-t border-slate-100 px-5 py-4">
-            <span className="text-[11px] text-slate-400">عرض {visibleVideos.length + visiblePlatformCampaigns.length} من {videos.length + platformCampaigns.length} إعلاناً</span>
+            <span className="text-[11px] text-slate-400">{`عرض ${visibleVideos.length + visiblePlatformCampaigns.length} من ${videos.length + platformCampaigns.length} إعلاناً`}</span>
             <Button type="button" data-testid="button-view-all-videos" onClick={() => onTab('all')} variant="ghost" size="fit" className="flex items-center gap-1 text-xs font-bold text-[#1557ee]">عرض الكل <ArrowDownLeft className="h-3.5 w-3.5" /></Button>
           </div>
         </div>

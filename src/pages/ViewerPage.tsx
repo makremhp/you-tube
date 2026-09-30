@@ -107,7 +107,7 @@ export function ViewerView({
         </div>
       ) : <div className="browser-watch-list mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {activeVideos.map((video, index) => (
-          <Button type="button" key={video.id} data-testid={`card-reward-${video.id}`} onClick={() => onSelect(video)} variant="unstyled" size="fit" className={`group w-full overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[var(--shadow-soft)] transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-[var(--shadow-lift)] ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>
+          <Button type="button" key={video.id} data-testid={`card-reward-${video.id}`} onClick={() => onSelect(video)} variant="unstyled" size="fit" className={`group flex w-full flex-col items-stretch justify-start overflow-hidden whitespace-normal rounded-[20px] border border-slate-200 bg-white shadow-[var(--shadow-soft)] transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-[var(--shadow-lift)] ${dir === 'rtl' ? 'text-right' : 'text-left'}`}>
             <VideoArtwork video={video} />
             <div className="p-4">
               <div className="flex items-center justify-between">
