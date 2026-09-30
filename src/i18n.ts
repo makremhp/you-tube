@@ -4,6 +4,9 @@ export type Language = 'ar' | 'en';
 
 export function getBrowserLanguage(): Language {
   if (typeof navigator === 'undefined') return 'en';
+  const documentLanguage = typeof document === 'undefined' ? '' : document.documentElement.lang.toLowerCase();
+  if (documentLanguage.startsWith('ar')) return 'ar';
+  if (documentLanguage.startsWith('en')) return 'en';
   const languages = navigator.languages?.length ? navigator.languages : [navigator.language];
   const preferredSupportedLanguage = languages.find((value) => {
     const normalized = value?.toLowerCase() ?? '';
