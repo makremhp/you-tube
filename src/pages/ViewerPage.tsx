@@ -3,15 +3,13 @@ import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
 import { SiYoutube } from 'react-icons/si';
 import {
-  calculateViewerReward, formatDuration, formatUsd, VideoArtwork, WalletArtwork,
+  calculateViewerReward, formatDuration, formatUsd, VideoArtwork,
   type Video,
 } from '@/legacy/shared';
 
 export function ViewerView({
   videos,
   onSelect,
-  balance,
-  onWithdraw,
   insideTelegram,
   onOpenBrowser,
   completedVideoIds,
@@ -19,8 +17,6 @@ export function ViewerView({
 }: {
   videos: Video[];
   onSelect: (video: Video) => void;
-  balance: number;
-  onWithdraw: () => void;
   insideTelegram: boolean;
   onOpenBrowser: (video: Video) => void;
   completedVideoIds: Set<number>;
@@ -52,20 +48,6 @@ export function ViewerView({
           <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-slate-500 sm:text-[11px]">إجمالي المكافآت</span>
           <strong className="shrink-0 text-[13px] font-bold tabular-nums text-[#159b89]" aria-label={`${formatUsd(totalVideoRewards)} إجمالي المكافآت`}>{formatUsd(totalVideoRewards)}</strong>
         </div>
-      </section>
-      <section className="mb-5 flex flex-col gap-4 rounded-[22px] border border-blue-100 bg-white p-5 shadow-[var(--shadow-soft)] sm:flex-row sm:items-center sm:justify-between md:p-6">
-        <div className="flex items-center gap-4">
-          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-[#eef4ff]">
-            <WalletArtwork method="balance" size="md" className="h-12 w-12" />
-          </div>
-          <div>
-            <div className="text-xs font-semibold text-slate-400">رصيدك القابل للسحب</div>
-            <div className="mt-1 text-2xl font-bold tracking-tight text-[#12234b]">{formatUsd(balance)}</div>
-          </div>
-        </div>
-        <Button type="button" data-testid="button-withdraw" onClick={onWithdraw} disabled={balance <= 0} variant="secondary" size="default" className="flex items-center justify-center gap-2 border-[#1557ee] text-xs font-bold text-[#1557ee] disabled:border-slate-200 disabled:text-slate-300">
-          <WalletArtwork method="balance" size="xs" className="h-7 w-7" /> سحب الأرباح
-        </Button>
       </section>
       {insideTelegram ? (
         <section className="animate-rise mx-auto mt-8 flex min-h-[340px] max-w-3xl flex-col items-center justify-center rounded-[26px] border border-blue-100 bg-white px-6 py-10 text-center shadow-[var(--shadow-soft)] md:px-10">

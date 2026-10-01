@@ -286,8 +286,8 @@ export function HomePage() {
                       : screen === 'tiktok-task' && mode === 'viewer' && selectedTikTokTask ? <TikTokTaskPage campaign={selectedTikTokTask} proof={taskProofs.find((item) => item.campaignId === selectedTikTokTask.id)} onSubmitProof={submitTaskProof} onBack={() => setScreen('tiktok-tasks')} />
                         : screen === 'ads' && mode === 'viewer' ? <main data-testid="page-ads" aria-label="Ads" className="min-h-[calc(100dvh-7rem)]" />
                  : screen === 'publish' && mode === 'viewer' ? <PublishingSystemPage telegramUser={telegramUser} />
-                : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} balance={viewerBalance} onWithdraw={() => setScreen('withdraw')} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
-                   : <CreatorOverview advertiserBalance={advertiserBalance} telegramUser={telegramUser} platformCampaigns={platformCampaigns} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
+                : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
+                   : <CreatorOverview telegramUser={telegramUser} platformCampaigns={platformCampaigns} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
           {!browserEarningPage && <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 p-2 backdrop-blur lg:hidden">
              <div className={`mx-auto grid max-w-md ${mode === 'viewer' ? 'grid-cols-5' : 'grid-cols-4'} items-end gap-1`}>
               {mode === 'creator' ? (
