@@ -5,12 +5,26 @@ import NotFound from '@/pages/not-found';
 import { ExternalWatchPage } from '@/pages/ExternalWatchPage';
 import { HomePage } from '@/pages/HomePage';
 
-export function Router() {
+type RouterProps = {
+  initialMode: 'creator' | 'viewer';
+  initialScreen: 'watch' | 'add' | null;
+  onModeChange: (mode: 'creator' | 'viewer') => void;
+};
+
+export function Router({ initialMode, initialScreen, onModeChange }: RouterProps) {
   return (
     <RoutedErrorBoundary>
       <Switch>
         <Route path="/watch" component={ExternalWatchPage} />
-        <Route path="/" component={HomePage} />
+        <Route path="/">
+          {() => (
+            <HomePage
+              initialMode={initialMode}
+              initialScreen={initialScreen}
+              onModeChange={onModeChange}
+            />
+          )}
+        </Route>
         <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>

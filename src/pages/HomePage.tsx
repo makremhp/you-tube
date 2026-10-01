@@ -29,11 +29,19 @@ import { ViewerView } from '@/pages/ViewerPage';
 import { WithdrawPage } from '@/pages/WithdrawPage';
 import { AdsPage } from '@/pages/AdsPage';
 
-export function HomePage() {
+type HomePageProps = {
+  initialMode: 'creator' | 'viewer';
+  initialScreen: 'watch' | 'add' | null;
+  onModeChange: (mode: 'creator' | 'viewer') => void;
+};
+
+export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageProps) {
   const { t } = useLanguage();
   const [browserEarningPage] = useState(() => new URLSearchParams(window.location.search).get('view') === 'earn');
-  const [mode, setMode] = useState<'creator' | 'viewer'>(() => browserEarningPage ? 'viewer' : 'creator');
-  const [screen, setScreen] = useState<AppScreen>(() => browserEarningPage ? 'watch' : 'overview');
+  const [mode, setMode] = useState<'creator' | 'viewer'>(() => browserEarningPage ? 'viewer' : initialMode);
+  const [screen, setScreen] = useState<AppScreen>(() => browserEarningPage
+    ? 'watch'
+    : initialScreen ?? (initialMode === 'viewer' ? 'watch' : 'overview'));
   const [telegramUser, setTelegramUser] = useState<TelegramUser | null>(() => getTelegramUser() ?? getTelegramUserFromHash());
   const [insideTelegram, setInsideTelegram] = useState(() => !browserEarningPage && Boolean(window.Telegram?.WebApp?.initData));
   const [videos, setVideos] = useState<Video[]>(initialVideos);
@@ -274,13 +282,25 @@ export function HomePage() {
     }
   };
 
+  const changeMode = (nextMode: 'creator' | 'viewer') => {
+    setMode(nextMode);
+    setScreen(nextMode === 'creator' ? 'overview' : 'watch');
+    onModeChange(nextMode);
+  };
+
+  const openAdvertiserCampaignForm = () => {
+    setMode('creator');
+    setScreen('add');
+    onModeChange('creator');
+  };
+
   return (
     <div className="min-h-[100dvh] bg-[#f7f9fc] text-[#12234b]">
       <div className={`flex min-h-[100dvh] ${browserEarningPage ? '' : 'lg:gap-5 lg:p-5'}`}>
-        {!browserEarningPage && <Sidebar mode={mode} screen={screen} telegramUser={telegramUser} onModeChange={(nextMode) => { setMode(nextMode); setScreen(nextMode === 'creator' ? 'overview' : 'watch'); }} onNavigate={setScreen} onAdd={() => { setMode('creator'); setScreen('add'); }} open={mobileMenu} onClose={() => setMobileMenu(false)} />}
+        {!browserEarningPage && <Sidebar mode={mode} screen={screen} telegramUser={telegramUser} onModeChange={changeMode} onNavigate={setScreen} onAdd={openAdvertiserCampaignForm} open={mobileMenu} onClose={() => setMobileMenu(false)} />}
         {!browserEarningPage && mobileMenu && <Button type="button" aria-label="إغلاق خلفية القائمة" data-testid="button-close-menu-overlay" onClick={() => setMobileMenu(false)} variant="unstyled" size="fit" className="fixed inset-0 z-40 bg-[#061333]/30 backdrop-blur-sm lg:hidden" />}
         <div className={`min-w-0 flex-1 ${browserEarningPage ? '' : 'overflow-hidden rounded-none bg-[#f7f9fc] lg:rounded-[26px] lg:border lg:border-slate-200/80 lg:bg-[#fbfcfe]'}`}>
-          {!browserEarningPage && <Header mode={mode} screen={screen} telegramUser={telegramUser} onMenu={() => setMobileMenu(true)} onAdd={() => { setMode('creator'); setScreen('add'); }} />}
+          {!browserEarningPage && <Header mode={mode} screen={screen} telegramUser={telegramUser} onMenu={() => setMobileMenu(true)} onAdd={openAdvertiserCampaignForm} />}
           {screen === 'add' && mode === 'creator' ? <AddVideo telegramUser={telegramUser} onBack={() => setScreen('campaigns')} onPromotionSubmit={addPromotionCampaign} onSubmit={(video) => { addVideo(video); notify('success', 'تم نشر الإعلان', 'أصبح الفيديو نشطًا ويمكن للمشاهدين اكتشافه الآن.'); }} />
             : screen === 'deposit' && mode === 'creator' ? <DepositPage advertiserBalance={advertiserBalance} telegramUser={telegramUser} onDepositRequested={requestDeposit} onDepositCompleted={completeDeposit} onDepositExpired={expireDeposit} />
               : screen === 'deposit-history' && mode === 'creator' ? <DepositHistoryPage records={depositHistory} />
