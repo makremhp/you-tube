@@ -675,7 +675,7 @@ function StatCard({
   icon: typeof Eye;
   label: string;
   value: string;
-  change: string;
+  change?: string;
   tone: 'blue' | 'cyan' | 'navy' | 'sand';
 }) {
   const tones = {
@@ -688,7 +688,7 @@ function StatCard({
     <div className="rounded-[20px] border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)] transition hover:-translate-y-1 hover:shadow-[var(--shadow-lift)]">
       <div className="flex items-start justify-between">
         <div className={`grid h-10 w-10 place-items-center rounded-xl ${tones[tone]}`}><StatIcon className="h-[19px] w-[19px]" /></div>
-        <span className="flex items-center gap-0.5 text-[10px] font-bold text-[#13a18c]"><ArrowUpLeft className="h-3 w-3" /> {change}</span>
+        {change && <span className="flex items-center gap-0.5 text-[10px] font-bold text-[#13a18c]"><ArrowUpLeft className="h-3 w-3" /> {change}</span>}
       </div>
       <div className="mt-5 text-[12px] font-medium text-slate-400">{label}</div>
       <div className="mt-1 text-[25px] font-bold tracking-tight text-[#12234b]">{value}</div>
