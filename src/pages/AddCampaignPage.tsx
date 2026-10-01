@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import {
   AlertCircle, ArrowDownLeft, Check, CheckCircle2, Clock3, Film, Image as ImageIcon, Link2, LoaderCircle, Play, ShieldCheck,
-  PlaySquare, Target, Upload, Users,
+  PlaySquare, Upload,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
-import { SiTelegram, SiTiktok } from 'react-icons/si';
+import { SiTelegram, SiTiktok, SiYoutube } from 'react-icons/si';
 import {
   calculateViewerReward, createUniqueIdentifier, durationOptions, formatDuration,
   formatUsd, getEmbedUrl, getUserDisplayName, PlatformSelector,
@@ -155,7 +155,7 @@ export function AddPlatformCampaign({
             {image && <button type="button" onClick={() => setImage('')} className="mt-2 text-[10px] font-bold text-[#1557ee]">إزالة الصورة</button>}
           </label>
           <div className="mt-7">
-            <div className="flex items-center justify-between"><div><h3 className="text-xs font-bold text-slate-700">باقة {isTelegram ? 'المشتركين' : 'المتابعين'}</h3><p className="mt-1 text-[10px] text-slate-400">اختر الباقة المناسبة لحملتك.</p></div>{isTelegram ? <Users className="h-5 w-5 text-[#168fb8]" /> : <Target className="h-5 w-5 text-[#1557ee]" />}</div>
+            <div className="flex items-center justify-between"><div><h3 className="text-xs font-bold text-slate-700">باقة {isTelegram ? 'المشتركين' : 'المتابعين'}</h3><p className="mt-1 text-[10px] text-slate-400">اختر الباقة المناسبة لحملتك.</p></div><PlatformIcon aria-hidden="true" className={`h-5 w-5 ${isTelegram ? 'text-[#229ED9]' : 'text-[#111111]'}`} /></div>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
               {packages.map((item) => <Button key={item.count} type="button" data-testid={`button-package-${platform}-${item.count}`} onClick={() => setSelectedCount(item.count)} variant="unstyled" size="fit" aria-pressed={selectedCount === item.count} className={`w-full rounded-xl border p-3 text-right transition ${selectedCount === item.count ? 'border-[#1557ee] bg-[#edf3ff] text-[#1557ee]' : 'border-slate-200 text-slate-500 hover:border-blue-200'}`}><div className="text-sm font-bold">{item.count}</div><div className="mt-1 text-[10px] opacity-70">${item.price.toFixed(2)}</div></Button>)}
             </div>
@@ -170,7 +170,6 @@ export function AddPlatformCampaign({
                 <div className="min-w-0 flex-1">
                   <h3 className="text-xs font-bold text-[#12234b]">تحقق تلقائي من البوت</h3>
                   <p role="status" className="mt-1 text-[10px] leading-5 text-slate-600">{botCheckMessage || 'أدخل رابط القناة؛ سيتحقق الخادم من أن البوت مضبوط ومشرف فيها.'}</p>
-                  <p className="mt-1 text-[10px] leading-5 text-slate-400">يُحفظ توكن البوت على الخادم في TELEGRAM_BOT_TOKEN ولا يُرسل إلى المتصفح.</p>
                 </div>
                 {botCheckStatus === 'error' && validLink && <Button type="button" data-testid="button-retry-telegram-bot-check" onClick={() => void verifyTelegramBot(link)} variant="secondary" size="sm" className="shrink-0 border-slate-200 bg-white text-[10px] font-bold">إعادة التحقق</Button>}
               </div>
@@ -258,7 +257,7 @@ export function AddVideo({
   return (
     <main className="mx-auto w-full max-w-[1180px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir={dir}>
       <PlatformSelector selected={selectedPlatform} onSelect={setSelectedPlatform} />
-      <div className="mb-7 flex items-center gap-3"><Button type="button" data-testid="button-back-add" onClick={onBack} variant="icon" size="icon" className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:border-blue-200 hover:text-[#1557ee]" aria-label={t('العودة')}><ArrowDownLeft className="h-4 w-4" /></Button><div><div className="text-xs font-semibold text-[#1557ee]">{t('نشر إعلان / إعلان جديد')}</div><h1 className="mt-1 font-display text-2xl font-bold text-[#12234b]">{t('انشر إعلانك')}</h1></div></div>
+      <div className="mb-7 flex items-center gap-3"><Button type="button" data-testid="button-back-add" onClick={onBack} variant="icon" size="icon" className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:border-blue-200 hover:text-[#1557ee]" aria-label={t('العودة')}><ArrowDownLeft className="h-4 w-4" /></Button><div><div className="flex items-center gap-1.5 text-xs font-semibold text-[#1557ee]"><SiYoutube aria-hidden="true" className="h-3.5 w-3.5 text-[#FF0000]" />{t('نشر إعلان / إعلان جديد')}</div><h1 className="mt-1 font-display text-2xl font-bold text-[#12234b]">{t('انشر إعلانك')}</h1></div></div>
       <div className="grid gap-5 xl:grid-cols-[1fr_400px]">
         <section className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)] md:p-7">
           <div className="mb-7"><h2 className="font-display text-lg font-bold text-[#12234b]">{t('تفاصيل الفيديو')}</h2><p className="mt-1 text-xs text-slate-400">{t('أخبر المشاهدين لماذا يستحق هذا الفيديو وقتهم.')}</p></div>
