@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentType, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Button } from '@/components/ui/button';
@@ -671,12 +671,14 @@ function StatCard({
   value,
   change,
   tone,
+  iconClassName = '',
 }: {
-  icon: typeof Eye;
+  icon: ComponentType<{ className?: string; 'aria-hidden'?: boolean }>;
   label: string;
   value: string;
   change?: string;
   tone: 'blue' | 'cyan' | 'navy' | 'sand';
+  iconClassName?: string;
 }) {
   const tones = {
     blue: 'bg-[#eff4ff] text-[#1557ee]',
@@ -687,7 +689,7 @@ function StatCard({
   return (
     <div className="rounded-[20px] border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)] transition hover:-translate-y-1 hover:shadow-[var(--shadow-lift)]">
       <div className="flex items-start justify-between">
-        <div className={`grid h-10 w-10 place-items-center rounded-xl ${tones[tone]}`}><StatIcon className="h-[19px] w-[19px]" /></div>
+        <div className={`grid h-10 w-10 place-items-center rounded-xl ${tones[tone]}`}><StatIcon aria-hidden={true} className={`h-[19px] w-[19px] ${iconClassName}`} /></div>
         {change && <span className="flex items-center gap-0.5 text-[10px] font-bold text-[#13a18c]"><ArrowUpLeft className="h-3 w-3" /> {change}</span>}
       </div>
       <div className="mt-5 text-[12px] font-medium text-slate-400">{label}</div>
