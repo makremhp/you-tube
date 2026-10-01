@@ -1,5 +1,5 @@
-import { useEffect, useState, type ChangeEvent } from 'react';
-import { ArrowUpRight, CheckCircle2, Clock3, ExternalLink, ImagePlus, LoaderCircle, ShieldCheck } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowRight, CheckCircle2, Clock3, ExternalLink, ImageIcon, LoaderCircle, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
 import type { PromotionCampaign, PromotionPlatform, TaskProof } from '@/legacy/shared';
@@ -19,13 +19,13 @@ export function PlatformTasksPage({
   platform,
   campaigns,
   proofs,
-  onSubmitProof,
+  onStartTask,
   telegramUserId,
 }: {
   platform: PromotionPlatform;
   campaigns: PromotionCampaign[];
   proofs: TaskProof[];
-  onSubmitProof: (campaignId: string, image: string) => void;
+  onStartTask?: (campaign: PromotionCampaign) => void;
   telegramUserId: number | null;
 }) {
   const { dir } = useLanguage();
@@ -46,21 +46,6 @@ export function PlatformTasksPage({
   const [joiningId, setJoiningId] = useState('');
   const [returnedIds, setReturnedIds] = useState<Record<string, boolean>>({});
   const [verification, setVerification] = useState<Record<string, TaskVerification>>({});
-  const [proofImages, setProofImages] = useState<Record<string, string>>({});
-
-  const handleProofImage = (taskId: string, event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !file.type.startsWith('image/')) return;
-    if (file.size > 2_000_000) {
-      window.alert('حجم الإثبات يجب أن يكون أقل من 2 ميغابايت.');
-      event.target.value = '';
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => setProofImages((current) => ({ ...current, [taskId]: String(reader.result ?? '') }));
-    reader.readAsDataURL(file);
-  };
-
   const verifyMembership = async (task: PromotionCampaign) => {
     const initData = window.Telegram?.WebApp?.initData;
     if (!initData) {
@@ -135,8 +120,10 @@ export function PlatformTasksPage({
             return (
               <article key={task.id} data-testid={`task-${platform}-${task.id}`} className="h-[60px] max-h-[60px] overflow-hidden rounded-2xl border border-slate-200 bg-white px-2 shadow-[var(--shadow-soft)] transition hover:border-[#b9e6f5] hover:shadow-[var(--shadow-lift)] sm:px-3">
                 <div className="flex h-full min-w-0 items-center gap-2">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#eaf8fd] text-[#229ED9]">
-                    <SiTelegram aria-hidden="true" className="h-5 w-5" />
+                  <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full bg-[#eaf8fd] text-[#229ED9] sm:h-12 sm:w-12">
+                    {task.image
+                      ? <img src={task.image} alt={`صورة حملة ${task.title}`} className="h-full w-full object-cover" />
+                      : <ImageIcon aria-hidden="true" className="h-4 w-4 text-slate-400" />}
                   </span>
                   <div className="min-w-0 flex-1">
                     <h2 className="truncate text-[11px] font-bold leading-4 text-[#12234b]">{task.title}</h2>
@@ -163,56 +150,31 @@ export function PlatformTasksPage({
             );
           }
           return (
-            <article key={task.id} data-testid={`task-${platform}-${task.id}`} className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-[var(--shadow-soft)] transition hover:border-blue-200 hover:shadow-[var(--shadow-lift)]">
-              <div className="p-4 sm:p-5">
-                <div className="flex items-start gap-3">
-                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-slate-100 text-[#111111]">
-                    <SiTiktok aria-hidden="true" className="h-5 w-5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-600">حساب TikTok</span>
-                      <span className="rounded-full bg-[#eafbf8] px-2 py-0.5 text-[9px] font-bold text-[#159b89]">متابعة</span>
-                    </div>
-                    <h2 className="line-clamp-2 text-sm font-bold leading-5 text-[#12234b]">{task.title}</h2>
-                    <a href={task.link} target="_blank" rel="noreferrer" dir="ltr" className="mt-1 block truncate text-left text-[10px] text-slate-400">{task.link}</a>
-                  </div>
-                  <span className="shrink-0 rounded-full bg-[#eafbf8] px-2.5 py-1 text-[10px] font-bold text-[#159b89]">{isTelegram ? '$0.02' : '$0.01'}</span>
+            <article key={task.id} data-testid={`task-${platform}-${task.id}`} className="h-[70px] max-h-[70px] overflow-hidden rounded-2xl border border-slate-200 bg-white px-2 shadow-[var(--shadow-soft)] transition hover:border-blue-200 hover:shadow-[var(--shadow-lift)] sm:px-3">
+              <div className="flex h-full min-w-0 items-center gap-2 sm:gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-slate-200 bg-[#f2f5f8] sm:h-12 sm:w-12">
+                  {task.image
+                    ? <img src={task.image} alt={`صورة حملة ${task.title}`} className="h-full w-full object-cover" />
+                    : <ImageIcon aria-hidden="true" className="h-4 w-4 text-slate-400" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h2 className="truncate text-[11px] font-bold leading-4 text-[#12234b] sm:text-xs">{task.title}</h2>
+                  <p className={`truncate text-[9px] leading-3 ${proof ? 'font-semibold text-[#2456b8]' : 'text-slate-400'}`} dir="ltr">
+                    {proof ? 'الإثبات قيد المراجعة' : `${task.targetCount.toLocaleString()} متابع · ${task.link}`}
+                  </p>
                 </div>
-                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-[10px] text-slate-400">
-                  <span>هدف المتابعة</span>
-                  <span className="font-semibold text-slate-600">{task.targetCount.toLocaleString()} متابع <span className="mx-1 text-slate-300">·</span> $0.01 لكل متابعة</span>
-                </div>
-              </div>
-              <div className="border-t border-slate-100 bg-[#fbfcff] px-4 py-4 sm:px-5">
-                {proof ? (
-                  <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-white p-3">
-                    <img src={proof.image} alt="إثبات المتابعة" className="h-12 w-16 shrink-0 rounded-lg object-cover" />
-                    <div className="min-w-0"><p className="flex items-center gap-1.5 text-xs font-bold text-[#2456b8]"><Clock3 className="h-3.5 w-3.5" /> قيد المراجعة</p><p className="mt-1 text-[10px] leading-4 text-slate-400">وصل الإثبات، وسيُراجع قبل اعتماد المكافأة.</p></div>
-                  </div>
-                ) : (
-                  <div className="grid gap-3 sm:grid-cols-[1fr_1fr]">
-                    <div className="flex flex-col gap-2">
-                      <Button type="button" data-testid={`button-open-${task.id}`} onClick={() => window.open(task.link, '_blank', 'noopener,noreferrer')} variant="secondary" size="sm" className="justify-center gap-2 border-slate-200 bg-white text-xs font-bold text-[#12234b]">
-                        <ArrowUpRight className="h-3.5 w-3.5" /> افتح حساب TikTok
-                      </Button>
-                      <div className="flex items-start gap-2 rounded-xl bg-white p-3 text-[10px] leading-5 text-slate-500">
-                        <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-slate-100 font-bold text-slate-600">1</span>
-                        <span>تابع الحساب ثم التقط صورة تظهر اسم الحساب بوضوح.</span>
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white px-3 py-2 text-center text-[10px] font-bold text-slate-600 transition hover:border-[#1557ee] hover:text-[#1557ee]">
-                        <ImagePlus className="h-4 w-4 text-[#1557ee]" /> {proofImages[task.id] ? 'تم اختيار صورة الإثبات' : 'اختر صورة الإثبات'}
-                        <input type="file" data-testid={`input-proof-${task.id}`} accept="image/*" onChange={(event) => handleProofImage(task.id, event)} className="sr-only" />
-                      </label>
-                      <Button type="button" data-testid={`button-submit-proof-${task.id}`} disabled={!proofImages[task.id]} onClick={() => onSubmitProof(task.id, proofImages[task.id])} variant="primary" size="sm" className="justify-center gap-2 text-xs font-bold disabled:opacity-50">
-                        <ShieldCheck className="h-3.5 w-3.5" /> أرسل الإثبات للمراجعة
-                      </Button>
-                    </div>
-                    {proofImages[task.id] && <img src={proofImages[task.id]} alt="معاينة صورة الإثبات" className="col-span-full h-36 w-full rounded-xl border border-slate-200 object-cover" />}
-                  </div>
-                )}
+                <span className="shrink-0 rounded-full bg-[#eafbf8] px-2 py-1 text-[9px] font-bold text-[#159b89]">$0.01</span>
+                <Button
+                  type="button"
+                  data-testid={`button-start-${task.id}`}
+                  onClick={() => onStartTask?.(task)}
+                  variant="secondary"
+                  size="fit"
+                  className="flex h-9 min-w-[74px] shrink-0 items-center justify-center gap-1 rounded-lg border-[#c9e9f4] bg-white px-2 text-[9px] font-bold text-[#147fa7] transition hover:border-[#229ed9] hover:bg-[#effaff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#229ed9]"
+                >
+                  <ArrowRight className="h-3.5 w-3.5" />
+                  ابدأ المهمة
+                </Button>
               </div>
             </article>
           );
