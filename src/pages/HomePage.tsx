@@ -27,6 +27,7 @@ import { TikTokTaskPage } from '@/pages/TikTokTaskPage';
 import { PublishingSystemPage } from '@/pages/PublishingPage';
 import { ViewerView } from '@/pages/ViewerPage';
 import { WithdrawPage } from '@/pages/WithdrawPage';
+import { AdsPage } from '@/pages/AdsPage';
 
 export function HomePage() {
   const { t } = useLanguage();
@@ -258,6 +259,11 @@ export function HomePage() {
     notify('success', 'تمت إضافة المكافأة', `أضيفت ${video.reward} إلى رصيدك بعد إكمال المدة المطلوبة.`);
   };
 
+  const creditAdReward = (amount: number, title: string, message: string) => {
+    setViewerBalance((current) => Number((current + amount).toFixed(4)));
+    notify('success', title, message);
+  };
+
   const openWatchInBrowser = (_video: Video) => {
     const url = createBrowserWatchUrl(telegramUser);
     const webApp = window.Telegram?.WebApp;
@@ -284,7 +290,7 @@ export function HomePage() {
                   : screen === 'telegram-tasks' && mode === 'viewer' ? <PlatformTasksPage platform="telegram" campaigns={platformCampaigns} proofs={taskProofs} telegramUserId={telegramUser?.id ?? null} />
                     : screen === 'tiktok-tasks' && mode === 'viewer' ? <PlatformTasksPage platform="tiktok" campaigns={platformCampaigns} proofs={taskProofs} onStartTask={openTikTokTask} telegramUserId={telegramUser?.id ?? null} />
                       : screen === 'tiktok-task' && mode === 'viewer' && selectedTikTokTask ? <TikTokTaskPage campaign={selectedTikTokTask} proof={taskProofs.find((item) => item.campaignId === selectedTikTokTask.id)} onSubmitProof={submitTaskProof} onBack={() => setScreen('tiktok-tasks')} />
-                        : screen === 'ads' && mode === 'viewer' ? <main data-testid="page-ads" aria-label="Ads" className="min-h-[calc(100dvh-7rem)]" />
+                         : screen === 'ads' && mode === 'viewer' ? <AdsPage key={telegramUser?.id ?? 'guest'} userId={telegramUser?.id ?? null} onReward={creditAdReward} />
                  : screen === 'publish' && mode === 'viewer' ? <PublishingSystemPage telegramUser={telegramUser} />
                 : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
                    : <CreatorOverview telegramUser={telegramUser} platformCampaigns={platformCampaigns} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}

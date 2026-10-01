@@ -1,504 +1,594 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  ArrowLeft, BadgeCheck, Clock3, Gift, LockKeyhole, Zap,
+  BadgeCheck,
+  Clock3,
+  Gift,
+  LockKeyhole,
+  Play,
+  ShieldCheck,
+  Zap,
 } from 'lucide-react';
 import { useLanguage } from '@/i18n';
 
-type AdTaskId = 'adsgram-daily' | 'adstera-daily';
-
-type AdTask = {
-  id: AdTaskId;
-  kind: 'adsgram' | 'adstera';
-  provider: 'Adsgram' | 'Adsterra';
-  title: string;
-  description: string;
-  reward: number;
-  dailyLimit: number;
-  completedToday: number;
-  duration: number;
-};
-
+type AdProvider = 'adsgram' | 'adstera';
 type DailyProgress = {
   day: string;
-  counts: Record<AdTaskId, number>;
+  adsgram: number;
+  adstera: number;
 };
 
-type VerificationState = {
-  taskId: AdTaskId;
-  phase: 'watching' | 'waiting';
-} | null;
-
-type AdsterraBanner = {
-  key: string;
+type AdScriptDefinition = {
   src: string;
+  options?: {
+    key: string;
+    format: 'iframe';
+    height: number;
+    width: number;
+    params: Record<string, never>;
+  };
 };
 
-const DAILY_PROGRESS_KEY = 'vidreward.daily-ad-progress.v1';
+const ADSGRAM_REWARD = 0.002;
+const ADSGRAM_DAILY_LIMIT = 10;
+const ADSTERRA_REWARD = 0.0005;
+const ADSTERRA_DAILY_LIMIT = 100;
 const ADSTERRA_COUNTDOWN_SECONDS = 30;
-const ADSGRAM_LOGO = `${import.meta.env.BASE_URL}assets/adsgram-logo.jpg`;
-const ADSTERRA_LOGO = `${import.meta.env.BASE_URL}assets/adstera-logo.jpeg`;
+const ADSGRAM_DURATION_SECONDS = 30;
 
-const ADSTERRA_BANNERS: AdsterraBanner[] = [
-  { key: 'b895987c82805b8778a34f54911e8de0', src: 'https://interventioncopiedloitering.com/b895987c82805b8778a34f54911e8de0/invoke.js' },
-  { key: 'ab4615d3d759a81e9b876abbcebaf690', src: 'https://interventioncopiedloitering.com/ab4615d3d759a81e9b876abbcebaf690/invoke.js' },
-  { key: '3b49398bb9242d548c0464f244b621fa', src: 'https://interventioncopiedloitering.com/3b49398bb9242d548c0464f244b621fa/invoke.js' },
-  { key: 'b3570e82f7fb6c462dfdfded816f1576', src: 'https://interventioncopiedloitering.com/b3570e82f7fb6c462dfdfded816f1576/invoke.js' },
-  { key: 'de29a44d70992e967ae5d20275e77fab', src: 'https://interventioncopiedloitering.com/de29a44d70992e967ae5d20275e77fab/invoke.js' },
-  { key: '280eab7c354ed87595a376b2f5e270cb', src: 'https://interventioncopiedloitering.com/280eab7c354ed87595a376b2f5e270cb/invoke.js' },
-  { key: 'd47f719464108005a03a03e6d49fba1a', src: 'https://interventioncopiedloitering.com/d47f719464108005a03a03e6d49fba1a/invoke.js' },
-  { key: '04bcf6532017b6790ab2ddac95a5621d', src: 'https://interventioncopiedloitering.com/04bcf6532017b6790ab2ddac95a5621d/invoke.js' },
-  { key: '8c0574e870e5a3843e89d947bd38aaff', src: 'https://interventioncopiedloitering.com/8c0574e870e5a3843e89d947bd38aaff/invoke.js' },
-  { key: '9f6fe4084cb3d8a8eb4d8246ee57ed25', src: 'https://interventioncopiedloitering.com/9f6fe4084cb3d8a8eb4d8246ee57ed25/invoke.js' },
+const ADSTERRA_SCRIPT_BATCH: AdScriptDefinition[] = [
+  { src: 'https://interventioncopiedloitering.com/b895987c82805b8778a34f54911e8de0/invoke.js', options: { key: 'b895987c82805b8778a34f54911e8de0', format: 'iframe', height: 50, width: 320, params: {} } },
+  { src: 'https://interventioncopiedloitering.com/ab4615d3d759a81e9b876abbcebaf690/invoke.js', options: { key: 'ab4615d3d759a81e9b876abbcebaf690', format: 'iframe', height: 50, width: 320, params: {} } },
+  { src: 'https://interventioncopiedloitering.com/3b49398bb9242d548c0464f244b621fa/invoke.js', options: { key: '3b49398bb9242d548c0464f244b621fa', format: 'iframe', height: 50, width: 320, params: {} } },
+  { src: 'https://interventioncopiedloitering.com/b3570e82f7fb6c462dfdfded816f1576/invoke.js', options: { key: 'b3570e82f7fb6c462dfdfded816f1576', format: 'iframe', height: 50, width: 320, params: {} } },
+  { src: 'https://interventioncopiedloitering.com/de29a44d70992e967ae5d20275e77fab/invoke.js', options: { key: 'de29a44d70992e967ae5d20275e77fab', format: 'iframe', height: 50, width: 320, params: {} } },
+  { src: 'https://interventioncopiedloitering.com/280eab7c354ed87595a376b2f5e270cb/invoke.js', options: { key: '280eab7c354ed87595a376b2f5e270cb', format: 'iframe', height: 50, width: 320, params: {} } },
+  { src: 'https://interventioncopiedloitering.com/d47f719464108005a03a03e6d49fba1a/invoke.js', options: { key: 'd47f719464108005a03a03e6d49fba1a', format: 'iframe', height: 50, width: 320, params: {} } },
+  { src: 'https://interventioncopiedloitering.com/04bcf6532017b6790ab2ddac95a5621d/invoke.js', options: { key: '04bcf6532017b6790ab2ddac95a5621d', format: 'iframe', height: 50, width: 320, params: {} } },
+  { src: 'https://interventioncopiedloitering.com/8c0574e870e5a3843e89d947bd38aaff/invoke.js', options: { key: '8c0574e870e5a3843e89d947bd38aaff', format: 'iframe', height: 50, width: 320, params: {} } },
+  { src: 'https://interventioncopiedloitering.com/9f6fe4084cb3d8a8eb4d8246ee57ed25/invoke.js', options: { key: '9f6fe4084cb3d8a8eb4d8246ee57ed25', format: 'iframe', height: 50, width: 320, params: {} } },
+  { src: 'https://interventioncopiedloitering.com/5d/77/0f/5d770ff402768d79ddda9c1cd67e9819.js' },
 ];
 
-function localDayKey() {
+const ADSTERRA_BANNER_BATCH = ADSTERRA_SCRIPT_BATCH.filter(
+  (script): script is AdScriptDefinition & {
+    options: NonNullable<AdScriptDefinition['options']>;
+  } => Boolean(script.options),
+);
+const ADSTERRA_SOCIAL_BATCH = ADSTERRA_SCRIPT_BATCH.filter((script) => !script.options);
+
+function getLocalDayKey() {
   const date = new Date();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${date.getFullYear()}-${month}-${day}`;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-function emptyCounts(): Record<AdTaskId, number> {
-  return { 'adsgram-daily': 0, 'adstera-daily': 0 };
+function emptyProgress(day = getLocalDayKey()): DailyProgress {
+  return { day, adsgram: 0, adstera: 0 };
 }
 
-function safeCount(value: unknown, limit: number) {
-  const count = Number(value);
-  return Number.isFinite(count) ? Math.max(0, Math.min(limit, Math.floor(count))) : 0;
-}
-
-function readDailyProgress(storageKey: string): DailyProgress {
-  const day = localDayKey();
+function loadDailyProgress(storageKey: string): DailyProgress {
   try {
-    const saved = JSON.parse(window.localStorage.getItem(storageKey) ?? 'null') as {
-      day?: unknown;
-      counts?: Partial<Record<AdTaskId, unknown>>;
-    } | null;
-    if (saved?.day === day && saved.counts) {
+    const saved = JSON.parse(window.localStorage.getItem(storageKey) ?? 'null') as Partial<DailyProgress> | null;
+    if (saved?.day === getLocalDayKey()) {
       return {
-        day,
-        counts: {
-          'adsgram-daily': safeCount(saved.counts['adsgram-daily'], 10),
-          'adstera-daily': safeCount(saved.counts['adstera-daily'], 100),
-        },
+        day: saved.day,
+        adsgram: Math.min(ADSGRAM_DAILY_LIMIT, Math.max(0, Number(saved.adsgram) || 0)),
+        adstera: Math.min(ADSTERRA_DAILY_LIMIT, Math.max(0, Number(saved.adstera) || 0)),
       };
     }
   } catch {
-    // Ads remain available when browser storage is blocked.
+    // Keep the ads page usable when browser storage is blocked or unavailable.
   }
-  return { day, counts: emptyCounts() };
+  return emptyProgress();
 }
 
-function rewardLabel(amount: number) {
-  return `${amount.toFixed(amount < 0.001 ? 4 : 3)}$`;
+function formatReward(amount: number) {
+  const precision = amount < 0.001 ? 4 : 3;
+  return `${amount.toFixed(precision)} USDT`;
 }
 
-function makeAdsterraDocument(banner: AdsterraBanner) {
-  const options = {
-    key: banner.key,
-    format: 'iframe',
-    height: 50,
-    width: 320,
-    params: {},
-  };
-  return `<!doctype html>
+function appendIsolatedBanner(
+  root: HTMLElement,
+  definition: (typeof ADSTERRA_BANNER_BATCH)[number],
+) {
+  const frame = document.createElement('iframe');
+  frame.title = `Adsterra banner ${definition.options.key}`;
+  frame.width = String(definition.options.width);
+  frame.height = String(definition.options.height);
+  frame.loading = 'eager';
+  frame.referrerPolicy = 'no-referrer-when-downgrade';
+  frame.setAttribute('sandbox', 'allow-scripts allow-popups allow-popups-to-escape-sandbox');
+  frame.dataset.vidrewardAdsterraKey = definition.options.key;
+  frame.srcdoc = `<!doctype html>
 <html>
   <head><meta charset="utf-8"></head>
   <body style="margin:0;overflow:hidden;background:transparent">
-    <script>window.atOptions=${JSON.stringify(options)};</script>
-    <script src="${banner.src}"></script>
+    <script>window.atOptions=${JSON.stringify(definition.options)};</script>
+    <script src="${definition.src}"></script>
   </body>
 </html>`;
+  root.appendChild(frame);
 }
 
-function AdsTaskCard({
-  task,
-  isArabic,
-  verification,
-  onStart,
+function appendSocialScriptFrame(root: HTMLElement, definition: AdScriptDefinition) {
+  const frame = document.createElement('iframe');
+  frame.title = 'Adsterra social ad';
+  frame.loading = 'eager';
+  frame.referrerPolicy = 'no-referrer-when-downgrade';
+  frame.setAttribute('sandbox', 'allow-scripts allow-popups allow-popups-to-escape-sandbox');
+  frame.srcdoc = `<!doctype html>
+<html>
+  <head><meta charset="utf-8"></head>
+  <body style="margin:0;overflow:hidden;background:transparent">
+    <script src="${definition.src}"></script>
+  </body>
+</html>`;
+  root.appendChild(frame);
+}
+
+function AdsterraBannerSlot({
+  definition,
+  active,
+  refreshKey,
+  index,
 }: {
-  task: AdTask;
-  isArabic: boolean;
-  verification: VerificationState;
-  onStart: (task: AdTask) => void;
+  definition: (typeof ADSTERRA_BANNER_BATCH)[number];
+  active: boolean;
+  refreshKey: number;
+  index: number;
 }) {
-  const limitReached = task.completedToday >= task.dailyLimit;
-  const active = verification?.taskId === task.id;
-  const blocked = Boolean(verification && !active);
-  const progress = task.dailyLimit ? Math.round(task.completedToday / task.dailyLimit * 100) : 0;
-  const isAdsterra = task.kind === 'adstera';
+  const slotRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = slotRef.current;
+    if (!root || !active) {
+      root?.replaceChildren();
+      return;
+    }
+
+    root.replaceChildren();
+    appendIsolatedBanner(root, definition);
+    return () => root.replaceChildren();
+  }, [active, definition, refreshKey]);
 
   return (
-    <article
-      data-testid={`card-task-${task.id}`}
-      className={`relative overflow-hidden rounded-2xl border p-3 text-white shadow-[0_12px_28px_rgba(9,18,42,.18)] transition hover:-translate-y-0.5 ${
-        active ? 'border-amber-300/80' : isAdsterra ? 'border-red-500/60' : 'border-slate-200/20'
-      } ${blocked ? 'opacity-60' : ''}`}
-      style={{
-        background: isAdsterra
-          ? 'radial-gradient(circle at 94% 0%, rgba(239,68,68,.23), transparent 8rem), linear-gradient(135deg, #642424 0%, #351313 58%, #1c0909 100%)'
-          : 'radial-gradient(circle at 92% 0%, rgba(34,211,238,.18), transparent 8rem), linear-gradient(135deg, #1c2b55 0%, #202540 58%, #10172f 100%)',
-      }}
+    <div
+      ref={slotRef}
+      data-testid={`adsterra-banner-slot-${index + 1}`}
+      className="flex min-h-[50px] w-[320px] max-w-full items-center justify-center overflow-hidden rounded-lg bg-white/5"
+      aria-label={`Adsterra banner ${index + 1}`}
+    />
+  );
+}
+
+function AdsterraSocialScripts({ active, refreshKey }: { active: boolean; refreshKey: number }) {
+  const socialRootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = socialRootRef.current;
+    if (!root || !active) {
+      root?.replaceChildren();
+      return;
+    }
+
+    root.replaceChildren();
+    ADSTERRA_SOCIAL_BATCH.forEach((definition) => appendSocialScriptFrame(root, definition));
+    return () => root.replaceChildren();
+  }, [active, refreshKey]);
+
+  return (
+    <div
+      ref={socialRootRef}
+      aria-hidden="true"
+      className="pointer-events-none absolute h-px w-px overflow-hidden opacity-0"
+    />
+  );
+}
+
+function AdsterraExperience({
+  isArabic,
+  onClaim,
+}: {
+  isArabic: boolean;
+  onClaim: () => void;
+}) {
+  const [remaining, setRemaining] = useState(ADSTERRA_COUNTDOWN_SECONDS);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const active = remaining > 0;
+
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setTimeout(() => setRemaining((value) => Math.max(value - 1, 0)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [active, remaining]);
+
+  useEffect(() => {
+    if (!active) return;
+    const refreshTimer = window.setInterval(() => setRefreshKey((value) => value + 1), 5000);
+    return () => window.clearInterval(refreshTimer);
+  }, [active]);
+
+  const copy = isArabic
+    ? {
+        eyebrow: 'تصفح Adsterra',
+        title: 'أكمل وقت التصفح واحصل على مكافأتك.',
+        description: 'ابقَ في هذه الصفحة حتى انتهاء العداد للحصول على 0.0005 USDT.',
+        congratulations: 'تهانينا، لقد أكملت عملية التصفح',
+        claim: 'استلام المكافأة',
+      }
+    : {
+        eyebrow: 'ADSTERRA BROWSING',
+        title: 'Finish browsing to claim your reward.',
+        description: 'Stay on this page until the countdown ends to receive 0.0005 USDT.',
+        congratulations: 'You completed the browsing session',
+        claim: 'Claim reward',
+      };
+
+  return (
+    <div
+      dir={isArabic ? 'rtl' : 'ltr'}
+      className="fixed inset-0 z-[80] min-h-dvh overflow-y-auto overscroll-contain bg-[#11172c] text-white"
     >
-      <div className="flex items-center gap-3 rounded-xl px-1.5 py-1">
-        <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-white shadow-[0_8px_18px_rgba(0,0,0,.25)]">
+      <div className="mx-auto flex min-h-full w-full max-w-[390px] flex-col items-center px-4 pb-10 pt-7">
+        <div className="mb-2 flex items-center gap-2 text-[10px] font-bold tracking-[.15em] text-blue-100/70">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#f6c453]" />
+          {copy.eyebrow}
+        </div>
+        <div
+          data-testid="text-adstera-countdown"
+          aria-live="polite"
+          className="font-mono text-5xl font-bold tracking-[-.08em] text-[#f6c453]"
+        >
+          {remaining}
+        </div>
+        <h1 className="mt-2 text-center text-base font-bold">{copy.title}</h1>
+        <p className="mt-1 text-center text-xs leading-5 text-blue-100/65">{copy.description}</p>
+        <div data-testid="container-adsterra-banners" className="mt-6 flex w-full flex-col items-center gap-3">
+          {ADSTERRA_BANNER_BATCH.map((definition, index) => (
+            <AdsterraBannerSlot
+              key={`${definition.src}-${refreshKey}`}
+              definition={definition}
+              active={active}
+              refreshKey={refreshKey}
+              index={index}
+            />
+          ))}
+        </div>
+        <AdsterraSocialScripts active={active} refreshKey={refreshKey} />
+      </div>
+      {!active && (
+        <div
+          data-testid="modal-adsterra-complete"
+          className="absolute inset-0 flex items-center justify-center bg-[#11172c]/90 p-5 backdrop-blur-sm"
+        >
+          <section className="w-full max-w-sm rounded-[1.6rem] border border-[#f6c453]/30 bg-[#15243c] p-6 text-center shadow-2xl">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-300/15 text-emerald-300">
+              <BadgeCheck size={28} />
+            </div>
+            <h2 className="mt-5 text-lg font-bold">{copy.congratulations}</h2>
+            <p className="mt-2 font-mono text-sm text-[#f6c453]">+{formatReward(ADSTERRA_REWARD)}</p>
+            <button
+              type="button"
+              data-testid="button-claim-adstera"
+              onClick={onClaim}
+              className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#f6c453] text-sm font-bold text-[#17213a] transition hover:bg-[#ffdc7e]"
+            >
+              <Gift size={17} />
+              {copy.claim}
+            </button>
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RewardAdCard({
+  provider,
+  title,
+  description,
+  label,
+  reward,
+  completed,
+  limit,
+  phase,
+  blocked,
+  isArabic,
+  onStart,
+}: {
+  provider: AdProvider;
+  title: string;
+  description: string;
+  label: string;
+  reward: number;
+  completed: number;
+  limit: number;
+  phase: 'watching' | 'waiting' | null;
+  blocked: boolean;
+  isArabic: boolean;
+  onStart: () => void;
+}) {
+  const isAdstera = provider === 'adstera';
+  const isComplete = completed >= limit;
+  const progress = Math.min(100, Math.round((completed / limit) * 100));
+  const startLabel = isArabic ? (isAdstera ? 'ابدأ التصفح' : 'ابدأ الآن') : (isAdstera ? 'Start browsing' : 'Start now');
+
+  return (
+    <section
+      data-testid={`card-task-${provider}`}
+      className={`relative isolate overflow-hidden rounded-2xl border p-3 text-white shadow-xl transition duration-200 hover:-translate-y-0.5 ${
+        isAdstera
+          ? 'border-red-400/40 bg-[radial-gradient(circle_at_94%_0%,rgba(248,90,90,.22),transparent_8rem),linear-gradient(135deg,#64221f_0%,#361a20_58%,#1d131e_100%)] shadow-red-950/20'
+          : 'border-blue-200/20 bg-[radial-gradient(circle_at_92%_0%,rgba(55,211,224,.2),transparent_8rem),linear-gradient(135deg,#1e2d5b_0%,#1c2347_58%,#10172d_100%)] shadow-blue-950/20'
+      } ${blocked ? 'opacity-60' : ''}`}
+    >
+      <div className="relative z-10 flex items-center gap-3 rounded-xl px-1.5 py-1">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-lg">
           <img
-            src={isAdsterra ? ADSTERRA_LOGO : ADSGRAM_LOGO}
-            alt={task.provider}
+            src={isAdstera ? '/assets/adstera-logo.jpeg' : '/assets/adsgram-logo.jpg'}
+            alt={isAdstera ? 'Adsterra' : 'Adsgram'}
             className="h-full w-full object-cover"
           />
         </div>
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex flex-wrap items-center gap-2">
-            <span className={`text-[9px] font-bold uppercase tracking-[.13em] ${isAdsterra ? 'text-red-200' : 'text-cyan-200'}`}>
-              {isAdsterra ? (isArabic ? 'تصفح لمدة 30 ثانية' : '30-second browse') : (isArabic ? 'إعلان قصير' : 'Short ad')}
+            <span className="text-[9px] font-bold uppercase tracking-[.13em] text-[#f6c453]">{label}</span>
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-bold text-blue-100/75">
+              {isAdstera ? 'Adsterra' : 'Adsgram'}
             </span>
-            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-bold text-white/80">{task.provider}</span>
           </div>
-          <h2 data-testid={`text-task-title-${task.id}`} className="truncate text-sm font-bold">
-            {task.title}
-          </h2>
+          <h2 className="truncate text-sm font-bold">{title}</h2>
         </div>
-        <span
-          data-testid={`text-task-reward-${task.id}`}
-          className="shrink-0 rounded-xl bg-amber-300 px-2.5 py-1.5 text-center font-mono text-[10px] font-bold text-[#17203a]"
-        >
-          +{rewardLabel(task.reward)}
+        <span className="shrink-0 rounded-xl bg-[#f6c453] px-2.5 py-1.5 text-center font-mono text-[10px] font-bold leading-4 text-[#17213a]">
+          +{formatReward(reward)}
         </span>
       </div>
 
-      <p data-testid={`text-task-description-${task.id}`} className="mt-2 truncate px-1 text-[11px] leading-5 text-white/75">
-        {task.description}
-      </p>
-
-      <div className="mt-3 px-1">
-        <div className="mb-1.5 flex items-center justify-between gap-3 text-[10px] font-semibold text-white/70">
-          <span className="flex items-center gap-1.5"><Clock3 className="h-3.5 w-3.5 text-cyan-200" />{task.duration} {isArabic ? 'ثانية' : 'seconds'}</span>
-          <span data-testid={`text-task-limit-${task.id}`} className="font-mono">
-            {task.completedToday.toLocaleString(isArabic ? 'ar' : 'en-US')} / {task.dailyLimit.toLocaleString(isArabic ? 'ar' : 'en-US')} {isArabic ? 'اليوم' : 'today'}
+      <div className="relative z-10 mt-2 px-1">
+        <p className="truncate text-[11px] leading-4 text-blue-100/75">{description}</p>
+        <div className="mb-1.5 mt-3 flex items-center justify-between text-[10px] font-semibold text-blue-100/75">
+          <span className="flex items-center gap-1.5">
+            <Clock3 size={13} className="text-cyan-200" />
+            {ADSGRAM_DURATION_SECONDS} {isArabic ? 'ثانية' : 'seconds'}
+          </span>
+          <span data-testid={`text-task-limit-${provider}`} className="font-mono">
+            {completed} / {limit} {isArabic ? 'اليوم' : 'today'}
           </span>
         </div>
-        <div
-          className="h-1.5 overflow-hidden rounded-full bg-white/15"
-          role="progressbar"
-          aria-label={`${task.provider} ${isArabic ? 'الإنجاز اليومي' : 'daily progress'}`}
-          aria-valuemin={0}
-          aria-valuemax={task.dailyLimit}
-          aria-valuenow={task.completedToday}
-        >
-          <div className="h-full rounded-full bg-amber-300 transition-[width] duration-500" style={{ width: `${Math.max(progress, progress > 0 ? 4 : 2)}%` }} />
+        <div className="h-1.5 overflow-hidden rounded-full bg-white/15">
+          <div className="h-full rounded-full bg-[#f6c453] transition-[width] duration-500" style={{ width: `${Math.max(progress, progress > 0 ? 4 : 2)}%` }} />
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-3 px-1">
-        <span className="text-[10px] text-white/65">{isArabic ? 'يتجدد يومياً' : 'Resets daily'}</span>
-        {active ? (
-          <button type="button" disabled data-testid={`button-start-task-${task.id}`} className="flex min-h-9 cursor-wait items-center gap-2 rounded-lg bg-white/10 px-3 text-[11px] font-bold text-amber-200">
-            {verification?.phase === 'waiting'
-              ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-200/35 border-t-amber-200" />
-              : <Clock3 className="h-3.5 w-3.5" />}
-            <span data-testid={verification?.phase === 'waiting' ? `status-task-verifying-${task.id}` : undefined}>
-              {verification?.phase === 'waiting'
-                ? (isArabic ? 'جاري التحقق' : 'Verifying')
-                : (isArabic ? 'جارٍ عرض الإعلان' : 'Ad in progress')}
-            </span>
-          </button>
-        ) : limitReached ? (
-          <span data-testid={`status-task-completed-${task.id}`} className="flex min-h-9 items-center gap-1.5 text-xs font-bold text-emerald-200">
-            <BadgeCheck className="h-4 w-4" />{isArabic ? 'اكتمل حد اليوم' : 'Daily limit reached'}
+      <div className="relative z-10 mt-3 flex items-center justify-between gap-3 px-1">
+        <span className="text-[10px] text-blue-100/65">{isArabic ? 'يتجدد يومياً' : 'Resets daily'}</span>
+        {isComplete ? (
+          <span data-testid={`status-task-completed-${provider}`} className="flex min-h-9 items-center gap-1.5 text-xs font-bold text-emerald-300">
+            <BadgeCheck size={16} />
+            {isArabic ? 'اكتملت اليوم' : 'Done for today'}
           </span>
+        ) : phase === 'waiting' ? (
+          <button type="button" disabled className="flex min-h-9 cursor-wait items-center gap-2 rounded-lg bg-[#f6c453]/15 px-3 text-[11px] font-bold text-[#f6c453]">
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#f6c453]/35 border-t-[#f6c453]" />
+            {isArabic ? 'جاري التحقق' : 'Verifying'}
+          </button>
+        ) : phase === 'watching' ? (
+          <button type="button" disabled className="flex min-h-9 cursor-wait items-center gap-2 rounded-lg bg-cyan-200/10 px-3 text-[11px] font-bold text-cyan-100">
+            <Clock3 size={14} />
+            {isArabic ? 'جارٍ عرض الإعلان' : 'Ad in progress'}
+          </button>
         ) : (
           <button
             type="button"
             disabled={blocked}
-            data-testid={`button-start-task-${task.id}`}
-            onClick={() => onStart(task)}
-            className="flex min-h-9 items-center gap-2 rounded-lg bg-amber-300 px-3 text-[11px] font-bold text-[#17203a] transition hover:-translate-y-0.5 hover:bg-amber-200 active:translate-y-0 disabled:cursor-not-allowed"
+            data-testid={`button-start-task-${provider}`}
+            onClick={onStart}
+            className="flex min-h-9 items-center gap-2 rounded-lg bg-[#f6c453] px-3 text-[11px] font-bold text-[#17213a] transition hover:bg-[#ffdc7e] active:scale-[.98] disabled:cursor-not-allowed"
           >
-            {isAdsterra ? (isArabic ? 'ابدأ التصفح' : 'Start browsing') : (isArabic ? 'ابدأ المشاهدة' : 'Watch ad')}
-            <ArrowLeft className="h-3.5 w-3.5" />
+            {isAdstera ? <Zap size={14} /> : <Play size={14} fill="currentColor" />}
+            {startLabel}
           </button>
         )}
       </div>
-
-      {active && (
-        <div data-testid={`panel-verification-${task.id}`} className="mt-3 border-t border-white/15 pt-3">
-          <div className="flex items-center gap-3 rounded-xl bg-amber-300/10 p-3 text-xs leading-5 text-white/80">
-            {verification?.phase === 'waiting'
-              ? <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-amber-200/35 border-t-amber-200" />
-              : <Clock3 className="h-4 w-4 shrink-0 text-cyan-200" />}
-            <span>
-              {verification?.phase === 'waiting'
-                ? (isArabic ? 'جاري تجهيز المكافأة...' : 'Preparing your reward...')
-                : (isArabic ? 'جارٍ عرض الإعلان...' : 'The ad is in progress...')}
-            </span>
-          </div>
-        </div>
-      )}
-    </article>
-  );
-}
-
-function AdsterraSession({
-  task,
-  isArabic,
-  dir,
-  onClaim,
-}: {
-  task: AdTask;
-  isArabic: boolean;
-  dir: 'rtl' | 'ltr';
-  onClaim: () => void;
-}) {
-  const [remaining, setRemaining] = useState(ADSTERRA_COUNTDOWN_SECONDS);
-  const active = remaining > 0;
-
-  useEffect(() => {
-    if (!active) return;
-    const timer = window.setTimeout(() => setRemaining((current) => Math.max(current - 1, 0)), 1000);
-    return () => window.clearTimeout(timer);
-  }, [active, remaining]);
-
-  return (
-    <main
-      data-testid="page-adstera-session"
-      dir={dir}
-      className="fixed inset-0 z-[70] min-h-dvh overflow-y-auto bg-[#0e1632] text-white"
-    >
-      <div className="mx-auto flex min-h-full w-full max-w-[390px] flex-col items-center px-4 pb-10 pt-7">
-        <p className="text-xs font-bold text-white/65">{isArabic ? 'تصفح إعلانات Adsterra' : 'Browse Adsterra ads'}</p>
-        <div
-          data-testid="text-adstera-countdown"
-          aria-live="polite"
-          className="mt-2 font-mono text-5xl font-bold tracking-[-.08em] text-amber-300"
-        >
-          {remaining}
-        </div>
-        <p className="mt-1 text-[11px] text-white/65">{isArabic ? 'ابقَ في الصفحة حتى انتهاء العداد' : 'Stay on this page until the timer ends'}</p>
-
-        {active && (
-          <div data-testid="container-adsterra-banners" className="mt-6 flex w-full flex-col items-center gap-3">
-            {ADSTERRA_BANNERS.map((banner, index) => (
-              <div
-                key={banner.key}
-                data-testid={`adsterra-banner-slot-${index + 1}`}
-                className="flex min-h-[50px] w-full max-w-[320px] items-center justify-center overflow-hidden rounded-lg bg-white/[.04]"
-                aria-label={`Adsterra banner ${index + 1}`}
-              >
-                <iframe
-                  title={`Adsterra banner ${index + 1}`}
-                  width="320"
-                  height="50"
-                  loading="eager"
-                  referrerPolicy="no-referrer-when-downgrade"
-                  sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
-                  srcDoc={makeAdsterraDocument(banner)}
-                  className="block h-[50px] w-[320px] max-w-full border-0"
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {!active && (
-        <div data-testid="modal-adstera-complete" className="absolute inset-0 flex items-center justify-center bg-[#0e1632]/90 p-5 backdrop-blur-sm">
-          <section className="w-full max-w-sm rounded-[1.6rem] border border-amber-300/30 bg-[#102b30] p-6 text-center shadow-[0_24px_70px_rgba(0,0,0,.35)]">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-300/15 text-emerald-200">
-              <BadgeCheck className="h-7 w-7" />
-            </div>
-            <h2 className="mt-5 text-lg font-bold">
-              {isArabic ? 'تهانينا، أكملت التصفح' : 'Browsing complete'}
-            </h2>
-            <p className="mt-2 text-xs leading-6 text-white/70">
-              +{rewardLabel(task.reward)}
-            </p>
-            <button
-              type="button"
-              data-testid="button-claim-adstera"
-              onClick={onClaim}
-              className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-amber-300 text-sm font-bold text-[#17203a] transition hover:bg-amber-200"
-            >
-              <Gift className="h-4 w-4" />
-              {isArabic ? 'استلام المكافأة' : 'Claim reward'}
-            </button>
-          </section>
-        </div>
-      )}
-    </main>
+    </section>
   );
 }
 
 export function AdsPage({
-  telegramUserId,
+  userId,
   onReward,
 }: {
-  telegramUserId: number | null;
-  onReward: (amount: number, provider: string) => void;
+  userId: number | null;
+  onReward: (amount: number, title: string, message: string) => void;
 }) {
   const { dir, isArabic } = useLanguage();
-  const storageKey = `${DAILY_PROGRESS_KEY}.${telegramUserId ?? 'guest'}`;
-  const today = localDayKey();
-  const [dailyProgress, setDailyProgress] = useState(() => readDailyProgress(storageKey));
-  const [verification, setVerification] = useState<VerificationState>(null);
-  const [activeAdsterraTask, setActiveAdsterraTask] = useState<AdTask | null>(null);
-  const onRewardRef = useRef(onReward);
-  const adsterraClaimedRef = useRef(false);
-  onRewardRef.current = onReward;
+  const storageKey = `vidreward.ads.daily.v1-${userId ?? 'guest'}`;
+  const [today, setToday] = useState(getLocalDayKey);
+  const [progress, setProgress] = useState(() => loadDailyProgress(storageKey));
+  const [adsgramPhase, setAdsgramPhase] = useState<'watching' | 'waiting' | null>(null);
+  const [adsteraOpen, setAdsteraOpen] = useState(false);
+  const adsgramClaimed = useRef(false);
 
   useEffect(() => {
-    if (dailyProgress.day !== today) {
-      setDailyProgress({ day: today, counts: emptyCounts() });
-    }
-  }, [dailyProgress.day, today]);
+    const interval = window.setInterval(() => setToday(getLocalDayKey()), 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    setProgress(loadDailyProgress(storageKey));
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (progress.day !== today) setProgress(emptyProgress(today));
+  }, [progress.day, today]);
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(storageKey, JSON.stringify(dailyProgress));
+      window.localStorage.setItem(storageKey, JSON.stringify(progress));
     } catch {
-      // Keep the task list usable if storage is unavailable.
+      // The ad list still works for the current session if storage is unavailable.
     }
-  }, [dailyProgress, storageKey]);
+  }, [progress, storageKey]);
 
-  const tasks = useMemo<AdTask[]>(() => [
-    {
-      id: 'adsgram-daily',
-      kind: 'adsgram',
-      provider: 'Adsgram',
-      title: isArabic ? 'إعلان Adsgram' : 'Adsgram ad',
-      description: isArabic ? 'شاهد إعلاناً قصيراً واحصل على مكافأة 0.002$.' : 'Watch a short ad and receive a 0.002$ reward.',
-      reward: 0.002,
-      dailyLimit: 10,
-      completedToday: dailyProgress.day === today ? dailyProgress.counts['adsgram-daily'] : 0,
-      duration: 30,
-    },
-    {
-      id: 'adstera-daily',
-      kind: 'adstera',
-      provider: 'Adsterra',
-      title: isArabic ? 'تصفح إعلانات Adsterra' : 'Browse Adsterra',
-      description: isArabic ? 'تصفح الإعلانات لمدة 30 ثانية واحصل على مكافأة 0.0005$.' : 'Browse the ads for 30 seconds and receive a 0.0005$ reward.',
-      reward: 0.0005,
-      dailyLimit: 100,
-      completedToday: dailyProgress.day === today ? dailyProgress.counts['adstera-daily'] : 0,
-      duration: ADSTERRA_COUNTDOWN_SECONDS,
-    },
-  ], [dailyProgress, isArabic, today]);
+  const daily = progress.day === today ? progress : emptyProgress(today);
+  const copy = isArabic
+    ? {
+        eyebrow: 'إعلانات Adsgram وAdsterra',
+        title: 'شاهد الإعلان واحصل على مكافأتك.',
+        description: 'إعلانات يومية واضحة، مع الحد الأقصى والمكافأة الظاهرة قبل البدء.',
+        adsToday: 'إعلان مكافأة اليوم',
+        resets: 'يتجدد يومياً',
+        adsgramTitle: 'إعلان Adsgram',
+        adsgramDescription: 'محاكاة محلية للتجربة فقط؛ لا يتصل المصدر بـ Adsgram ولا يتحقق من مشاهدة فعلية.',
+        adsgramLabel: 'محاكاة',
+        adsteraTitle: 'تصفح إعلانات Adsterra',
+        adsteraDescription: 'تصفح صفحة Adsterra لمدة 30 ثانية واحصل على مكافأة 0.0005 USDT.',
+        adsteraLabel: 'تصفح لمدة 30 ثانية',
+        rulesTitle: 'لماذا توجد حدود يومية؟',
+        rulesBody: 'كود Adsgram في المصدر المرفق يحاكي المشاهدة فقط؛ التحقق الحقيقي يحتاج Placement ID وخادماً. يسجل Adsterra المكافأة بعد عدّاد 30 ثانية كما في المصدر.',
+        completed: 'اكتملت اليوم',
+        rewardAdded: 'تمت إضافة المكافأة',
+        rewardMessage: (reward: string) => `أُضيفت ${reward} إلى رصيدك.`,
+        demoRewardAdded: 'مكافأة تجريبية',
+        demoRewardMessage: (reward: string) => `أُضيفت ${reward} إلى رصيد العرض التجريبي.`,
+      }
+    : {
+        eyebrow: 'ADSGRAM & ADSTERRA',
+        title: 'Watch the ad and earn your reward.',
+        description: 'Daily ads with the limit and reward shown before you start.',
+        adsToday: 'reward ads today',
+        resets: 'Resets daily',
+        adsgramTitle: 'Adsgram ad',
+        adsgramDescription: 'Local demo only; the supplied source does not call Adsgram or verify a real view.',
+        adsgramLabel: 'Demo',
+        adsteraTitle: 'Browse Adsterra',
+        adsteraDescription: 'Browse the Adsterra page for 30 seconds and receive 0.0005 USDT.',
+        adsteraLabel: '30-second browse',
+        rulesTitle: 'Why are there daily limits?',
+        rulesBody: 'The supplied Adsgram code simulates a view; real verification needs a Placement ID and server validation. Adsterra is credited after its 30-second timer, matching the source.',
+        completed: 'complete today',
+        rewardAdded: 'Reward added',
+        rewardMessage: (reward: string) => `${reward} was added to your balance.`,
+        demoRewardAdded: 'Demo reward added',
+        demoRewardMessage: (reward: string) => `${reward} was added to the demo balance.`,
+      };
+
+  const completeAd = (provider: AdProvider) => {
+    const current = progress.day === getLocalDayKey() ? progress : emptyProgress();
+    const limit = provider === 'adsgram' ? ADSGRAM_DAILY_LIMIT : ADSTERRA_DAILY_LIMIT;
+    if (current[provider] >= limit) return;
+
+    setProgress({
+      ...current,
+      [provider]: current[provider] + 1,
+    });
+    const reward = provider === 'adsgram' ? ADSGRAM_REWARD : ADSTERRA_REWARD;
+    if (provider === 'adsgram') {
+      onReward(reward, copy.demoRewardAdded, copy.demoRewardMessage(formatReward(reward)));
+    } else {
+      onReward(reward, copy.rewardAdded, copy.rewardMessage(formatReward(reward)));
+    }
+  };
 
   useEffect(() => {
-    if (!verification) return;
-    const task = tasks.find((item) => item.id === verification.taskId);
-    if (!task) return;
+    if (!adsgramPhase) return;
 
     const timer = window.setTimeout(() => {
-      if (verification.phase === 'watching') {
-        setVerification((current) => current?.taskId === task.id ? { ...current, phase: 'waiting' } : current);
+      if (adsgramPhase === 'watching') {
+        setAdsgramPhase('waiting');
         return;
       }
-
-      setDailyProgress((current) => {
-        const counts = current.day === today ? current.counts : emptyCounts();
-        const completed = counts[task.id] ?? 0;
-        if (completed >= task.dailyLimit) return current;
-        return {
-          day: today,
-          counts: { ...counts, [task.id]: completed + 1 },
-        };
-      });
-      setVerification(null);
-      onRewardRef.current(task.reward, task.provider);
-    }, verification.phase === 'watching' ? 1800 : 900);
+      if (!adsgramClaimed.current) {
+        adsgramClaimed.current = true;
+        completeAd('adsgram');
+      }
+      setAdsgramPhase(null);
+    }, adsgramPhase === 'watching' ? 1800 : 900);
 
     return () => window.clearTimeout(timer);
-  }, [tasks, today, verification]);
+  }, [adsgramPhase]);
 
-  const totalCompleted = tasks.reduce((total, task) => total + task.completedToday, 0);
-  const totalLimit = tasks.reduce((total, task) => total + task.dailyLimit, 0);
-  const totalProgress = totalLimit ? Math.min(100, Math.round(totalCompleted / totalLimit * 100)) : 0;
-
-  const startTask = (task: AdTask) => {
-    if (verification || task.completedToday >= task.dailyLimit) return;
-    if (task.kind === 'adstera') {
-      adsterraClaimedRef.current = false;
-      setActiveAdsterraTask(task);
-      return;
-    }
-    setVerification({ taskId: task.id, phase: 'watching' });
+  const startAdsgram = () => {
+    if (daily.adsgram >= ADSGRAM_DAILY_LIMIT || adsgramPhase || adsteraOpen) return;
+    adsgramClaimed.current = false;
+    setAdsgramPhase('watching');
   };
 
-  const claimAdsterra = () => {
-    const task = activeAdsterraTask;
-    if (!task || adsterraClaimedRef.current) return;
-    adsterraClaimedRef.current = true;
-    setDailyProgress((current) => {
-      const counts = current.day === today ? current.counts : emptyCounts();
-      const completed = counts[task.id] ?? 0;
-      if (completed >= task.dailyLimit) return current;
-      return {
-        day: today,
-        counts: { ...counts, [task.id]: completed + 1 },
-      };
-    });
-    onRewardRef.current(task.reward, task.provider);
-    setActiveAdsterraTask(null);
+  const startAdstera = () => {
+    if (daily.adstera >= ADSTERRA_DAILY_LIMIT || adsgramPhase || adsteraOpen) return;
+    setAdsteraOpen(true);
   };
-
-  if (activeAdsterraTask) {
-    return (
-      <AdsterraSession
-        task={activeAdsterraTask}
-        isArabic={isArabic}
-        dir={dir}
-        onClaim={claimAdsterra}
-      />
-    );
-  }
 
   return (
-    <main data-testid="page-ads" aria-label="Ads" className="mx-auto min-h-[calc(100dvh-7rem)] w-full max-w-[900px] px-4 pb-28 pt-7 md:px-8 md:pt-10" dir={dir}>
-      <header className="mb-6">
-        <div className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.12em] text-[#1557ee]">
-          <Zap className="h-4 w-4 text-amber-500" />
-          <span>{isArabic ? 'إعلانات Adsgram وAdsterra' : 'Adsgram & Adsterra'}</span>
+    <main data-testid="page-ads" aria-label={isArabic ? 'الإعلانات' : 'Ads'} dir={dir} className="mx-auto min-h-[calc(100dvh-7rem)] w-full max-w-[980px] px-4 pb-28 pt-7 text-[#12234b] md:px-8 md:pt-10">
+      <section className="animate-rise">
+        <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#1557ee]">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#23bdc9]" />
+          {copy.eyebrow}
         </div>
-        <h1 className="font-display text-2xl font-bold tracking-tight text-[#12234b] md:text-3xl">
-          {isArabic ? 'شاهد الإعلان واحصل على مكافأتك.' : 'Watch an ad and earn your reward.'}
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-          {isArabic ? 'إعلانات يومية واضحة، مع الحد الأقصى والمكافأة الظاهرة قبل البدء.' : 'Daily ads with a clear limit and reward shown before you start.'}
-        </p>
-      </header>
+        <h1 className="font-display text-2xl font-bold tracking-tight text-[#12234b] sm:text-3xl">{copy.title}</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{copy.description}</p>
+      </section>
 
-      <section className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4" aria-label={isArabic ? 'تقدم الإعلانات اليوم' : 'Daily ad progress'}>
-        <div className="flex items-center justify-between gap-3">
-          <span className="flex items-center gap-2 text-xs font-bold text-amber-900">
-            <Zap className="h-4 w-4 text-amber-600" />
-            {totalCompleted.toLocaleString(isArabic ? 'ar' : 'en-US')} {isArabic ? 'من' : 'of'} {totalLimit.toLocaleString(isArabic ? 'ar' : 'en-US')} {isArabic ? 'إعلانات المكافآت اليوم' : 'reward ads today'}
+      <section className="mt-6 flex items-center justify-between gap-3 rounded-2xl border border-[#f6c453]/50 bg-[#fff8df] px-4 py-3 text-xs">
+        <span className="flex items-center gap-2 font-semibold text-[#70501a]">
+          <Zap size={15} />
+          <span data-testid="text-ads-daily-progress">
+            {daily.adsgram + daily.adstera} {isArabic ? 'من' : 'of'} {ADSGRAM_DAILY_LIMIT + ADSTERRA_DAILY_LIMIT} {copy.adsToday}
           </span>
-          <span className="shrink-0 text-[10px] font-semibold text-amber-800">{isArabic ? 'يتجدد يومياً' : 'Resets daily'}</span>
-        </div>
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-amber-200/70" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={totalProgress}>
-          <div className="h-full rounded-full bg-amber-500 transition-[width] duration-500" style={{ width: `${totalProgress}%` }} />
-        </div>
+        </span>
+        <span className="shrink-0 text-[#8a671e]">{copy.resets}</span>
       </section>
 
-      <section className="space-y-3">
-        {tasks.map((task) => (
-          <AdsTaskCard key={task.id} task={task} isArabic={isArabic} verification={verification} onStart={startTask} />
-        ))}
-      </section>
+      <div className="mt-4 space-y-3">
+        <RewardAdCard
+          provider="adsgram"
+          title={copy.adsgramTitle}
+          description={copy.adsgramDescription}
+          label={copy.adsgramLabel}
+          reward={ADSGRAM_REWARD}
+          completed={daily.adsgram}
+          limit={ADSGRAM_DAILY_LIMIT}
+          phase={adsgramPhase}
+          blocked={Boolean(adsgramPhase || adsteraOpen)}
+          isArabic={isArabic}
+          onStart={startAdsgram}
+        />
+        <RewardAdCard
+          provider="adstera"
+          title={copy.adsteraTitle}
+          description={copy.adsteraDescription}
+          label={copy.adsteraLabel}
+          reward={ADSTERRA_REWARD}
+          completed={daily.adstera}
+          limit={ADSTERRA_DAILY_LIMIT}
+          phase={null}
+          blocked={Boolean(adsgramPhase || adsteraOpen)}
+          isArabic={isArabic}
+          onStart={startAdstera}
+        />
+      </div>
 
-      <section data-testid="status-task-rules" className="mt-6 flex gap-3 rounded-2xl bg-[#123438] p-5 text-white">
-        <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
+      <section data-testid="status-task-rules" className="mt-6 flex gap-3 rounded-2xl bg-[#0e2452] p-5 text-white shadow-[0_15px_34px_rgba(14,36,82,.16)]">
+        <LockKeyhole className="mt-0.5 shrink-0 text-[#f6c453]" size={18} />
         <div>
-          <h2 className="text-sm font-bold">{isArabic ? 'لماذا توجد حدود يومية؟' : 'Why are there daily limits?'}</h2>
-          <p className="mt-1 text-xs leading-6 text-white/75">
-            {isArabic
-              ? 'الحد ينظم المكافآت المتاحة يومياً. تدفق Adsgram الحالي يحاكي التحقق بمؤقت من النسخة المرفقة، ولا يتحقق مباشرةً من مشاهدة الإعلان لدى المزود.'
-              : 'Limits organize daily rewards. The Adsgram flow currently uses the timer simulation from the supplied app; it does not verify an ad view with the provider.'}
-          </p>
+          <div className="text-sm font-bold">{copy.rulesTitle}</div>
+          <p className="mt-1 text-xs leading-6 text-blue-100/75">{copy.rulesBody}</p>
+          <div className="mt-3 flex items-center gap-2 text-[10px] font-semibold text-emerald-200/90">
+            <ShieldCheck size={14} />
+            {isArabic ? 'شروط المكافأة ظاهرة قبل البدء' : 'Reward terms are visible before you start'}
+          </div>
         </div>
       </section>
+
+      {adsteraOpen && (
+        <AdsterraExperience
+          isArabic={isArabic}
+          onClaim={() => {
+            completeAd('adstera');
+            setAdsteraOpen(false);
+          }}
+        />
+      )}
     </main>
   );
 }
