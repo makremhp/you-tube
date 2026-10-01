@@ -24,6 +24,7 @@ import {
   Image as ImageIcon,
   LayoutDashboard,
   Link2,
+  Megaphone,
   Menu,
   MoreHorizontal,
   Play,
@@ -34,12 +35,10 @@ import {
   Share2,
   ShieldCheck,
   Sparkles,
-  Target,
   Timer,
   Trash2,
   TrendingUp,
   Upload,
-  Users,
   WalletCards,
   X,
   PlaySquare,
@@ -47,6 +46,7 @@ import {
 } from 'lucide-react';
 import { Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
 import { LanguageProvider, useLanguage } from '@/i18n';
+import { SiTelegram, SiTiktok, SiYoutube } from 'react-icons/si';
 
 const queryClient = new QueryClient();
 
@@ -214,7 +214,7 @@ type TransactionStatus = 'تم' | 'قيد المعالجة' | 'تم الإلغا
 type PaymentMethod = 'stars' | 'binance' | 'web3';
 type DepositMethod = 'stars' | 'web3';
 type WithdrawMethod = 'binance' | 'web3';
-type AppScreen = 'overview' | 'campaigns' | 'watch' | 'publish' | 'add' | 'deposit' | 'withdraw' | 'deposit-history' | 'withdraw-history' | 'telegram-tasks' | 'tiktok-tasks';
+type AppScreen = 'overview' | 'campaigns' | 'watch' | 'publish' | 'add' | 'deposit' | 'withdraw' | 'deposit-history' | 'withdraw-history' | 'telegram-tasks' | 'tiktok-tasks' | 'tiktok-task' | 'ads';
 
 type DepositRecord = {
   id: string;
@@ -480,9 +480,10 @@ function Sidebar({
         { icon: History, label: 'سجل الإيداع', screen: 'deposit-history' as AppScreen },
       ]
     : [
-        { icon: Eye, label: 'شاهد واربح', screen: 'watch' as AppScreen },
-        { icon: Users, label: 'مهام Telegram', screen: 'telegram-tasks' as AppScreen },
-        { icon: Target, label: 'مهام TikTok', screen: 'tiktok-tasks' as AppScreen },
+        { icon: SiYoutube, label: 'شاهد واربح', screen: 'watch' as AppScreen },
+        { icon: SiTelegram, label: 'مهام Telegram', screen: 'telegram-tasks' as AppScreen },
+        { icon: SiTiktok, label: 'مهام TikTok', screen: 'tiktok-tasks' as AppScreen },
+        { icon: Megaphone, label: 'Ads', screen: 'ads' as AppScreen },
         { icon: Share2, label: 'نظام النشر', screen: 'publish' as AppScreen },
         { icon: WalletCards, label: 'سحب الأرباح', screen: 'withdraw' as AppScreen },
         { icon: History, label: 'سجل السحب', screen: 'withdraw-history' as AppScreen },
@@ -520,7 +521,7 @@ function Sidebar({
           size="fit"
           className={`flex w-full items-center gap-3 rounded-[13px] px-3 py-3 text-right text-sm font-semibold transition ${mode === 'viewer' ? 'bg-white text-[#1557ee] shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
         >
-          <Eye className="h-[18px] w-[18px]" />
+          <TrendingUp className="h-[18px] w-[18px]" />
           <span>اربح</span>
           {mode === 'viewer' && <span className="mr-auto h-1.5 w-1.5 rounded-full bg-[#1557ee]" />}
         </Button>
@@ -631,6 +632,10 @@ function Header({
                 ? 'مهام Telegram'
                 : screen === 'tiktok-tasks'
                   ? 'مهام TikTok'
+                  : screen === 'tiktok-task'
+                    ? 'مهمة TikTok'
+                    : screen === 'ads'
+                      ? 'Ads'
         : screen === 'publish'
           ? 'نظام النشر'
             : mode === 'creator' ? 'نظرة عامة' : 'شاهد واربح';
@@ -813,9 +818,9 @@ function PlatformSelector({
   onSelect: (platform: 'youtube' | PromotionPlatform) => void;
 }) {
   const options = [
-    { value: 'youtube' as const, label: 'YouTube' },
-    { value: 'telegram' as const, label: 'Telegram' },
-    { value: 'tiktok' as const, label: 'TikTok' },
+    { value: 'youtube' as const, label: 'YouTube', icon: SiYoutube },
+    { value: 'telegram' as const, label: 'Telegram', icon: SiTelegram },
+    { value: 'tiktok' as const, label: 'TikTok', icon: SiTiktok },
   ];
   return (
     <div className="mb-5 grid grid-cols-3 gap-2 sm:gap-3" role="group" aria-label="اختيار منصة الإعلان" data-testid="platform-selector">
@@ -828,8 +833,9 @@ function PlatformSelector({
           variant="unstyled"
           size="fit"
           aria-pressed={selected === option.value}
-          className={`flex min-w-0 items-center justify-center gap-1 rounded-xl border px-2 py-3 text-xs font-bold transition sm:gap-2 sm:px-4 ${selected === option.value ? 'border-[#1557ee] bg-[#edf3ff] text-[#1557ee] shadow-[0_0_0_2px_rgba(21,87,238,.08)]' : 'border-slate-200 bg-white text-slate-500 hover:border-blue-200 hover:text-[#1557ee]'}`}
+          className={`flex min-w-0 items-center justify-center gap-1.5 rounded-xl border px-2 py-3 text-xs font-bold transition sm:gap-2 sm:px-4 ${selected === option.value ? 'border-[#1557ee] bg-[#edf3ff] text-[#1557ee] shadow-[0_0_0_2px_rgba(21,87,238,.08)]' : 'border-slate-200 bg-white text-slate-500 hover:border-blue-200 hover:text-[#1557ee]'}`}
         >
+          <option.icon aria-hidden="true" className="h-4 w-4 shrink-0" />
           {selected === option.value && <Check className="h-3.5 w-3.5 shrink-0" />}
           <span className="truncate">{option.label}</span>
         </Button>
