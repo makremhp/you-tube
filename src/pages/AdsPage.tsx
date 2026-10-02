@@ -92,7 +92,9 @@ function appendIsolatedBanner(
   frame.height = String(definition.options.height);
   frame.loading = 'eager';
   frame.referrerPolicy = 'no-referrer-when-downgrade';
-  frame.setAttribute('sandbox', 'allow-scripts allow-popups allow-popups-to-escape-sandbox');
+  frame.style.display = 'block';
+  frame.style.maxWidth = '100%';
+  frame.style.border = '0';
   frame.dataset.vidrewardAdsterraKey = definition.options.key;
   frame.srcdoc = `<!doctype html>
 <html>
@@ -116,7 +118,7 @@ function AdsterraBannerSlot({
   refreshKey: number;
   index: number;
 }) {
-  const slotRef = useRef<HTMLElement>(null);
+  const slotRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const root = slotRef.current;
@@ -131,10 +133,11 @@ function AdsterraBannerSlot({
   }, [active, definition, refreshKey]);
 
   return (
-    <article
+    <div
       ref={slotRef}
       data-testid={`adsterra-banner-slot-${index + 1}`}
-      className="flex h-[50px] w-[320px] max-w-full items-center justify-center overflow-hidden rounded-lg bg-white shadow-[0_0_0_1px_rgba(148,163,184,.35),0_8px_24px_rgba(0,0,0,.18)]"
+      data-adsterra-key={definition.options.key}
+      className="flex min-h-[50px] w-[320px] max-w-full items-center justify-center overflow-hidden rounded-lg bg-white/[0.04] shadow-[0_0_0_1px_rgba(148,163,184,.2)]"
       aria-label={`Adsterra 320 × 50 banner ${index + 1}`}
     />
   );
