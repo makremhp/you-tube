@@ -64,13 +64,38 @@
 .vr-brand {
   align-items: center;
   display: inline-flex;
+  gap: 11px;
+  text-decoration: none;
 }
 
-.vr-brand img {
-  display: block;
+.vr-profile-avatar {
+  align-items: center;
+  background: linear-gradient(145deg, #e5edd9, #b9cba7);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 3px 12px rgba(41, 75, 48, .18), 0 0 0 1px #e5eadf;
+  color: var(--vr-green);
+  display: inline-flex;
+  flex: 0 0 auto;
   height: 48px;
-  object-fit: contain;
-  width: 52px;
+  justify-content: center;
+  overflow: hidden;
+  width: 48px;
+}
+
+.vr-profile-avatar img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.vr-brand-name {
+  color: var(--vr-deep);
+  font-family: var(--vr-display);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -.04em;
 }
 
 .vr-language {
@@ -266,9 +291,13 @@
     padding: 0 20px;
   }
 
-  .vr-brand img {
+  .vr-profile-avatar {
     height: 42px;
-    width: 46px;
+    width: 42px;
+  }
+
+  .vr-brand-name {
+    font-size: 14px;
   }
 
   .vr-main {
