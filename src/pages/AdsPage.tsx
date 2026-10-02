@@ -3,21 +3,18 @@ import {
   BadgeCheck,
   Clock3,
   Gift,
-  Play,
   Zap,
 } from 'lucide-react';
 import { useLanguage } from '@/i18n';
 
-type AdProvider = 'adsgram' | 'adstera';
 type DailyProgress = {
   day: string;
-  adsgram: number;
   adstera: number;
 };
 
 type AdScriptDefinition = {
   src: string;
-  options?: {
+  options: {
     key: string;
     format: 'iframe';
     height: number;
@@ -26,14 +23,11 @@ type AdScriptDefinition = {
   };
 };
 
-const ADSGRAM_REWARD = 0.002;
-const ADSGRAM_DAILY_LIMIT = 10;
 const ADSTERRA_REWARD = 0.0005;
 const ADSTERRA_DAILY_LIMIT = 100;
 const ADSTERRA_COUNTDOWN_SECONDS = 30;
-const ADSGRAM_DURATION_SECONDS = 30;
 
-const ADSTERRA_SCRIPT_BATCH: AdScriptDefinition[] = [
+const ADSTERRA_BANNER_BATCH: AdScriptDefinition[] = [
   { src: 'https://interventioncopiedloitering.com/b895987c82805b8778a34f54911e8de0/invoke.js', options: { key: 'b895987c82805b8778a34f54911e8de0', format: 'iframe', height: 50, width: 320, params: {} } },
   { src: 'https://interventioncopiedloitering.com/ab4615d3d759a81e9b876abbcebaf690/invoke.js', options: { key: 'ab4615d3d759a81e9b876abbcebaf690', format: 'iframe', height: 50, width: 320, params: {} } },
   { src: 'https://interventioncopiedloitering.com/3b49398bb9242d548c0464f244b621fa/invoke.js', options: { key: '3b49398bb9242d548c0464f244b621fa', format: 'iframe', height: 50, width: 320, params: {} } },
@@ -44,15 +38,20 @@ const ADSTERRA_SCRIPT_BATCH: AdScriptDefinition[] = [
   { src: 'https://interventioncopiedloitering.com/04bcf6532017b6790ab2ddac95a5621d/invoke.js', options: { key: '04bcf6532017b6790ab2ddac95a5621d', format: 'iframe', height: 50, width: 320, params: {} } },
   { src: 'https://interventioncopiedloitering.com/8c0574e870e5a3843e89d947bd38aaff/invoke.js', options: { key: '8c0574e870e5a3843e89d947bd38aaff', format: 'iframe', height: 50, width: 320, params: {} } },
   { src: 'https://interventioncopiedloitering.com/9f6fe4084cb3d8a8eb4d8246ee57ed25/invoke.js', options: { key: '9f6fe4084cb3d8a8eb4d8246ee57ed25', format: 'iframe', height: 50, width: 320, params: {} } },
-  { src: 'https://interventioncopiedloitering.com/5d/77/0f/5d770ff402768d79ddda9c1cd67e9819.js' },
 ];
 
-const ADSTERRA_BANNER_BATCH = ADSTERRA_SCRIPT_BATCH.filter(
-  (script): script is AdScriptDefinition & {
-    options: NonNullable<AdScriptDefinition['options']>;
-  } => Boolean(script.options),
-);
-const ADSTERRA_SOCIAL_BATCH = ADSTERRA_SCRIPT_BATCH.filter((script) => !script.options);
+const ADSTERRA_SOCIAL_SCRIPTS = [
+  'https://interventioncopiedloitering.com/5d/77/0f/5d770ff402768d79ddda9c1cd67e9819.js',
+  'https://interventioncopiedloitering.com/96/90/da/9690da690d344e2579dffa12d4e2ac24.js',
+  'https://interventioncopiedloitering.com/f0/07/9c/f0079c7c7d8c3c01bd28c4116a805f4a.js',
+  'https://interventioncopiedloitering.com/7e/7f/2b/7e7f2b6f7c43d86c6859e5b0a40afe3e.js',
+  'https://interventioncopiedloitering.com/7e/28/55/7e2855c2f9fb53ed0ca536022ca067df.js',
+  'https://interventioncopiedloitering.com/d0/f6/b3/d0f6b318f29b5787025697029ae72f23.js',
+  'https://interventioncopiedloitering.com/58/0d/ca/580dcaa1a10c7fb3943a7ea94b700f42.js',
+  'https://interventioncopiedloitering.com/da/5e/c3/da5ec3a230bfa740492f3f78bd1ed182.js',
+];
+
+let socialScriptLoadedThisPage = false;
 
 function getLocalDayKey() {
   const date = new Date();
@@ -60,7 +59,7 @@ function getLocalDayKey() {
 }
 
 function emptyProgress(day = getLocalDayKey()): DailyProgress {
-  return { day, adsgram: 0, adstera: 0 };
+  return { day, adstera: 0 };
 }
 
 function loadDailyProgress(storageKey: string): DailyProgress {
@@ -69,7 +68,6 @@ function loadDailyProgress(storageKey: string): DailyProgress {
     if (saved?.day === getLocalDayKey()) {
       return {
         day: saved.day,
-        adsgram: Math.min(ADSGRAM_DAILY_LIMIT, Math.max(0, Number(saved.adsgram) || 0)),
         adstera: Math.min(ADSTERRA_DAILY_LIMIT, Math.max(0, Number(saved.adstera) || 0)),
       };
     }
@@ -107,22 +105,6 @@ function appendIsolatedBanner(
   root.appendChild(frame);
 }
 
-function appendSocialScriptFrame(root: HTMLElement, definition: AdScriptDefinition) {
-  const frame = document.createElement('iframe');
-  frame.title = 'Adsterra social ad';
-  frame.loading = 'eager';
-  frame.referrerPolicy = 'no-referrer-when-downgrade';
-  frame.setAttribute('sandbox', 'allow-scripts allow-popups allow-popups-to-escape-sandbox');
-  frame.srcdoc = `<!doctype html>
-<html>
-  <head><meta charset="utf-8"></head>
-  <body style="margin:0;overflow:hidden;background:transparent">
-    <script src="${definition.src}"></script>
-  </body>
-</html>`;
-  root.appendChild(frame);
-}
-
 function AdsterraBannerSlot({
   definition,
   active,
@@ -134,7 +116,7 @@ function AdsterraBannerSlot({
   refreshKey: number;
   index: number;
 }) {
-  const slotRef = useRef<HTMLDivElement>(null);
+  const slotRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const root = slotRef.current;
@@ -149,37 +131,43 @@ function AdsterraBannerSlot({
   }, [active, definition, refreshKey]);
 
   return (
-    <div
+    <article
       ref={slotRef}
       data-testid={`adsterra-banner-slot-${index + 1}`}
-      className="flex min-h-[50px] w-[320px] max-w-full items-center justify-center overflow-hidden rounded-lg bg-white/5"
-      aria-label={`Adsterra banner ${index + 1}`}
+      className="flex h-[50px] w-[320px] max-w-full items-center justify-center overflow-hidden rounded-lg bg-white shadow-[0_0_0_1px_rgba(148,163,184,.35),0_8px_24px_rgba(0,0,0,.18)]"
+      aria-label={`Adsterra 320 × 50 banner ${index + 1}`}
     />
   );
 }
 
-function AdsterraSocialScripts({ active, refreshKey }: { active: boolean; refreshKey: number }) {
-  const socialRootRef = useRef<HTMLDivElement>(null);
-
+function AdsterraSocialScripts({ active }: { active: boolean }) {
   useEffect(() => {
-    const root = socialRootRef.current;
-    if (!root || !active) {
-      root?.replaceChildren();
-      return;
-    }
+    if (!active || socialScriptLoadedThisPage) return;
+    const source = ADSTERRA_SOCIAL_SCRIPTS[Math.floor(Math.random() * ADSTERRA_SOCIAL_SCRIPTS.length)];
+    if (!source) return;
 
-    root.replaceChildren();
-    ADSTERRA_SOCIAL_BATCH.forEach((definition) => appendSocialScriptFrame(root, definition));
-    return () => root.replaceChildren();
-  }, [active, refreshKey]);
+    const script = document.createElement('script');
+    let cancelled = false;
+    script.src = source;
+    script.async = true;
+    script.dataset.vidrewardAdsteraSocial = 'true';
+    script.onload = () => {
+      if (!cancelled) socialScriptLoadedThisPage = true;
+    };
+    script.onerror = () => {
+      if (!cancelled) {
+        socialScriptLoadedThisPage = false;
+        script.remove();
+      }
+    };
+    document.body.appendChild(script);
+    return () => {
+      cancelled = true;
+      script.remove();
+    };
+  }, [active]);
 
-  return (
-    <div
-      ref={socialRootRef}
-      aria-hidden="true"
-      className="pointer-events-none absolute h-px w-px overflow-hidden opacity-0"
-    />
-  );
+  return null;
 }
 
 function AdsterraExperience({
@@ -251,7 +239,7 @@ function AdsterraExperience({
             />
           ))}
         </div>
-        <AdsterraSocialScripts active={active} refreshKey={refreshKey} />
+        <AdsterraSocialScripts active={active} />
       </div>
       {!active && (
         <div
@@ -281,49 +269,40 @@ function AdsterraExperience({
 }
 
 function RewardAdCard({
-  provider,
   title,
   description,
   label,
   reward,
   completed,
   limit,
-  phase,
   blocked,
   isArabic,
   onStart,
 }: {
-  provider: AdProvider;
   title: string;
   description: string;
   label: string;
   reward: number;
   completed: number;
   limit: number;
-  phase: 'watching' | 'waiting' | null;
   blocked: boolean;
   isArabic: boolean;
   onStart: () => void;
 }) {
-  const isAdstera = provider === 'adstera';
   const isComplete = completed >= limit;
   const progress = Math.min(100, Math.round((completed / limit) * 100));
-  const startLabel = isArabic ? (isAdstera ? 'ابدأ التصفح' : 'ابدأ الآن') : (isAdstera ? 'Start browsing' : 'Start now');
+  const startLabel = isArabic ? 'ابدأ التصفح' : 'Start browsing';
 
   return (
     <section
-      data-testid={`card-task-${provider}`}
-      className={`relative isolate overflow-hidden rounded-2xl border p-3 text-white shadow-xl transition duration-200 hover:-translate-y-0.5 ${
-        isAdstera
-          ? 'border-red-400/40 bg-[radial-gradient(circle_at_94%_0%,rgba(248,90,90,.22),transparent_8rem),linear-gradient(135deg,#64221f_0%,#361a20_58%,#1d131e_100%)] shadow-red-950/20'
-          : 'border-blue-200/20 bg-[radial-gradient(circle_at_92%_0%,rgba(55,211,224,.2),transparent_8rem),linear-gradient(135deg,#1e2d5b_0%,#1c2347_58%,#10172d_100%)] shadow-blue-950/20'
-      } ${blocked ? 'opacity-60' : ''}`}
+      data-testid="card-task-adstera"
+      className={`relative isolate overflow-hidden rounded-2xl border border-red-400/40 bg-[radial-gradient(circle_at_94%_0%,rgba(248,90,90,.22),transparent_8rem),linear-gradient(135deg,#64221f_0%,#361a20_58%,#1d131e_100%)] p-3 text-white shadow-xl shadow-red-950/20 transition duration-200 hover:-translate-y-0.5 ${blocked ? 'opacity-60' : ''}`}
     >
       <div className="relative z-10 flex items-center gap-3 rounded-xl px-1.5 py-1">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-lg">
           <img
-            src={isAdstera ? '/assets/adstera-logo.jpeg' : '/assets/adsgram-logo.jpg'}
-            alt={isAdstera ? 'Adsterra' : 'Adsgram'}
+            src="/assets/adstera-logo.jpeg"
+            alt="Adsterra"
             className="h-full w-full object-cover"
           />
         </div>
@@ -331,7 +310,7 @@ function RewardAdCard({
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <span className="text-[9px] font-bold uppercase tracking-[.13em] text-[#f6c453]">{label}</span>
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-bold text-blue-100/75">
-              {isAdstera ? 'Adsterra' : 'Adsgram'}
+              Adsterra
             </span>
           </div>
           <h2 className="truncate text-sm font-bold">{title}</h2>
@@ -346,9 +325,9 @@ function RewardAdCard({
         <div className="mb-1.5 mt-3 flex items-center justify-between text-[10px] font-semibold text-blue-100/75">
           <span className="flex items-center gap-1.5">
             <Clock3 size={13} className="text-cyan-200" />
-            {ADSGRAM_DURATION_SECONDS} {isArabic ? 'ثانية' : 'seconds'}
+            {ADSTERRA_COUNTDOWN_SECONDS} {isArabic ? 'ثانية' : 'seconds'}
           </span>
-          <span data-testid={`text-task-limit-${provider}`} className="font-mono">
+          <span data-testid="text-task-limit-adstera" className="font-mono">
             {completed} / {limit} {isArabic ? 'اليوم' : 'today'}
           </span>
         </div>
@@ -360,29 +339,19 @@ function RewardAdCard({
       <div className="relative z-10 mt-3 flex items-center justify-between gap-3 px-1">
         <span className="text-[10px] text-blue-100/65">{isArabic ? 'يتجدد يومياً' : 'Resets daily'}</span>
         {isComplete ? (
-          <span data-testid={`status-task-completed-${provider}`} className="flex min-h-9 items-center gap-1.5 text-xs font-bold text-emerald-300">
+          <span data-testid="status-task-completed-adstera" className="flex min-h-9 items-center gap-1.5 text-xs font-bold text-emerald-300">
             <BadgeCheck size={16} />
             {isArabic ? 'اكتملت اليوم' : 'Done for today'}
           </span>
-        ) : phase === 'waiting' ? (
-          <button type="button" disabled className="flex min-h-9 cursor-wait items-center gap-2 rounded-lg bg-[#f6c453]/15 px-3 text-[11px] font-bold text-[#f6c453]">
-            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#f6c453]/35 border-t-[#f6c453]" />
-            {isArabic ? 'جاري التحقق' : 'Verifying'}
-          </button>
-        ) : phase === 'watching' ? (
-          <button type="button" disabled className="flex min-h-9 cursor-wait items-center gap-2 rounded-lg bg-cyan-200/10 px-3 text-[11px] font-bold text-cyan-100">
-            <Clock3 size={14} />
-            {isArabic ? 'جارٍ عرض الإعلان' : 'Ad in progress'}
-          </button>
         ) : (
           <button
             type="button"
             disabled={blocked}
-            data-testid={`button-start-task-${provider}`}
+            data-testid="button-start-task-adstera"
             onClick={onStart}
             className="flex min-h-9 items-center gap-2 rounded-lg bg-[#f6c453] px-3 text-[11px] font-bold text-[#17213a] transition hover:bg-[#ffdc7e] active:scale-[.98] disabled:cursor-not-allowed"
           >
-            {isAdstera ? <Zap size={14} /> : <Play size={14} fill="currentColor" />}
+            <Zap size={14} />
             {startLabel}
           </button>
         )}
@@ -402,9 +371,7 @@ export function AdsPage({
   const storageKey = `vidreward.ads.daily.v1-${userId ?? 'guest'}`;
   const [today, setToday] = useState(getLocalDayKey);
   const [progress, setProgress] = useState(() => loadDailyProgress(storageKey));
-  const [adsgramPhase, setAdsgramPhase] = useState<'watching' | 'waiting' | null>(null);
   const [adsteraOpen, setAdsteraOpen] = useState(false);
-  const adsgramClaimed = useRef(false);
 
   useEffect(() => {
     const interval = window.setInterval(() => setToday(getLocalDayKey()), 30_000);
@@ -430,81 +397,39 @@ export function AdsPage({
   const daily = progress.day === today ? progress : emptyProgress(today);
   const copy = isArabic
     ? {
-        eyebrow: 'إعلانات Adsgram وAdsterra',
+        eyebrow: 'إعلانات Adsterra',
         title: 'شاهد الإعلان واحصل على مكافأتك.',
-        description: 'اختر الإعلان المناسب واطّلع على المكافأة قبل البدء.',
-        adsgramTitle: 'إعلان Adsgram',
-        adsgramDescription: 'محاكاة محلية للتجربة فقط؛ لا يتصل المصدر بـ Adsgram ولا يتحقق من مشاهدة فعلية.',
-        adsgramLabel: 'محاكاة',
+        description: 'تصفح البنرات الإعلانية واحصل على مكافأتك بعد إكمال الوقت.',
         adsteraTitle: 'تصفح إعلانات Adsterra',
         adsteraDescription: 'تصفح صفحة Adsterra لمدة 30 ثانية واحصل على مكافأة 0.0005 USDT.',
         adsteraLabel: 'تصفح لمدة 30 ثانية',
-        completed: 'اكتملت اليوم',
         rewardAdded: 'تمت إضافة المكافأة',
         rewardMessage: (reward: string) => `أُضيفت ${reward} إلى رصيدك.`,
-        demoRewardAdded: 'مكافأة تجريبية',
-        demoRewardMessage: (reward: string) => `أُضيفت ${reward} إلى رصيد العرض التجريبي.`,
       }
     : {
-        eyebrow: 'ADSGRAM & ADSTERRA',
+        eyebrow: 'ADSTERRA ADS',
         title: 'Watch the ad and earn your reward.',
-        description: 'Choose an ad and review its reward before you start.',
-        adsgramTitle: 'Adsgram ad',
-        adsgramDescription: 'Local demo only; the supplied source does not call Adsgram or verify a real view.',
-        adsgramLabel: 'Demo',
+        description: 'Browse the banner ads and earn your reward after completing the countdown.',
         adsteraTitle: 'Browse Adsterra',
         adsteraDescription: 'Browse the Adsterra page for 30 seconds and receive 0.0005 USDT.',
         adsteraLabel: '30-second browse',
-        completed: 'complete today',
         rewardAdded: 'Reward added',
         rewardMessage: (reward: string) => `${reward} was added to your balance.`,
-        demoRewardAdded: 'Demo reward added',
-        demoRewardMessage: (reward: string) => `${reward} was added to the demo balance.`,
       };
 
-  const completeAd = (provider: AdProvider) => {
+  const completeAd = () => {
     const current = progress.day === getLocalDayKey() ? progress : emptyProgress();
-    const limit = provider === 'adsgram' ? ADSGRAM_DAILY_LIMIT : ADSTERRA_DAILY_LIMIT;
-    if (current[provider] >= limit) return;
+    if (current.adstera >= ADSTERRA_DAILY_LIMIT) return;
 
     setProgress({
       ...current,
-      [provider]: current[provider] + 1,
+      adstera: current.adstera + 1,
     });
-    const reward = provider === 'adsgram' ? ADSGRAM_REWARD : ADSTERRA_REWARD;
-    if (provider === 'adsgram') {
-      onReward(reward, copy.demoRewardAdded, copy.demoRewardMessage(formatReward(reward)));
-    } else {
-      onReward(reward, copy.rewardAdded, copy.rewardMessage(formatReward(reward)));
-    }
-  };
-
-  useEffect(() => {
-    if (!adsgramPhase) return;
-
-    const timer = window.setTimeout(() => {
-      if (adsgramPhase === 'watching') {
-        setAdsgramPhase('waiting');
-        return;
-      }
-      if (!adsgramClaimed.current) {
-        adsgramClaimed.current = true;
-        completeAd('adsgram');
-      }
-      setAdsgramPhase(null);
-    }, adsgramPhase === 'watching' ? 1800 : 900);
-
-    return () => window.clearTimeout(timer);
-  }, [adsgramPhase]);
-
-  const startAdsgram = () => {
-    if (daily.adsgram >= ADSGRAM_DAILY_LIMIT || adsgramPhase || adsteraOpen) return;
-    adsgramClaimed.current = false;
-    setAdsgramPhase('watching');
+    onReward(ADSTERRA_REWARD, copy.rewardAdded, copy.rewardMessage(formatReward(ADSTERRA_REWARD)));
   };
 
   const startAdstera = () => {
-    if (daily.adstera >= ADSTERRA_DAILY_LIMIT || adsgramPhase || adsteraOpen) return;
+    if (daily.adstera >= ADSTERRA_DAILY_LIMIT || adsteraOpen) return;
     setAdsteraOpen(true);
   };
 
@@ -521,28 +446,13 @@ export function AdsPage({
 
       <div className="mt-4 space-y-3">
         <RewardAdCard
-          provider="adsgram"
-          title={copy.adsgramTitle}
-          description={copy.adsgramDescription}
-          label={copy.adsgramLabel}
-          reward={ADSGRAM_REWARD}
-          completed={daily.adsgram}
-          limit={ADSGRAM_DAILY_LIMIT}
-          phase={adsgramPhase}
-          blocked={Boolean(adsgramPhase || adsteraOpen)}
-          isArabic={isArabic}
-          onStart={startAdsgram}
-        />
-        <RewardAdCard
-          provider="adstera"
           title={copy.adsteraTitle}
           description={copy.adsteraDescription}
           label={copy.adsteraLabel}
           reward={ADSTERRA_REWARD}
           completed={daily.adstera}
           limit={ADSTERRA_DAILY_LIMIT}
-          phase={null}
-          blocked={Boolean(adsgramPhase || adsteraOpen)}
+          blocked={adsteraOpen}
           isArabic={isArabic}
           onStart={startAdstera}
         />
@@ -552,7 +462,7 @@ export function AdsPage({
         <AdsterraExperience
           isArabic={isArabic}
           onClaim={() => {
-            completeAd('adstera');
+            completeAd();
             setAdsteraOpen(false);
           }}
         />

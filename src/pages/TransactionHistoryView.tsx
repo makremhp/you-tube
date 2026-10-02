@@ -65,14 +65,14 @@ export function TransactionHistoryView({
       return [
         record.id,
         record.destination,
-        record.memoTag,
+        ...(isDeposit ? [record.memoTag] : []),
         record.blockchainTxId ?? '',
         record.status,
         record.method,
         record.createdAt,
       ].some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
     });
-  }, [filter, query, records]);
+  }, [filter, isDeposit, query, records]);
 
   const counts: Record<HistoryFilter, number> = {
     all: records.length,
