@@ -946,6 +946,69 @@
   .vr-landing .social-t { font-size: 11.4px; }
 }
 
+/* Distinguish the two landing-page paths with a coordinated red and violet palette. */
+.vr-landing .vr-viewer-card {
+  background: linear-gradient(145deg, #f0e5ff 0%, #e9dcff 72%, #dfd0ff 100%);
+  border-color: #d3bff5;
+  box-shadow: 0 16px 38px rgba(101, 62, 180, .12), inset 0 1px 0 rgba(255, 255, 255, .72);
+}
+
+.vr-landing .vr-viewer-card:hover {
+  border-color: #b69ae9;
+  box-shadow: 0 20px 42px rgba(101, 62, 180, .18), inset 0 1px 0 rgba(255, 255, 255, .76);
+}
+
+.vr-landing .vr-viewer-card .vr-choice-icon {
+  background: #efe7ff;
+  border-color: #e1d3fb;
+  color: #7144c6;
+}
+
+.vr-landing .vr-viewer-card .vr-choice-label {
+  color: #7144c6;
+}
+
+.vr-landing .vr-viewer-card .vr-button-primary {
+  background: linear-gradient(100deg, #8756df, #6739bc);
+  box-shadow: 0 9px 20px rgba(103, 57, 188, .2);
+}
+
+.vr-landing .vr-viewer-card .vr-button-primary:hover {
+  background: linear-gradient(100deg, #7543cf, #562ba8);
+  box-shadow: 0 11px 24px rgba(103, 57, 188, .26);
+}
+
+.vr-landing .vr-advertiser-card {
+  background: linear-gradient(145deg, #ffe5e8 0%, #ffd9de 72%, #ffccd3 100%);
+  border-color: #efb9c0;
+  box-shadow: 0 16px 38px rgba(177, 54, 70, .12), inset 0 1px 0 rgba(255, 255, 255, .72);
+}
+
+.vr-landing .vr-advertiser-card:hover {
+  border-color: #df9ca5;
+  box-shadow: 0 20px 42px rgba(177, 54, 70, .18), inset 0 1px 0 rgba(255, 255, 255, .76);
+}
+
+.vr-landing .vr-advertiser-card .vr-choice-icon {
+  background: #ffe8eb;
+  border-color: #f8d3d8;
+  color: #c54252;
+}
+
+.vr-landing .vr-advertiser-card .vr-choice-label {
+  color: #c54252;
+}
+
+.vr-landing .vr-advertiser-card .vr-button-primary {
+  background: linear-gradient(100deg, #e65a68, #c83c4d);
+  box-shadow: 0 9px 20px rgba(200, 60, 77, .19);
+}
+
+.vr-landing .vr-advertiser-card .vr-button-primary:hover {
+  background: linear-gradient(100deg, #d84858, #b62e40);
+  box-shadow: 0 11px 24px rgba(200, 60, 77, .25);
+}
+
 @media (min-width: 360px) and (max-width: 499px) {
   .vr-header { height: 69px; }
   .vr-brand {
