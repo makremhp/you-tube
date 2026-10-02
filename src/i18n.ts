@@ -1,18 +1,23 @@
-import { createContext, createElement, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 export type Language = 'ar' | 'en';
 
+const LANGUAGE_STORAGE_KEY = 'vidreward-language';
+
+function getSavedLanguage(): Language | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const saved = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    return saved === 'ar' || saved === 'en' ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
 export function getBrowserLanguage(): Language {
   if (typeof navigator === 'undefined') return 'en';
-  const documentLanguage = typeof document === 'undefined' ? '' : document.documentElement.lang.toLowerCase();
-  if (documentLanguage.startsWith('ar')) return 'ar';
-  if (documentLanguage.startsWith('en')) return 'en';
-  const languages = navigator.languages?.length ? navigator.languages : [navigator.language];
-  const preferredSupportedLanguage = languages.find((value) => {
-    const normalized = value?.toLowerCase() ?? '';
-    return normalized.startsWith('ar') || normalized.startsWith('en');
-  });
-  return preferredSupportedLanguage?.toLowerCase().startsWith('ar') ? 'ar' : 'en';
+  const primaryLanguage = navigator.languages?.[0] || navigator.language || '';
+  return primaryLanguage.toLowerCase().startsWith('ar') ? 'ar' : 'en';
 }
 
 const exactTranslations: Record<string, string> = {
@@ -266,7 +271,7 @@ const dynamicTranslations: Array<[RegExp, (match: RegExpExecArray) => string]> =
   [/^أضيف الطلب (.+) إلى سجل السحب بحالة قيد المعالجة\.$/, (match) => `Withdrawal request ${match[1]} was added to history with a processing status.`],
   [/^أضيفت (.+) إلى رصيدك بعد إكمال المدة المطلوبة\.$/, (match) => `${match[1]} was added to your balance after completing the required duration.`],
   [/^تمت إضافة (.+) USDT إلى رصيد المعلن\.$/, (match) => `${match[1]} USDT was added to the advertiser balance.`],
-  [/^توقفت المشاهدة قبل إكمال المدة المطلوبة، ولم تُحتسب المكافأة\.$/, () => 'Viewing stopped before the required duration was completed, so the reward was not counted.'],
+  [/^تم حفظ تقدم المشاهدة\. ارجع وأكمل الوقت المطلوب لاستلام المكافأة\.$/, () => 'Your watch progress was saved. Return and finish the required time to receive the reward.'],
   [/^تمت استعادة تقدم المشاهدة دون مكافأة\. أكمل المدة المطلوبة ثم تحقق\.$/, () => 'Viewing progress was restored without a reward. Complete the required duration, then verify.'],
   [/^لم يصل تحويل مؤكد قبل انتهاء مدة الفاتورة\.$/, () => 'No confirmed transfer arrived before the invoice expired.'],
 ];
@@ -540,7 +545,7 @@ const fragmentTranslations: Record<string, string> = {
   'لا توجد عمليات إيداع بعد': 'No deposit transactions yet',
   'مساحة الربح / سجل السحب': 'Earning space / Withdrawal history',
   'لا توجد طلبات سحب بعد': 'No withdrawal requests yet',
-  'توقفت المشاهدة قبل إكمال المدة المطلوبة، ولم تُحتسب المكافأة.': 'Viewing stopped before the required duration was completed, so the reward was not counted.',
+  'تم حفظ تقدم المشاهدة. ارجع وأكمل الوقت المطلوب لاستلام المكافأة.': 'Your watch progress was saved. Return and finish the required time to receive the reward.',
   'تمت استعادة تقدم المشاهدة دون مكافأة. أكمل المدة المطلوبة ثم تحقق.': 'Viewing progress was restored without a reward. Complete the required duration, then verify.',
   'أصبح الفيديو نشطًا ويمكن للمشاهدين اكتشافه الآن.': 'The video is active and viewers can discover it now.',
 };
@@ -570,6 +575,7 @@ export function translateText(value: string, language: Language): string {
 
 type LanguageContextValue = {
   language: Language;
+  setLanguage: (language: Language) => void;
   dir: 'rtl' | 'ltr';
   isArabic: boolean;
   t: (value: string) => string;
@@ -578,16 +584,28 @@ type LanguageContextValue = {
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguage] = useState<Language>(() => getBrowserLanguage());
+  const [language, setLanguage] = useState<Language>(
+    () => getSavedLanguage() ?? getBrowserLanguage(),
+  );
+  const setLanguagePreference = useCallback((nextLanguage: Language) => {
+    try {
+      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, nextLanguage);
+    } catch {
+      // Keep language switching available when browser storage is restricted.
+    }
+    setLanguage(nextLanguage);
+  }, []);
   const value = useMemo<LanguageContextValue>(() => ({
     language,
+    setLanguage: setLanguagePreference,
     dir: language === 'ar' ? 'rtl' : 'ltr',
     isArabic: language === 'ar',
     t: (text: string) => translateText(text, language),
-  }), [language]);
+  }), [language, setLanguagePreference]);
 
   useEffect(() => {
     const syncBrowserLanguage = () => {
+      if (getSavedLanguage()) return;
       const nextLanguage = getBrowserLanguage();
       setLanguage((currentLanguage) => currentLanguage === nextLanguage ? currentLanguage : nextLanguage);
     };
