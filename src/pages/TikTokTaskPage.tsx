@@ -15,7 +15,7 @@ export function TikTokTaskPage({
   onSubmitProof: (campaignId: string, image: string) => void;
   onBack: () => void;
 }) {
-  const { dir } = useLanguage();
+  const { dir, t } = useLanguage();
   const [proofImage, setProofImage] = useState('');
 
   const handleProofImage = (event: ChangeEvent<HTMLInputElement>) => {
@@ -48,7 +48,7 @@ export function TikTokTaskPage({
         className="mb-5 inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-xs font-bold text-slate-500 transition hover:bg-white hover:text-[#1557ee] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1557ee]"
       >
         <ArrowRight className="h-4 w-4" />
-        العودة إلى مهام TikTok
+        {t('العودة إلى مهام TikTok')}
       </Button>
 
       <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[var(--shadow-soft)]">
@@ -101,7 +101,7 @@ export function TikTokTaskPage({
                   className="min-h-12 justify-center gap-2 rounded-xl border-[#1c2228] bg-[#1c2228] text-sm font-bold text-white shadow-[0_4px_10px_rgba(17,24,39,.12)] transition hover:border-[#343c44] hover:bg-[#343c44] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1557ee]"
                 >
                   <ArrowUpRight className="h-4 w-4" />
-                  افتح حساب TikTok
+                  {t('افتح حساب TikTok')}
                 </Button>
                 <div className="flex items-start gap-3 rounded-xl bg-white p-4 text-xs leading-6 text-slate-500">
                   <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-slate-100 font-bold text-slate-600">1</span>
@@ -140,7 +140,7 @@ export function TikTokTaskPage({
                   className="min-h-12 justify-center gap-2 rounded-xl text-sm font-bold disabled:opacity-50"
                 >
                   <ShieldCheck className="h-4 w-4" />
-                  أرسل الإثبات للمراجعة
+                  {t('أرسل الإثبات للمراجعة')}
                 </Button>
               </div>
             </div>

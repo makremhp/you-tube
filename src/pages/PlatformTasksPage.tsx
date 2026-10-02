@@ -20,15 +20,17 @@ export function PlatformTasksPage({
   campaigns,
   proofs,
   onStartTask,
+  onNotify,
   telegramUserId,
 }: {
   platform: PromotionPlatform;
   campaigns: PromotionCampaign[];
   proofs: TaskProof[];
   onStartTask?: (campaign: PromotionCampaign) => void;
+  onNotify?: (tone: 'success' | 'info' | 'warning', title: string, message: string) => void;
   telegramUserId: number | null;
 }) {
-  const { dir } = useLanguage();
+  const { dir, t } = useLanguage();
   const isTelegram = platform === 'telegram';
   const BrandIcon = isTelegram ? SiTelegram : SiTiktok;
   const brandColor = isTelegram ? '#229ED9' : '#111111';
@@ -49,13 +51,16 @@ export function PlatformTasksPage({
   const verifyMembership = async (task: PromotionCampaign) => {
     const initData = window.Telegram?.WebApp?.initData;
     if (!initData) {
+      const message = 'افتح التطبيق من Telegram للتحقق الآلي من العضوية.';
       setVerification((current) => ({
         ...current,
-        [task.id]: { state: 'error', message: 'افتح التطبيق من Telegram للتحقق الآلي من العضوية.' },
+        [task.id]: { state: 'error', message },
       }));
+      onNotify?.('warning', 'تعذر التحقق من الاشتراك', message);
       return;
     }
     setVerification((current) => ({ ...current, [task.id]: { state: 'checking' } }));
+    onNotify?.('info', 'جارٍ التحقق من الاشتراك', 'نراجع عضويتك في القناة الآن.');
     try {
       const response = await fetch(`${import.meta.env.BASE_URL}api/telegram/verify-bot`, {
         method: 'POST',
@@ -64,18 +69,35 @@ export function PlatformTasksPage({
       });
       const result = await response.json() as MembershipResponse;
       if (!response.ok) throw new Error(result.message || 'تعذر التحقق الآن. حاول مرة أخرى.');
-      setVerification((current) => ({
-        ...current,
-        [task.id]: result.member
-          ? { state: 'member', message: 'تم التحقق من اشتراكك عبر Telegram.' }
-          : { state: 'not-member', message: 'لم يظهر اشتراكك بعد. انضم إلى القناة ثم أعد التحقق.' },
-      }));
+      if (result.member) {
+        const message = 'تم التحقق من اشتراكك عبر Telegram.';
+        setVerification((current) => ({
+          ...current,
+          [task.id]: { state: 'member', message },
+        }));
+        onNotify?.('success', 'تم إكمال مهمة القناة', 'تم التحقق من اشتراكك عبر Telegram وإكمال المهمة.');
+      } else {
+        const message = 'لم يظهر اشتراكك بعد. انضم إلى القناة ثم أعد التحقق.';
+        setVerification((current) => ({
+          ...current,
+          [task.id]: { state: 'not-member', message },
+        }));
+        onNotify?.('warning', 'لم يكتمل التحقق', message);
+      }
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'تعذر التحقق الآن. حاول مرة أخرى.';
       setVerification((current) => ({
         ...current,
-        [task.id]: { state: 'error', message: error instanceof Error ? error.message : 'تعذر التحقق الآن. حاول مرة أخرى.' },
+        [task.id]: { state: 'error', message },
       }));
+      onNotify?.('warning', 'تعذر التحقق من الاشتراك', message);
     }
+  };
+
+  const openTaskChannel = (task: PromotionCampaign) => {
+    window.open(task.link, '_blank', 'noopener,noreferrer');
+    setJoiningId(task.id);
+    onNotify?.('info', 'تم فتح رابط القناة', 'عُد إلى التطبيق بعد الانضمام للتحقق من اشتراكك.');
   };
 
   useEffect(() => {
@@ -105,30 +127,30 @@ export function PlatformTasksPage({
           <BrandIcon aria-hidden="true" className="h-6 w-6" />
         </span>
         <div className="min-w-0">
-          <div className="text-xs font-semibold text-[#1557ee]">مساحة الربح / {isTelegram ? 'Telegram' : 'TikTok'}</div>
-          <h1 className="mt-1 font-display text-2xl font-bold text-[#12234b]">{isTelegram ? 'مهام Telegram' : 'مهام TikTok'}</h1>
-          <p className="mt-1 text-xs leading-5 text-slate-500">{isTelegram ? 'انضم إلى القناة، ثم تحقّق تلقائيًا من اشتراكك.' : 'تابع الحساب وارفع لقطة شاشة واضحة لإثبات المتابعة.'}</p>
+          <div className="text-xs font-semibold text-[#1557ee]">{t('مساحة الربح')} / {isTelegram ? 'Telegram' : 'TikTok'}</div>
+          <h1 className="mt-1 font-display text-2xl font-bold text-[#12234b]">{t(isTelegram ? 'مهام Telegram' : 'مهام TikTok')}</h1>
+          <p className="mt-1 text-xs leading-5 text-slate-500">{t(isTelegram ? 'انضم إلى القناة، ثم تحقّق تلقائيًا من اشتراكك.' : 'تابع الحساب وارفع لقطة شاشة واضحة لإثبات المتابعة.')}</p>
         </div>
       </div>
-      {!activeCampaigns.length && <div className="mb-5 flex items-start gap-2 rounded-xl border border-blue-100 bg-[#f4f8ff] px-4 py-3 text-[11px] leading-5 text-slate-600"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#1557ee]" /><span>هذه أمثلة للمعاينة فقط. ستظهر الحملات الحقيقية هنا بعد نشرها.</span></div>}
-      {isTelegram && campaigns.some((campaign) => campaign.platform === 'telegram' && campaign.status !== 'نشط') && <div className="mb-5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] leading-5 text-amber-900"><Clock3 className="mt-0.5 h-4 w-4 shrink-0" /><span>هناك حملة تنتظر تأكيد صلاحيات البوت قبل ظهورها للمهام.</span></div>}
+      {!activeCampaigns.length && <div className="mb-5 flex items-start gap-2 rounded-xl border border-blue-100 bg-[#f4f8ff] px-4 py-3 text-[11px] leading-5 text-slate-600"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#1557ee]" /><span>{t('هذه أمثلة للمعاينة فقط. ستظهر الحملات الحقيقية هنا بعد نشرها.')}</span></div>}
+      {isTelegram && campaigns.some((campaign) => campaign.platform === 'telegram' && campaign.status !== 'نشط') && <div className="mb-5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] leading-5 text-amber-900"><Clock3 className="mt-0.5 h-4 w-4 shrink-0" /><span>{t('هناك حملة تنتظر تأكيد صلاحيات البوت قبل ظهورها للمهام.')}</span></div>}
       <div className="grid gap-4 lg:grid-cols-2">
         {tasks.map((task) => {
           const proof = proofs.find((item) => item.campaignId === task.id);
           const verificationState = verification[task.id] ?? { state: 'idle' as const };
           if (isTelegram) {
             return (
-              <article key={task.id} data-testid={`task-${platform}-${task.id}`} className="h-[60px] max-h-[60px] overflow-hidden rounded-2xl border border-slate-200 bg-white px-2 shadow-[var(--shadow-soft)] transition hover:border-[#b9e6f5] hover:shadow-[var(--shadow-lift)] sm:px-3">
-                <div className="flex h-full min-w-0 items-center gap-2">
+              <article key={task.id} data-testid={`task-${platform}-${task.id}`} className="min-h-[78px] rounded-2xl border border-slate-200 bg-white px-2.5 py-2 shadow-[var(--shadow-soft)] transition hover:border-[#b9e6f5] hover:shadow-[var(--shadow-lift)] sm:px-3">
+                <div className="flex min-h-[60px] min-w-0 items-center gap-2">
                   <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full bg-[#eaf8fd] text-[#229ED9] sm:h-12 sm:w-12">
                     {task.image
-                      ? <img src={task.image} alt={`صورة حملة ${task.title}`} className="h-full w-full object-cover" />
+                      ? <img src={task.image} alt={t('صورة حملة')} className="h-full w-full object-cover" />
                       : <ImageIcon aria-hidden="true" className="h-4 w-4 text-slate-400" />}
                   </span>
                   <div className="min-w-0 flex-1">
                     <h2 className="truncate text-[11px] font-bold leading-4 text-[#12234b]">{task.title}</h2>
                     <p className={`truncate text-[9px] leading-3 ${verificationState.state === 'member' ? 'text-[#159b89]' : verificationState.state === 'error' || verificationState.state === 'not-member' ? 'text-amber-700' : 'text-slate-400'}`} role={verificationState.state === 'idle' ? undefined : 'status'}>
-                      {verificationState.message ?? (returnedIds[task.id] && !telegramUserId ? 'افتح التطبيق من Telegram للتحقق الآلي من العضوية.' : `${task.targetCount.toLocaleString()} مشترك · ${task.link}`)}
+                      {t(verificationState.message ?? (returnedIds[task.id] && !telegramUserId ? 'افتح التطبيق من Telegram للتحقق الآلي من العضوية.' : `${task.targetCount.toLocaleString()} ${t('مشترك')} · ${task.link}`))}
                     </p>
                   </div>
                   <span className="shrink-0 rounded-full bg-[#eafbf8] px-2 py-1 text-[9px] font-bold text-[#159b89]">{isTelegram ? '$0.02' : '$0.01'}</span>
@@ -136,31 +158,31 @@ export function PlatformTasksPage({
                     type="button"
                     data-testid={`button-join-${task.id}`}
                     disabled={verificationState.state === 'checking' || verificationState.state === 'member' || (returnedIds[task.id] && !telegramUserId)}
-                    onClick={() => returnedIds[task.id] ? void verifyMembership(task) : (window.open(task.link, '_blank', 'noopener,noreferrer'), setJoiningId(task.id))}
+                    onClick={() => returnedIds[task.id] ? void verifyMembership(task) : openTaskChannel(task)}
                     variant={returnedIds[task.id] ? 'primary' : 'secondary'}
                     size="fit"
-                    aria-label={returnedIds[task.id] ? 'تحقق من الاشتراك' : 'انضم إلى القناة'}
-                    className={`flex h-9 min-w-[58px] shrink-0 items-center justify-center gap-1 rounded-lg px-2 text-[9px] font-bold ${returnedIds[task.id] ? 'text-white' : 'border-slate-200 bg-white text-[#12234b]'}`}
+                    aria-label={t(returnedIds[task.id] ? 'تحقق من الاشتراك' : 'انضم إلى القناة')}
+                    className={`flex h-9 min-w-[66px] shrink-0 items-center justify-center gap-1 rounded-lg px-2 text-[9px] font-bold ${returnedIds[task.id] ? 'text-white' : 'border-slate-200 bg-white text-[#12234b]'}`}
                   >
                     {verificationState.state === 'checking' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : verificationState.state === 'member' ? <CheckCircle2 className="h-3.5 w-3.5" /> : returnedIds[task.id] ? <ShieldCheck className="h-3.5 w-3.5" /> : <ExternalLink className="h-3.5 w-3.5" />}
-                    {verificationState.state === 'checking' ? 'تحقق…' : verificationState.state === 'member' ? 'مكتمل' : returnedIds[task.id] ? 'تحقق' : 'انضم'}
+                    {verificationState.state === 'checking' ? t('تحقق…') : verificationState.state === 'member' ? t('مكتمل') : returnedIds[task.id] ? t('تحقق') : t('انضم')}
                   </Button>
                 </div>
               </article>
             );
           }
           return (
-            <article key={task.id} data-testid={`task-${platform}-${task.id}`} className="h-[70px] max-h-[70px] overflow-hidden rounded-2xl border border-slate-200 bg-white px-2 shadow-[var(--shadow-soft)] transition hover:border-blue-200 hover:shadow-[var(--shadow-lift)] sm:px-3">
-              <div className="flex h-full min-w-0 items-center gap-2 sm:gap-3">
+            <article key={task.id} data-testid={`task-${platform}-${task.id}`} className="min-h-[82px] rounded-2xl border border-slate-200 bg-white px-2.5 py-2 shadow-[var(--shadow-soft)] transition hover:border-blue-200 hover:shadow-[var(--shadow-lift)] sm:px-3">
+              <div className="flex min-h-[64px] min-w-0 items-center gap-2 sm:gap-3">
                 <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-slate-200 bg-[#f2f5f8] sm:h-12 sm:w-12">
                   {task.image
-                    ? <img src={task.image} alt={`صورة حملة ${task.title}`} className="h-full w-full object-cover" />
+                    ? <img src={task.image} alt={t('صورة حملة')} className="h-full w-full object-cover" />
                     : <ImageIcon aria-hidden="true" className="h-4 w-4 text-slate-400" />}
                 </span>
                 <div className="min-w-0 flex-1">
                   <h2 className="truncate text-[11px] font-bold leading-4 text-[#12234b] sm:text-xs">{task.title}</h2>
                   <p className={`truncate text-[9px] leading-3 ${proof ? 'font-semibold text-[#2456b8]' : 'text-slate-400'}`} dir="ltr">
-                    {proof ? 'الإثبات قيد المراجعة' : `${task.targetCount.toLocaleString()} متابع · ${task.link}`}
+                    {proof ? t('الإثبات قيد المراجعة') : `${task.targetCount.toLocaleString()} ${t('متابع')} · ${task.link}`}
                   </p>
                 </div>
                 <span className="shrink-0 rounded-full bg-[#eafbf8] px-2 py-1 text-[9px] font-bold text-[#159b89]">$0.01</span>
@@ -173,7 +195,7 @@ export function PlatformTasksPage({
                   className="flex h-9 min-w-[74px] shrink-0 items-center justify-center gap-1 rounded-lg border-[#c9e9f4] bg-white px-2 text-[9px] font-bold text-[#147fa7] transition hover:border-[#229ed9] hover:bg-[#effaff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#229ed9]"
                 >
                   <ArrowRight className="h-3.5 w-3.5" />
-                  ابدأ المهمة
+                  {t('ابدأ المهمة')}
                 </Button>
               </div>
             </article>
