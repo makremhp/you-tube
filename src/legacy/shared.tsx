@@ -580,19 +580,19 @@ type ToastMessage = {
 };
 
 function ToastViewport({ toasts, onDismiss }: { toasts: ToastMessage[]; onDismiss: (id: number) => void }) {
-  const { dir } = useLanguage();
+  const { dir, t } = useLanguage();
   return (
     <div className="pointer-events-none fixed inset-x-4 top-4 z-[90] flex flex-col items-center gap-3 sm:inset-x-auto sm:right-6 sm:items-end" dir={dir} aria-live="polite">
       {toasts.map((toast) => (
-        <div key={toast.id} data-testid={`toast-${toast.id}`} className="pointer-events-auto flex w-full max-w-[390px] items-start gap-3 rounded-2xl border border-white/10 bg-[#0e2452] p-4 text-right text-white shadow-[0_16px_40px_rgba(14,36,82,.28)] backdrop-blur-md animate-rise">
+        <div key={toast.id} data-testid={`toast-${toast.id}`} role={toast.tone === 'warning' ? 'alert' : 'status'} className="pointer-events-auto flex w-full max-w-[410px] items-start gap-3 rounded-2xl border border-white/10 bg-[#0e2452] p-4 text-start text-white shadow-[0_16px_40px_rgba(14,36,82,.28)] backdrop-blur-md animate-rise">
           <span className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl ${toast.tone === 'success' ? 'bg-emerald-400/15 text-emerald-300' : toast.tone === 'warning' ? 'bg-amber-300/15 text-amber-300' : 'bg-cyan-300/15 text-cyan-200'}`}>
             {toast.tone === 'success' ? <CheckCircle2 className="h-4 w-4" /> : toast.tone === 'warning' ? <Timer className="h-4 w-4" /> : <Info className="h-4 w-4" />}
           </span>
           <div className="min-w-0 flex-1">
-            <div className="text-xs font-bold text-white">{toast.title}</div>
-            <div className="mt-1 text-[11px] leading-5 text-blue-100/75">{toast.message}</div>
+            <div className="text-xs font-bold text-white">{t(toast.title)}</div>
+            <div className="mt-1 text-[11px] leading-5 text-blue-100/75">{t(toast.message)}</div>
           </div>
-           <Button type="button" data-testid={`button-dismiss-toast-${toast.id}`} onClick={() => onDismiss(toast.id)} variant="ghost" size="icon" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-blue-100/60 transition hover:bg-white/10 hover:text-white" aria-label="إغلاق التنبيه">
+           <Button type="button" data-testid={`button-dismiss-toast-${toast.id}`} onClick={() => onDismiss(toast.id)} variant="ghost" size="icon" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-blue-100/60 transition hover:bg-white/10 hover:text-white" aria-label={t('إغلاق التنبيه')}>
             <X className="h-3.5 w-3.5" />
            </Button>
         </div>
@@ -999,6 +999,7 @@ function CompactCopyableIdentifier({
   value: string;
   tone?: string;
 }) {
+  const { t } = useLanguage();
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
@@ -1012,11 +1013,11 @@ function CompactCopyableIdentifier({
   };
 
   return (
-    <div className="min-w-0">
-      <div className="truncate text-[9px] font-semibold text-slate-400">{label}</div>
+    <div className="min-w-0 rounded-xl border border-slate-100 bg-white px-3 py-2">
+      <div className="truncate text-[9px] font-semibold text-slate-400">{t(label)}</div>
       <div className="mt-0.5 flex min-w-0 items-center gap-1">
         <code dir="ltr" className={`min-w-0 flex-1 truncate text-[10px] font-bold ${tone}`} title={value}>{value}</code>
-        <Button type="button" onClick={copy} variant="ghost" size="icon" className="copy-action grid h-5 w-5 shrink-0 place-items-center rounded-md text-slate-400 transition hover:text-[#1557ee]" aria-label={`نسخ ${label}`}>
+        <Button type="button" onClick={copy} variant="ghost" size="icon" className="copy-action grid h-6 w-6 shrink-0 place-items-center rounded-md text-slate-400 transition hover:text-[#1557ee]" aria-label={`${t('نسخ')} ${t(label)}`} title={copied ? t('تم النسخ') : t('نسخ')}>
           {copied ? <Check className="h-2.5 w-2.5 text-[#159b89]" /> : <Copy className="h-2.5 w-2.5" />}
         </Button>
       </div>
@@ -1031,71 +1032,46 @@ function CompactHistoryRow({
   record: DepositRecord | WithdrawRecord;
   kind: 'deposit' | 'withdraw';
 }) {
+  const { t, language } = useLanguage();
   const isDeposit = kind === 'deposit';
-  const amount = isDeposit ? record.amount.toFixed(2) : record.amount.toFixed(4);
+  const amount = new Intl.NumberFormat(language === 'ar' ? 'ar' : 'en', {
+    minimumFractionDigits: isDeposit ? 2 : 4,
+    maximumFractionDigits: isDeposit ? 2 : 4,
+  }).format(record.amount);
   const iconTone = isDeposit ? 'bg-[#edf3ff] text-[#1557ee]' : 'bg-[#eafbf8] text-[#159b89]';
 
   return (
-    <div data-testid={`row-${kind}-${record.id}`} className="overflow-x-hidden border-t border-slate-100 first:border-t-0 md:overflow-x-auto">
-      <div className="hidden h-[60px] min-w-[1180px] grid-cols-[1.25fr_.9fr_.8fr_1.15fr_1.1fr_1.2fr_auto_1.5fr] items-center gap-4 px-5 transition hover:bg-[#fbfcff] md:grid md:px-6">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-[10px] ${iconTone}`}>
-            {isDeposit ? <ArrowDownLeft className="h-3.5 w-3.5" /> : <ArrowUpLeft className="h-3.5 w-3.5" />}
+    <article data-testid={`row-${kind}-${record.id}`} className="rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-[0_4px_14px_rgba(18,32,77,.035)] transition hover:border-blue-200 hover:shadow-[var(--shadow-soft)] sm:p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${iconTone}`}>
+            {isDeposit ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpLeft className="h-4 w-4" />}
           </span>
           <div className="min-w-0">
-            <div className="truncate text-[11px] font-bold text-[#12234b]">{isDeposit ? 'إيداع' : 'سحب'} {amount} USDT</div>
-            <div className="mt-0.5 truncate text-[9px] text-slate-400">{record.createdAt}</div>
+            <div className="flex flex-wrap items-baseline gap-x-1.5 text-sm font-bold text-[#12234b]">
+              <span>{t(isDeposit ? 'إيداع' : 'سحب')}</span>
+              <span dir="ltr">{amount} USDT</span>
+            </div>
+            <div className="mt-1 truncate text-[10px] text-slate-400">{t(record.createdAt)}</div>
           </div>
         </div>
-        <div className="min-w-0">
-          <div className="text-[9px] font-semibold text-slate-400">الطريقة</div>
-          <div className="mt-0.5 min-w-0 truncate text-[10px] font-bold text-slate-600"><PaymentMethodBadge method={record.method} compact /></div>
+        <StatusBadge status={record.status} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+        <div className="min-w-0 rounded-xl border border-slate-100 bg-[#f8faff] px-3 py-2">
+          <div className="text-[9px] font-semibold text-slate-400">{t('الطريقة')}</div>
+          <div className="mt-1 min-w-0 truncate"><PaymentMethodBadge method={record.method} compact /></div>
         </div>
-        <div className="min-w-0">
-          <div className="text-[9px] font-semibold text-slate-400">نوع Memo</div>
-          <div className="mt-0.5 truncate text-[10px] font-bold text-slate-600">Memo / Tag</div>
+        <div className="min-w-0 rounded-xl border border-slate-100 bg-[#f8faff] px-3 py-2">
+          <div className="truncate text-[9px] font-semibold text-slate-400">{t(record.method === 'binance' ? 'الوجهة · Binance ID' : 'الوجهة')}</div>
+          <code dir="ltr" className="mt-1 block truncate text-[10px] font-bold text-slate-600" title={record.destination}>{record.destination}</code>
         </div>
         <CompactCopyableIdentifier label="Memo / Tag" value={record.memoTag} tone="text-[#159b89]" />
         <CompactCopyableIdentifier label="رقم العملية" value={record.id} tone="text-[#1557ee]" />
-        <div className="min-w-0">
-          <div className="truncate text-[9px] font-semibold text-slate-400">{record.method === 'binance' ? 'الوجهة · Binance ID' : 'الوجهة'}</div>
-          <code dir="ltr" className="mt-0.5 block truncate text-[10px] font-bold text-slate-600" title={record.destination}>{record.destination}</code>
-        </div>
-        <StatusBadge status={record.status} />
         <CompactCopyableIdentifier label="TXID الشبكة" value={record.blockchainTxId ?? 'بعد التأكيد'} tone="text-[#253961]" />
       </div>
-      <div className="grid gap-3 px-4 py-3 md:hidden">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-[10px] ${iconTone}`}>
-              {isDeposit ? <ArrowDownLeft className="h-3.5 w-3.5" /> : <ArrowUpLeft className="h-3.5 w-3.5" />}
-            </span>
-            <div className="min-w-0">
-              <div className="truncate text-[11px] font-bold text-[#12234b]">{isDeposit ? 'إيداع' : 'سحب'} {amount} USDT</div>
-              <div className="mt-0.5 truncate text-[9px] text-slate-400">{record.createdAt}</div>
-            </div>
-          </div>
-          <StatusBadge status={record.status} />
-        </div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-[14px] bg-[#fbfcff] px-3 py-2.5">
-          <div className="min-w-0">
-            <div className="text-[9px] font-semibold text-slate-400">الطريقة</div>
-            <div className="mt-0.5 min-w-0 truncate text-[10px] font-bold text-slate-600"><PaymentMethodBadge method={record.method} compact /></div>
-          </div>
-          <div className="min-w-0">
-            <div className="truncate text-[9px] font-semibold text-slate-400">{record.method === 'binance' ? 'الوجهة · Binance ID' : 'الوجهة'}</div>
-            <code dir="ltr" className="mt-0.5 block truncate text-[10px] font-bold text-slate-600" title={record.destination}>{record.destination}</code>
-          </div>
-          <div className="min-w-0">
-            <div className="text-[9px] font-semibold text-slate-400">نوع Memo</div>
-            <div className="mt-0.5 truncate text-[10px] font-bold text-slate-600">Memo / Tag</div>
-          </div>
-          <CompactCopyableIdentifier label="Memo / Tag" value={record.memoTag} tone="text-[#159b89]" />
-          <CompactCopyableIdentifier label="رقم العملية" value={record.id} tone="text-[#1557ee]" />
-          <CompactCopyableIdentifier label="TXID الشبكة" value={record.blockchainTxId ?? 'بعد التأكيد'} tone="text-[#253961]" />
-        </div>
-      </div>
-    </div>
+    </article>
   );
 }
 
