@@ -140,17 +140,29 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       }
 
       if (document.visibilityState === 'visible' && selectedVideo && watchSegmentStartedRef.current !== null) {
+        const returnedAt = Date.now();
+        const segmentElapsed = Math.max(0, returnedAt - watchSegmentStartedRef.current);
+        const requiredMs = selectedVideo.duration * 1000;
         const elapsed = Math.min(
-          selectedVideo.duration * 1000,
-          watchElapsedRef.current + (Date.now() - watchSegmentStartedRef.current),
+          requiredMs,
+          watchElapsedRef.current + segmentElapsed,
         );
-        watchElapsedRef.current = elapsed;
         watchSegmentStartedRef.current = null;
         externalWatchPendingRef.current = false;
-        setProgress(Math.floor(elapsed / 1000));
         setIsPlaying(false);
+
+        if (segmentElapsed < requiredMs) {
+          watchElapsedRef.current = 0;
+          setProgress(0);
+          saveWatchSession(selectedVideo, 0, 'paused', returnedAt);
+          notify('warning', 'المدة غير مكتملة', 'عد إلى فيديو YouTube وأكمل المدة المطلوبة من البداية؛ تم تصفير عدّاد المشاهدة.');
+          return;
+        }
+
+        watchElapsedRef.current = elapsed;
+        setProgress(Math.floor(elapsed / 1000));
         saveWatchSession(selectedVideo, elapsed, elapsed >= selectedVideo.duration * 1000 ? 'completed' : 'paused');
-        if (elapsed < selectedVideo.duration * 1000) {
+        if (elapsed < requiredMs) {
           notify('warning', 'الإعلان غير مكتمل', 'تم حفظ تقدم المشاهدة. ارجع وأكمل الوقت المطلوب لاستلام المكافأة.');
         }
       }

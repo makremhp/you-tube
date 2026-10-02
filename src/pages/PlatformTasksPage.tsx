@@ -172,8 +172,8 @@ export function PlatformTasksPage({
             );
           }
           return (
-            <article key={task.id} data-testid={`task-${platform}-${task.id}`} className="flex h-[108px] min-h-[108px] rounded-2xl border border-slate-200 bg-white px-2.5 py-2 shadow-[var(--shadow-soft)] transition hover:border-blue-200 hover:shadow-[var(--shadow-lift)] sm:px-3">
-              <div className="flex min-h-[76px] min-w-0 flex-1 items-center gap-2 sm:gap-3">
+            <article key={task.id} data-testid={`task-${platform}-${task.id}`} className="flex min-h-[112px] rounded-2xl border border-slate-200 bg-white px-2.5 py-2.5 shadow-[var(--shadow-soft)] transition hover:border-blue-200 hover:shadow-[var(--shadow-lift)] sm:min-h-[108px] sm:px-3">
+              <div className="flex min-h-[88px] min-w-0 flex-1 items-center gap-2 sm:gap-3">
                 <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-slate-200 bg-[#f2f5f8] sm:h-12 sm:w-12">
                   {task.image
                     ? <img src={task.image} alt={t('صورة حملة')} className="h-full w-full object-cover" />
@@ -186,11 +186,11 @@ export function PlatformTasksPage({
                       {t('الإثبات قيد المراجعة')}
                     </p>
                   ) : (
-                    <div className="min-w-0 text-[9px] leading-3 text-slate-400">
-                      <span className="block truncate" dir="ltr">{task.link}</span>
-                      <span className="block" dir="rtl">
+                    <div className="mt-0.5 flex min-w-0 flex-col items-start gap-0.5 text-[9px] leading-3 text-slate-400">
+                      <span className="block font-semibold text-slate-500" dir="rtl">
                         {task.targetCount.toLocaleString()} {t('متابع')}
                       </span>
+                      <span className="block w-full truncate" dir="ltr">{task.link}</span>
                     </div>
                   )}
                 </div>
@@ -201,7 +201,7 @@ export function PlatformTasksPage({
                   onClick={() => onStartTask?.(task)}
                   variant="secondary"
                   size="fit"
-                  className="flex h-9 min-w-[66px] shrink-0 items-center justify-center gap-1 rounded-lg border-[#c9e9f4] bg-white px-2 text-[9px] font-bold text-[#147fa7] transition hover:border-[#229ed9] hover:bg-[#effaff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#229ed9]"
+                  className="flex h-9 min-w-[66px] shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg border-[#c9e9f4] bg-white px-2 text-[9px] font-bold text-[#147fa7] transition hover:border-[#229ed9] hover:bg-[#effaff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#229ed9]"
                 >
                   <ArrowRight className="h-3.5 w-3.5" />
                   {t('ابدأ')}
