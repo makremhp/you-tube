@@ -51,8 +51,6 @@ const ADSTERRA_SOCIAL_SCRIPTS = [
   'https://interventioncopiedloitering.com/da/5e/c3/da5ec3a230bfa740492f3f78bd1ed182.js',
 ];
 
-let socialScriptLoadedThisPage = false;
-
 function getLocalDayKey() {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -144,33 +142,54 @@ function AdsterraBannerSlot({
 }
 
 function AdsterraSocialScripts({ active }: { active: boolean }) {
-  useEffect(() => {
-    if (!active || socialScriptLoadedThisPage) return;
-    const source = ADSTERRA_SOCIAL_SCRIPTS[Math.floor(Math.random() * ADSTERRA_SOCIAL_SCRIPTS.length)];
-    if (!source) return;
+  const rootRef = useRef<HTMLDivElement>(null);
 
-    const script = document.createElement('script');
-    let cancelled = false;
-    script.src = source;
-    script.async = true;
-    script.dataset.vidrewardAdsteraSocial = 'true';
-    script.onload = () => {
-      if (!cancelled) socialScriptLoadedThisPage = true;
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !active || ADSTERRA_SOCIAL_SCRIPTS.length === 0) {
+      root?.replaceChildren();
+      return;
+    }
+
+    let currentIndex = 0;
+    const showScript = (index: number) => {
+      const source = ADSTERRA_SOCIAL_SCRIPTS[index];
+      root.replaceChildren();
+      if (!source) return;
+
+      // Keep each third-party script inside a disposable browsing context. This
+      // lets us remove its complete DOM and execution environment on rotation.
+      const frame = document.createElement('iframe');
+      frame.title = `Adsterra social ad ${index + 1}`;
+      frame.width = '320';
+      frame.height = '80';
+      frame.setAttribute('sandbox', 'allow-scripts');
+      frame.style.cssText = 'display:block;width:100%;max-width:320px;height:80px;border:0';
+      frame.dataset.vidrewardAdsteraSocial = String(index);
+      frame.srcdoc = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;overflow:hidden;background:transparent"><script async src="${source}"></script></body></html>`;
+      root.appendChild(frame);
     };
-    script.onerror = () => {
-      if (!cancelled) {
-        socialScriptLoadedThisPage = false;
-        script.remove();
-      }
-    };
-    document.body.appendChild(script);
+
+    showScript(currentIndex);
+    const rotationTimer = window.setInterval(() => {
+      currentIndex = (currentIndex + 1) % ADSTERRA_SOCIAL_SCRIPTS.length;
+      showScript(currentIndex);
+    }, 3000);
+
     return () => {
-      cancelled = true;
-      script.remove();
+      window.clearInterval(rotationTimer);
+      root.replaceChildren();
     };
   }, [active]);
 
-  return null;
+  return (
+    <div
+      ref={rootRef}
+      data-testid="adsterra-social-slot"
+      aria-label="إعلان اجتماعي"
+      className="mt-5 min-h-[80px] w-full max-w-[320px] overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]"
+    />
+  );
 }
 
 function AdsterraExperience({

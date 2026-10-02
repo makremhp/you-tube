@@ -54,8 +54,8 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
   const [progress, setProgress] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [advertiserBalance, setAdvertiserBalance] = useState(250);
-  const [viewerBalance, setViewerBalance] = useState(12.84);
+  const [advertiserBalance, setAdvertiserBalance] = useState(0);
+  const [viewerBalance, setViewerBalance] = useState(0);
   const [depositHistory, setDepositHistory] = useState<DepositRecord[]>(initialDepositHistory);
   const [withdrawHistory, setWithdrawHistory] = useState<WithdrawRecord[]>(initialWithdrawHistory);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -324,7 +324,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
         {!browserEarningPage && <Sidebar mode={mode} screen={screen} telegramUser={telegramUser} onModeChange={changeMode} onNavigate={setScreen} onAdd={openAdvertiserCampaignForm} open={mobileMenu} onClose={() => setMobileMenu(false)} />}
         {!browserEarningPage && mobileMenu && <Button type="button" aria-label="إغلاق خلفية القائمة" data-testid="button-close-menu-overlay" onClick={() => setMobileMenu(false)} variant="unstyled" size="fit" className="fixed inset-0 z-40 bg-[#061333]/30 backdrop-blur-sm lg:hidden" />}
         <div className={`min-w-0 flex-1 ${browserEarningPage ? '' : 'overflow-hidden rounded-none bg-[#f7f9fc] lg:rounded-[26px] lg:border lg:border-slate-200/80 lg:bg-[#fbfcfe]'}`}>
-          {!browserEarningPage && <Header mode={mode} screen={screen} telegramUser={telegramUser} onMenu={() => setMobileMenu(true)} onAdd={openAdvertiserCampaignForm} />}
+          {!browserEarningPage && <Header mode={mode} screen={screen} telegramUser={telegramUser} viewerBalance={viewerBalance} advertiserBalance={advertiserBalance} onMenu={() => setMobileMenu(true)} onAdd={openAdvertiserCampaignForm} />}
           {screen === 'add' && mode === 'creator' ? <AddVideo telegramUser={telegramUser} onBack={() => setScreen('campaigns')} onPromotionSubmit={addPromotionCampaign} onSubmit={(video) => { addVideo(video); notify('success', 'تم نشر الإعلان', 'أصبح الفيديو نشطًا ويمكن للمشاهدين اكتشافه الآن.'); }} />
             : screen === 'deposit' && mode === 'creator' ? <DepositPage advertiserBalance={advertiserBalance} telegramUser={telegramUser} onDepositRequested={requestDeposit} onDepositCompleted={completeDeposit} onDepositExpired={expireDeposit} />
                 : screen === 'deposit-history' && mode === 'creator' ? <DepositHistoryPage records={depositHistory} onDeposit={() => setScreen('deposit')} />
@@ -337,7 +337,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
                          : screen === 'ads' && mode === 'viewer' ? <AdsPage key={telegramUser?.id ?? 'guest'} userId={telegramUser?.id ?? null} onReward={creditAdReward} />
                  : screen === 'publish' && mode === 'viewer' ? <PublishingSystemPage telegramUser={telegramUser} />
                 : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
-                   : <CreatorOverview telegramUser={telegramUser} platformCampaigns={platformCampaigns} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
+                    : <CreatorOverview telegramUser={telegramUser} platformCampaigns={platformCampaigns} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
           {!browserEarningPage && <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 p-2 backdrop-blur lg:hidden">
              <div className={`mx-auto grid max-w-md ${mode === 'viewer' ? 'grid-cols-5' : 'grid-cols-4'} items-end gap-1`}>
               {mode === 'creator' ? (
