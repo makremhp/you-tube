@@ -140,8 +140,8 @@ export function PlatformTasksPage({
           const verificationState = verification[task.id] ?? { state: 'idle' as const };
           if (isTelegram) {
             return (
-              <article key={task.id} data-testid={`task-${platform}-${task.id}`} className="min-h-[78px] rounded-2xl border border-slate-200 bg-white px-2.5 py-2 shadow-[var(--shadow-soft)] transition hover:border-[#b9e6f5] hover:shadow-[var(--shadow-lift)] sm:px-3">
-                <div className="flex min-h-[60px] min-w-0 items-center gap-2">
+              <article key={task.id} data-testid={`task-${platform}-${task.id}`} className="flex h-[108px] min-h-[108px] rounded-2xl border border-slate-200 bg-white px-2.5 py-2 shadow-[var(--shadow-soft)] transition hover:border-[#b9e6f5] hover:shadow-[var(--shadow-lift)] sm:px-3">
+                <div className="flex min-h-[76px] min-w-0 flex-1 items-center gap-2">
                   <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full bg-[#eaf8fd] text-[#229ED9] sm:h-12 sm:w-12">
                     {task.image
                       ? <img src={task.image} alt={t('صورة حملة')} className="h-full w-full object-cover" />
@@ -172,8 +172,8 @@ export function PlatformTasksPage({
             );
           }
           return (
-            <article key={task.id} data-testid={`task-${platform}-${task.id}`} className="min-h-[82px] rounded-2xl border border-slate-200 bg-white px-2.5 py-2 shadow-[var(--shadow-soft)] transition hover:border-blue-200 hover:shadow-[var(--shadow-lift)] sm:px-3">
-              <div className="flex min-h-[64px] min-w-0 items-center gap-2 sm:gap-3">
+            <article key={task.id} data-testid={`task-${platform}-${task.id}`} className="flex h-[108px] min-h-[108px] rounded-2xl border border-slate-200 bg-white px-2.5 py-2 shadow-[var(--shadow-soft)] transition hover:border-blue-200 hover:shadow-[var(--shadow-lift)] sm:px-3">
+              <div className="flex min-h-[76px] min-w-0 flex-1 items-center gap-2 sm:gap-3">
                 <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full border border-slate-200 bg-[#f2f5f8] sm:h-12 sm:w-12">
                   {task.image
                     ? <img src={task.image} alt={t('صورة حملة')} className="h-full w-full object-cover" />
@@ -181,9 +181,18 @@ export function PlatformTasksPage({
                 </span>
                 <div className="min-w-0 flex-1">
                   <h2 className="truncate text-[11px] font-bold leading-4 text-[#12234b] sm:text-xs">{task.title}</h2>
-                  <p className={`truncate text-[9px] leading-3 ${proof ? 'font-semibold text-[#2456b8]' : 'text-slate-400'}`} dir="ltr">
-                    {proof ? t('الإثبات قيد المراجعة') : `${task.targetCount.toLocaleString()} ${t('متابع')} · ${task.link}`}
-                  </p>
+                  {proof ? (
+                    <p className="truncate text-[9px] font-semibold leading-3 text-[#2456b8]">
+                      {t('الإثبات قيد المراجعة')}
+                    </p>
+                  ) : (
+                    <div className="min-w-0 text-[9px] leading-3 text-slate-400">
+                      <span className="block truncate" dir="ltr">{task.link}</span>
+                      <span className="block" dir="rtl">
+                        {task.targetCount.toLocaleString()} {t('متابع')}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <span className="shrink-0 rounded-full bg-[#eafbf8] px-2 py-1 text-[9px] font-bold text-[#159b89]">$0.01</span>
                 <Button
@@ -192,10 +201,10 @@ export function PlatformTasksPage({
                   onClick={() => onStartTask?.(task)}
                   variant="secondary"
                   size="fit"
-                  className="flex h-9 min-w-[74px] shrink-0 items-center justify-center gap-1 rounded-lg border-[#c9e9f4] bg-white px-2 text-[9px] font-bold text-[#147fa7] transition hover:border-[#229ed9] hover:bg-[#effaff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#229ed9]"
+                  className="flex h-9 min-w-[66px] shrink-0 items-center justify-center gap-1 rounded-lg border-[#c9e9f4] bg-white px-2 text-[9px] font-bold text-[#147fa7] transition hover:border-[#229ed9] hover:bg-[#effaff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#229ed9]"
                 >
                   <ArrowRight className="h-3.5 w-3.5" />
-                  {t('ابدأ المهمة')}
+                  {t('ابدأ')}
                 </Button>
               </div>
             </article>
