@@ -1013,7 +1013,7 @@ function CompactCopyableIdentifier({
   };
 
   return (
-    <div className="min-w-0 rounded-xl border border-slate-100 bg-white px-3 py-2">
+    <div className="min-w-0">
       <div className="truncate text-[9px] font-semibold text-slate-400">{t(label)}</div>
       <div className="mt-0.5 flex min-w-0 items-center gap-1">
         <code dir="ltr" className={`min-w-0 flex-1 truncate text-[10px] font-bold ${tone}`} title={value}>{value}</code>
@@ -1039,6 +1039,9 @@ function CompactHistoryRow({
     maximumFractionDigits: isDeposit ? 2 : 4,
   }).format(record.amount);
   const iconTone = isDeposit ? 'bg-[#edf3ff] text-[#1557ee]' : 'bg-[#eafbf8] text-[#159b89]';
+  const detailColumns = isDeposit
+    ? 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-5'
+    : 'grid-cols-2 sm:grid-cols-2 xl:grid-cols-4';
 
   return (
     <article data-testid={`row-${kind}-${record.id}`} className="rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-[0_4px_14px_rgba(18,32,77,.035)] transition hover:border-blue-200 hover:shadow-[var(--shadow-soft)] sm:p-4">
@@ -1058,16 +1061,16 @@ function CompactHistoryRow({
         <StatusBadge status={record.status} />
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
-        <div className="min-w-0 rounded-xl border border-slate-100 bg-[#f8faff] px-3 py-2">
+      <div className={`mt-4 grid ${detailColumns} gap-x-5 gap-y-3 border-t border-slate-100 pt-3`}>
+        <div className="min-w-0">
           <div className="text-[9px] font-semibold text-slate-400">{t('الطريقة')}</div>
           <div className="mt-1 min-w-0 truncate"><PaymentMethodBadge method={record.method} compact /></div>
         </div>
-        <div className="min-w-0 rounded-xl border border-slate-100 bg-[#f8faff] px-3 py-2">
+        <div className="min-w-0">
           <div className="truncate text-[9px] font-semibold text-slate-400">{t(record.method === 'binance' ? 'الوجهة · Binance ID' : 'الوجهة')}</div>
           <code dir="ltr" className="mt-1 block truncate text-[10px] font-bold text-slate-600" title={record.destination}>{record.destination}</code>
         </div>
-        <CompactCopyableIdentifier label="Memo / Tag" value={record.memoTag} tone="text-[#159b89]" />
+        {isDeposit && <CompactCopyableIdentifier label="Memo / Tag" value={record.memoTag} tone="text-[#159b89]" />}
         <CompactCopyableIdentifier label="رقم العملية" value={record.id} tone="text-[#1557ee]" />
         <CompactCopyableIdentifier label="TXID الشبكة" value={record.blockchainTxId ?? 'بعد التأكيد'} tone="text-[#253961]" />
       </div>
