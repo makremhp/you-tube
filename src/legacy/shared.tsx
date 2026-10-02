@@ -127,11 +127,12 @@ function getCompletedVideoIds() {
   return completedIds;
 }
 
-function UserAvatar({ user, className = '' }: { user: TelegramUser | null; className?: string }) {
+function UserAvatar({ user, className = '', size = 36 }: { user: TelegramUser | null; className?: string; size?: number }) {
   const initials = getShortName(user?.first_name).slice(0, 1);
   return (
     <div
       className={`grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-[#0e2452] text-xs font-bold text-white ring-2 ring-white ${className}`}
+      style={{ width: size, height: size }}
       title={user ? `${user.first_name} · Telegram ID: ${user.id}` : 'حساب المستخدم'}
       aria-label={user ? `حساب ${user.first_name}` : 'حساب المستخدم'}
     >
@@ -257,6 +258,11 @@ function calculateViewerReward(cpm: number) {
 
 function formatUsd(amount: number) {
   return `$${amount.toFixed(4)}`;
+}
+
+function formatBalanceUsd(amount: number) {
+  const precision = amount > 0 && amount < 0.01 ? 4 : 2;
+  return `$${amount.toFixed(precision)}`;
 }
 
 const initialVideos: Video[] = [
@@ -605,15 +611,22 @@ function Header({
   mode,
   screen,
   telegramUser,
+  viewerBalance,
+  advertiserBalance,
   onMenu,
   onAdd,
 }: {
   mode: 'creator' | 'viewer';
   screen: AppScreen;
   telegramUser: TelegramUser | null;
+  viewerBalance: number;
+  advertiserBalance: number;
   onMenu: () => void;
   onAdd: () => void;
 }) {
+  const isViewer = mode === 'viewer';
+  const balance = isViewer ? viewerBalance : advertiserBalance;
+  const formattedBalance = balance.toFixed(2);
   const pageTitle = screen === 'deposit'
     ? 'إيداع رصيد'
     : screen === 'withdraw'
@@ -659,7 +672,19 @@ function Header({
           </Button>
         )}
         <div className="hidden h-9 w-px bg-slate-200 sm:block" />
-        <UserAvatar user={telegramUser} />
+        <span
+          data-testid={isViewer ? 'header-viewer-balance' : 'header-advertiser-balance'}
+          aria-label={`${formattedBalance}$`}
+          dir="ltr"
+          className={`rounded-full border px-2.5 py-1.5 font-mono text-[11px] font-bold tabular-nums sm:px-3 ${
+            isViewer
+              ? 'border-emerald-100 bg-[#f3fbf8] text-[#138c79]'
+              : 'border-blue-100 bg-blue-50 text-[#2457d6]'
+          }`}
+        >
+          {formattedBalance}$
+        </span>
+        <UserAvatar user={telegramUser} size={43.2} />
       </div>
     </header>
   );
@@ -1107,6 +1132,7 @@ export {
   formatDuration,
   calculateViewerReward,
   formatUsd,
+  formatBalanceUsd,
   getEmbedUrl,
   getYoutubeVideoId,
   getVideoThumbnail,
