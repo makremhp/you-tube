@@ -151,7 +151,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
         setIsPlaying(false);
         saveWatchSession(selectedVideo, elapsed, elapsed >= selectedVideo.duration * 1000 ? 'completed' : 'paused');
         if (elapsed < selectedVideo.duration * 1000) {
-          notify('warning', 'الإعلان غير مكتمل', 'توقفت المشاهدة قبل إكمال المدة المطلوبة، ولم تُحتسب المكافأة.');
+          notify('warning', 'الإعلان غير مكتمل', 'تم حفظ تقدم المشاهدة. ارجع وأكمل الوقت المطلوب لاستلام المكافأة.');
         }
       }
     };
@@ -167,6 +167,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
   const viewerCount = useMemo(() => videos.filter((video) => video.status === 'نشط').length, [videos]);
 
   const selectVideo = (video: Video) => {
+    const now = Date.now();
     let restoredElapsed = 0;
     let restoredCredited = false;
     let restoredSessionId = '';
@@ -176,7 +177,12 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       if (stored) {
         const parsed = JSON.parse(stored) as Partial<AdvertisementSession>;
         if (parsed.videoId === video.id) {
-          restoredElapsed = Math.min(Number(parsed.elapsedMs) || 0, video.duration * 1000);
+          const savedElapsed = Math.max(0, Number(parsed.elapsedMs) || 0);
+          const lastStartedAt = Number(parsed.lastStartedAt);
+          const activeElapsed = parsed.status === 'active' && Number.isFinite(lastStartedAt)
+            ? Math.max(0, now - lastStartedAt)
+            : 0;
+          restoredElapsed = Math.min(savedElapsed + activeElapsed, video.duration * 1000);
           restoredCredited = Boolean(parsed.credited);
           restoredSessionId = parsed.id ?? '';
           restoredStatus = parsed.status === 'completed' ? 'completed' : 'paused';
@@ -192,9 +198,15 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       requiredMs: video.duration * 1000,
       status: restoredElapsed >= video.duration * 1000 ? 'completed' : restoredStatus,
       credited: restoredCredited,
+      lastStoppedAt: now,
     };
     watchSessionRef.current = nextSession;
     setWatchSession(nextSession);
+    try {
+      window.localStorage.setItem(`vidreward.watch.${video.id}`, JSON.stringify(nextSession));
+    } catch {
+      // The current watch session should still work when storage is unavailable.
+    }
     if (restoredCredited) creditedVideosRef.current.add(video.id);
     externalWatchPendingRef.current = false;
     if (restoredElapsed > 0 && restoredElapsed < video.duration * 1000 && !restoredCredited) {

@@ -3,9 +3,7 @@ import {
   BadgeCheck,
   Clock3,
   Gift,
-  LockKeyhole,
   Play,
-  ShieldCheck,
   Zap,
 } from 'lucide-react';
 import { useLanguage } from '@/i18n';
@@ -434,17 +432,13 @@ export function AdsPage({
     ? {
         eyebrow: 'إعلانات Adsgram وAdsterra',
         title: 'شاهد الإعلان واحصل على مكافأتك.',
-        description: 'إعلانات يومية واضحة، مع الحد الأقصى والمكافأة الظاهرة قبل البدء.',
-        adsToday: 'إعلان مكافأة اليوم',
-        resets: 'يتجدد يومياً',
+        description: 'اختر الإعلان المناسب واطّلع على المكافأة قبل البدء.',
         adsgramTitle: 'إعلان Adsgram',
         adsgramDescription: 'محاكاة محلية للتجربة فقط؛ لا يتصل المصدر بـ Adsgram ولا يتحقق من مشاهدة فعلية.',
         adsgramLabel: 'محاكاة',
         adsteraTitle: 'تصفح إعلانات Adsterra',
         adsteraDescription: 'تصفح صفحة Adsterra لمدة 30 ثانية واحصل على مكافأة 0.0005 USDT.',
         adsteraLabel: 'تصفح لمدة 30 ثانية',
-        rulesTitle: 'لماذا توجد حدود يومية؟',
-        rulesBody: 'كود Adsgram في المصدر المرفق يحاكي المشاهدة فقط؛ التحقق الحقيقي يحتاج Placement ID وخادماً. يسجل Adsterra المكافأة بعد عدّاد 30 ثانية كما في المصدر.',
         completed: 'اكتملت اليوم',
         rewardAdded: 'تمت إضافة المكافأة',
         rewardMessage: (reward: string) => `أُضيفت ${reward} إلى رصيدك.`,
@@ -454,17 +448,13 @@ export function AdsPage({
     : {
         eyebrow: 'ADSGRAM & ADSTERRA',
         title: 'Watch the ad and earn your reward.',
-        description: 'Daily ads with the limit and reward shown before you start.',
-        adsToday: 'reward ads today',
-        resets: 'Resets daily',
+        description: 'Choose an ad and review its reward before you start.',
         adsgramTitle: 'Adsgram ad',
         adsgramDescription: 'Local demo only; the supplied source does not call Adsgram or verify a real view.',
         adsgramLabel: 'Demo',
         adsteraTitle: 'Browse Adsterra',
         adsteraDescription: 'Browse the Adsterra page for 30 seconds and receive 0.0005 USDT.',
         adsteraLabel: '30-second browse',
-        rulesTitle: 'Why are there daily limits?',
-        rulesBody: 'The supplied Adsgram code simulates a view; real verification needs a Placement ID and server validation. Adsterra is credited after its 30-second timer, matching the source.',
         completed: 'complete today',
         rewardAdded: 'Reward added',
         rewardMessage: (reward: string) => `${reward} was added to your balance.`,
@@ -529,16 +519,6 @@ export function AdsPage({
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{copy.description}</p>
       </section>
 
-      <section className="mt-6 flex items-center justify-between gap-3 rounded-2xl border border-[#f6c453]/50 bg-[#fff8df] px-4 py-3 text-xs">
-        <span className="flex items-center gap-2 font-semibold text-[#70501a]">
-          <Zap size={15} />
-          <span data-testid="text-ads-daily-progress">
-            {daily.adsgram + daily.adstera} {isArabic ? 'من' : 'of'} {ADSGRAM_DAILY_LIMIT + ADSTERRA_DAILY_LIMIT} {copy.adsToday}
-          </span>
-        </span>
-        <span className="shrink-0 text-[#8a671e]">{copy.resets}</span>
-      </section>
-
       <div className="mt-4 space-y-3">
         <RewardAdCard
           provider="adsgram"
@@ -567,18 +547,6 @@ export function AdsPage({
           onStart={startAdstera}
         />
       </div>
-
-      <section data-testid="status-task-rules" className="mt-6 flex gap-3 rounded-2xl bg-[#0e2452] p-5 text-white shadow-[0_15px_34px_rgba(14,36,82,.16)]">
-        <LockKeyhole className="mt-0.5 shrink-0 text-[#f6c453]" size={18} />
-        <div>
-          <div className="text-sm font-bold">{copy.rulesTitle}</div>
-          <p className="mt-1 text-xs leading-6 text-blue-100/75">{copy.rulesBody}</p>
-          <div className="mt-3 flex items-center gap-2 text-[10px] font-semibold text-emerald-200/90">
-            <ShieldCheck size={14} />
-            {isArabic ? 'شروط المكافأة ظاهرة قبل البدء' : 'Reward terms are visible before you start'}
-          </div>
-        </div>
-      </section>
 
       {adsteraOpen && (
         <AdsterraExperience
