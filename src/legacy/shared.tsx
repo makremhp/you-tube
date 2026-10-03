@@ -39,6 +39,7 @@ import {
   Trash2,
   TrendingUp,
   Upload,
+  Users,
   WalletCards,
   X,
   PlaySquare,
@@ -215,7 +216,7 @@ type TransactionStatus = 'تم' | 'قيد المعالجة' | 'تم الإلغا
 type PaymentMethod = 'stars' | 'binance' | 'web3';
 type DepositMethod = 'stars' | 'web3';
 type WithdrawMethod = 'binance' | 'web3';
-type AppScreen = 'overview' | 'campaigns' | 'watch' | 'publish' | 'add' | 'deposit' | 'withdraw' | 'deposit-history' | 'withdraw-history' | 'telegram-tasks' | 'tiktok-tasks' | 'tiktok-task' | 'ads';
+type AppScreen = 'overview' | 'campaigns' | 'watch' | 'publish' | 'add' | 'deposit' | 'withdraw' | 'deposit-history' | 'withdraw-history' | 'telegram-tasks' | 'tiktok-tasks' | 'tiktok-task' | 'ads' | 'admin-overview' | 'admin-users' | 'admin-deposits' | 'admin-withdrawals' | 'admin-campaigns' | 'admin-proofs' | 'admin-ads' | 'admin-settings' | 'admin-notifications' | 'admin-suspicious';
 
 type DepositRecord = {
   id: string;
@@ -468,18 +469,31 @@ function Sidebar({
   onClose,
   open,
 }: {
-  mode: 'creator' | 'viewer';
+  mode: 'creator' | 'viewer' | 'admin';
   screen: AppScreen;
   telegramUser: TelegramUser | null;
-  onModeChange: (mode: 'creator' | 'viewer') => void;
+  onModeChange: (mode: 'creator' | 'viewer' | 'admin') => void;
   onNavigate: (screen: AppScreen) => void;
   onAdd: () => void;
   onClose?: () => void;
   open?: boolean;
 }) {
   const { dir } = useLanguage();
-  const navItems = mode === 'creator'
+  const navItems = mode === 'admin'
     ? [
+        { icon: BarChart3, label: 'نظرة عامة', screen: 'admin-overview' as AppScreen },
+        { icon: Users, label: 'مستخدمو Telegram', screen: 'admin-users' as AppScreen },
+        { icon: DollarSign, label: 'الإيداعات', screen: 'admin-deposits' as AppScreen },
+        { icon: WalletCards, label: 'السحوبات', screen: 'admin-withdrawals' as AppScreen },
+        { icon: Megaphone, label: 'الحملات', screen: 'admin-campaigns' as AppScreen },
+        { icon: CheckCircle2, label: 'إثباتات المهام', screen: 'admin-proofs' as AppScreen },
+        { icon: FileText, label: 'مخزون Adstera', screen: 'admin-ads' as AppScreen },
+        { icon: Settings2, label: 'الإعدادات', screen: 'admin-settings' as AppScreen },
+        { icon: Share2, label: 'الإشعارات', screen: 'admin-notifications' as AppScreen },
+        { icon: Timer, label: 'مستخدمون مشبوهون', screen: 'admin-suspicious' as AppScreen },
+      ]
+    : mode === 'creator'
+      ? [
         { icon: BarChart3, label: 'نظرة عامة', screen: 'overview' as AppScreen },
         { icon: Film, label: 'إعلاناتي', screen: 'campaigns' as AppScreen },
         { icon: WalletCards, label: 'إيداع رصيد', screen: 'deposit' as AppScreen },
@@ -531,9 +545,21 @@ function Sidebar({
           <span>اربح</span>
           {mode === 'viewer' && <span className="mr-auto h-1.5 w-1.5 rounded-full bg-[#1557ee]" />}
         </Button>
+        <Button
+          type="button"
+          data-testid="button-switch-admin"
+          onClick={() => { onModeChange('admin'); onClose?.(); }}
+          variant="unstyled"
+          size="fit"
+          className={`flex w-full items-center gap-3 rounded-[13px] px-3 py-3 text-right text-sm font-semibold transition ${mode === 'admin' ? 'bg-white text-[#1557ee] shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+        >
+          <ShieldCheck className="h-[18px] w-[18px]" />
+          <span>الإدارة</span>
+          {mode === 'admin' && <span className="mr-auto h-1.5 w-1.5 rounded-full bg-[#1557ee]" />}
+        </Button>
       </div>
       <div className="mt-8">
-        <div className="mb-3 px-3 text-[10px] font-bold tracking-[.16em] text-slate-400">{mode === 'creator' ? 'إدارة الإعلانات' : 'مساحة الربح'}</div>
+        <div className="mb-3 px-3 text-[10px] font-bold tracking-[.16em] text-slate-400">{mode === 'creator' ? 'إدارة الإعلانات' : mode === 'admin' ? 'صفحات الإدارة' : 'مساحة الربح'}</div>
         <nav className="space-y-1 pb-4">
           {navItems.map(({ icon: NavIcon, label, screen: itemScreen }, index) => (
             <Button
@@ -552,7 +578,7 @@ function Sidebar({
         </nav>
       </div>
       <div className="mt-auto">
-        <div className="mb-4 rounded-2xl bg-[#0e2452] p-4 text-white">
+        {mode !== 'admin' && <div className="mb-4 rounded-2xl bg-[#0e2452] p-4 text-white">
           <div className="mb-3 flex items-center justify-between">
             <span className="grid h-8 w-8 place-items-center rounded-lg bg-white/10"><Sparkles className="h-4 w-4 text-cyan-300" /></span>
             <span className="text-[10px] font-semibold text-blue-200">ميزة جديدة</span>
@@ -560,9 +586,9 @@ function Sidebar({
           <p className="text-sm font-bold">{mode === 'creator' ? 'موّل إعلانك بسهولة' : 'ابدأ بجمع أرباحك'}</p>
           <p className="mt-1 text-[11px] leading-5 text-blue-100/65">{mode === 'creator' ? 'أضف إعلاناً جديداً وحدد ميزانيته.' : 'أكمل المشاهدة وأضف الأرباح إلى رصيدك.'}</p>
            <Button type="button" data-testid="button-sidebar-add" onClick={() => mode === 'creator' ? onAdd() : onNavigate('watch')} variant="unstyled" size="fit" className="mt-4 flex items-center gap-1 text-xs font-bold text-cyan-300">
-             {mode === 'creator' ? 'أضف إعلان الآن' : 'اذهب إلى المشاهدة'} <ArrowUpLeft className="h-3.5 w-3.5" />
+              {mode === 'creator' ? 'أضف إعلان الآن' : 'اذهب إلى المشاهدة'} <ArrowUpLeft className="h-3.5 w-3.5" />
            </Button>
-        </div>
+        </div>}
         <div className="flex items-center gap-3 border-t border-slate-100 pt-4">
           <UserAvatar user={telegramUser} className="bg-[#dbe8ff] text-[#1557ee] ring-0" />
           <div className="min-w-0">
@@ -616,7 +642,7 @@ function Header({
   onMenu,
   onAdd,
 }: {
-  mode: 'creator' | 'viewer';
+  mode: 'creator' | 'viewer' | 'admin';
   screen: AppScreen;
   telegramUser: TelegramUser | null;
   viewerBalance: number;
@@ -651,7 +677,7 @@ function Header({
                       ? 'Ads'
         : screen === 'publish'
           ? 'نظام النشر'
-            : mode === 'creator' ? 'نظرة عامة' : 'شاهد واربح';
+            : mode === 'admin' ? 'الإدارة' : mode === 'creator' ? 'نظرة عامة' : 'شاهد واربح';
 
   return (
     <header className="flex items-center justify-between border-b border-slate-200/80 bg-white/80 px-4 py-4 backdrop-blur md:px-8 lg:px-10">
