@@ -142,32 +142,28 @@ function AdsterraBannerSlot({
 }
 
 function AdsterraSocialScripts({ active }: { active: boolean }) {
-  const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const root = rootRef.current;
-    if (!root || !active || ADSTERRA_SOCIAL_SCRIPTS.length === 0) {
-      root?.replaceChildren();
-      return;
-    }
+    if (!active || ADSTERRA_SOCIAL_SCRIPTS.length === 0) return;
 
     let currentIndex = 0;
+    let frame: HTMLIFrameElement | null = null;
     const showScript = (index: number) => {
       const source = ADSTERRA_SOCIAL_SCRIPTS[index];
-      root.replaceChildren();
+      frame?.remove();
       if (!source) return;
 
-      // Keep each third-party script inside a disposable browsing context. This
-      // lets us remove its complete DOM and execution environment on rotation.
-      const frame = document.createElement('iframe');
+      // Attach directly to body instead of a dedicated slot, while keeping
+      // third-party code in a disposable sandboxed browsing context.
+      frame = document.createElement('iframe');
       frame.title = `Adsterra social ad ${index + 1}`;
       frame.width = '320';
       frame.height = '80';
       frame.setAttribute('sandbox', 'allow-scripts');
-      frame.style.cssText = 'display:block;width:100%;max-width:320px;height:80px;border:0';
+      frame.style.cssText = 'position:fixed;right:16px;bottom:16px;display:block;width:min(320px,calc(100vw - 32px));height:80px;border:0;z-index:90;background:transparent';
       frame.dataset.vidrewardAdsteraSocial = String(index);
       frame.srcdoc = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;overflow:hidden;background:transparent"><script async src="${source}"></script></body></html>`;
-      root.appendChild(frame);
+      document.body.appendChild(frame);
     };
 
     showScript(currentIndex);
@@ -178,18 +174,11 @@ function AdsterraSocialScripts({ active }: { active: boolean }) {
 
     return () => {
       window.clearInterval(rotationTimer);
-      root.replaceChildren();
+      frame?.remove();
     };
   }, [active]);
 
-  return (
-    <div
-      ref={rootRef}
-      data-testid="adsterra-social-slot"
-      aria-label="إعلان اجتماعي"
-      className="mt-5 min-h-[80px] w-full max-w-[320px] overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]"
-    />
-  );
+  return null;
 }
 
 function AdsterraExperience({
@@ -323,7 +312,7 @@ function RewardAdCard({
       <div className="relative z-10 flex items-center gap-3 rounded-xl px-1.5 py-1">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-lg">
           <img
-            src="/assets/adstera-logo.jpeg"
+            src={`${import.meta.env.BASE_URL}assets/adstera-logo.jpeg`}
             alt="Adsterra"
             className="h-full w-full object-cover"
           />
