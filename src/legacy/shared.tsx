@@ -405,7 +405,7 @@ function BrandMark() {
   return (
     <div className="flex items-center gap-3" dir={dir}>
       <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-[13px] bg-[#1557ee] shadow-[0_8px_20px_rgba(21,87,238,.24)]">
-        <img src="/assets/vidreward-mark.png" alt="VidReward" className="h-full w-full object-contain" />
+        <img src={`${import.meta.env.BASE_URL}assets/vidreward-mark.png`} alt="VidReward" className="h-full w-full object-contain" />
       </div>
       <div className="leading-none">
         <div className="font-display text-[17px] font-bold tracking-tight text-[#0f1f46]">VidReward</div>
@@ -418,10 +418,10 @@ function BrandMark() {
 type WalletArtworkMethod = PaymentMethod | 'balance';
 
 const walletArtwork: Record<WalletArtworkMethod, { src: string; alt: string }> = {
-  stars: { src: '/assets/stars-wallet.png', alt: 'Stars wallet' },
-  web3: { src: '/assets/web3-wallet.png', alt: 'محفظة Web3' },
-  binance: { src: '/assets/binance-wallet.png', alt: 'محفظة Binance' },
-  balance: { src: '/assets/dollar-balance.png', alt: 'رصيد بالدولار' },
+  stars: { src: `${import.meta.env.BASE_URL}assets/stars-wallet.png`, alt: 'Stars wallet' },
+  web3: { src: `${import.meta.env.BASE_URL}assets/web3-wallet.png`, alt: 'محفظة Web3' },
+  binance: { src: `${import.meta.env.BASE_URL}assets/binance-wallet.png`, alt: 'محفظة Binance' },
+  balance: { src: `${import.meta.env.BASE_URL}assets/dollar-balance.png`, alt: 'رصيد بالدولار' },
 };
 
 function WalletArtwork({
@@ -1090,9 +1090,7 @@ function CompactHistoryRow({
     maximumFractionDigits: isDeposit ? 2 : 4,
   }).format(record.amount);
   const iconTone = isDeposit ? 'bg-[#edf3ff] text-[#1557ee]' : 'bg-[#eafbf8] text-[#159b89]';
-  const detailColumns = isDeposit
-    ? 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-5'
-    : 'grid-cols-2 sm:grid-cols-2 xl:grid-cols-4';
+  const detailColumns = 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-5';
 
   return (
     <article data-testid={`row-${kind}-${record.id}`} className="rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-[0_4px_14px_rgba(18,32,77,.035)] transition hover:border-blue-200 hover:shadow-[var(--shadow-soft)] sm:p-4">
@@ -1121,7 +1119,7 @@ function CompactHistoryRow({
           <div className="truncate text-[9px] font-semibold text-slate-400">{t(record.method === 'binance' ? 'الوجهة · Binance ID' : 'الوجهة')}</div>
           <code dir="ltr" className="mt-1 block truncate text-[10px] font-bold text-slate-600" title={record.destination}>{record.destination}</code>
         </div>
-        {isDeposit && <CompactCopyableIdentifier label="Memo / Tag" value={record.memoTag} tone="text-[#159b89]" />}
+        <CompactCopyableIdentifier label="Memo / Tag" value={record.memoTag} tone="text-[#159b89]" />
         <CompactCopyableIdentifier label="رقم العملية" value={record.id} tone="text-[#1557ee]" />
         <CompactCopyableIdentifier label="TXID الشبكة" value={record.blockchainTxId ?? 'بعد التأكيد'} tone="text-[#253961]" />
       </div>
