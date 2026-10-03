@@ -28,6 +28,7 @@ import { PublishingSystemPage } from '@/pages/PublishingPage';
 import { ViewerView } from '@/pages/ViewerPage';
 import { WithdrawPage } from '@/pages/WithdrawPage';
 import { AdsPage } from '@/pages/AdsPage';
+import { AdminConsole } from '@/pages/AdminConsole';
 
 type HomePageProps = {
   initialMode: 'creator' | 'viewer';
@@ -38,7 +39,7 @@ type HomePageProps = {
 export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageProps) {
   const { t } = useLanguage();
   const [browserEarningPage] = useState(() => new URLSearchParams(window.location.search).get('view') === 'earn');
-  const [mode, setMode] = useState<'creator' | 'viewer'>(() => browserEarningPage ? 'viewer' : initialMode);
+  const [mode, setMode] = useState<'creator' | 'viewer' | 'admin'>(() => browserEarningPage ? 'viewer' : initialMode);
   const [screen, setScreen] = useState<AppScreen>(() => browserEarningPage
     ? 'watch'
     : initialScreen ?? (initialMode === 'viewer' ? 'watch' : 'overview'));
@@ -306,10 +307,10 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     }
   };
 
-  const changeMode = (nextMode: 'creator' | 'viewer') => {
+  const changeMode = (nextMode: 'creator' | 'viewer' | 'admin') => {
     setMode(nextMode);
-    setScreen(nextMode === 'creator' ? 'overview' : 'watch');
-    onModeChange(nextMode);
+    setScreen(nextMode === 'creator' ? 'overview' : nextMode === 'admin' ? 'admin-overview' : 'watch');
+    if (nextMode !== 'admin') onModeChange(nextMode);
   };
 
   const openAdvertiserCampaignForm = () => {
@@ -325,7 +326,8 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
         {!browserEarningPage && mobileMenu && <Button type="button" aria-label="إغلاق خلفية القائمة" data-testid="button-close-menu-overlay" onClick={() => setMobileMenu(false)} variant="unstyled" size="fit" className="fixed inset-0 z-40 bg-[#061333]/30 backdrop-blur-sm lg:hidden" />}
         <div className={`min-w-0 flex-1 ${browserEarningPage ? '' : 'overflow-hidden rounded-none bg-[#f7f9fc] lg:rounded-[26px] lg:border lg:border-slate-200/80 lg:bg-[#fbfcfe]'}`}>
           {!browserEarningPage && <Header mode={mode} screen={screen} telegramUser={telegramUser} viewerBalance={viewerBalance} advertiserBalance={advertiserBalance} onMenu={() => setMobileMenu(true)} onAdd={openAdvertiserCampaignForm} />}
-          {screen === 'add' && mode === 'creator' ? <AddVideo telegramUser={telegramUser} onBack={() => setScreen('campaigns')} onPromotionSubmit={addPromotionCampaign} onSubmit={(video) => { addVideo(video); notify('success', 'تم نشر الإعلان', 'أصبح الفيديو نشطًا ويمكن للمشاهدين اكتشافه الآن.'); }} />
+            {mode === 'admin' ? <AdminConsole activeScreen={screen} onPageChange={(page) => setScreen(`admin-${page}` as AppScreen)} />
+             : screen === 'add' && mode === 'creator' ? <AddVideo telegramUser={telegramUser} onBack={() => setScreen('campaigns')} onPromotionSubmit={addPromotionCampaign} onSubmit={(video) => { addVideo(video); notify('success', 'تم نشر الإعلان', 'أصبح الفيديو نشطًا ويمكن للمشاهدين اكتشافه الآن.'); }} />
             : screen === 'deposit' && mode === 'creator' ? <DepositPage advertiserBalance={advertiserBalance} telegramUser={telegramUser} onDepositRequested={requestDeposit} onDepositCompleted={completeDeposit} onDepositExpired={expireDeposit} />
                 : screen === 'deposit-history' && mode === 'creator' ? <DepositHistoryPage records={depositHistory} onDeposit={() => setScreen('deposit')} />
                 : screen === 'withdraw' && mode === 'viewer' ? <WithdrawPage viewerBalance={viewerBalance} telegramUser={telegramUser} onWithdraw={withdrawEarnings} />
@@ -338,7 +340,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
                  : screen === 'publish' && mode === 'viewer' ? <PublishingSystemPage telegramUser={telegramUser} />
                 : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
                     : <CreatorOverview telegramUser={telegramUser} platformCampaigns={platformCampaigns} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
-          {!browserEarningPage && <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 p-2 backdrop-blur lg:hidden">
+           {!browserEarningPage && mode !== 'admin' && <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 p-2 backdrop-blur lg:hidden">
              <div className={`mx-auto grid max-w-md ${mode === 'viewer' ? 'grid-cols-5' : 'grid-cols-4'} items-end gap-1`}>
               {mode === 'creator' ? (
                 <>
