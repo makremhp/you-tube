@@ -6,50 +6,20 @@ import {
   Zap,
 } from 'lucide-react';
 import { useLanguage } from '@/i18n';
+import {
+  buildAdsteraDocument,
+  useAdsteraAds,
+  type AdsteraAd,
+} from '@/lib/adsteraAds';
 
 type DailyProgress = {
   day: string;
   adstera: number;
 };
 
-type AdScriptDefinition = {
-  src: string;
-  options: {
-    key: string;
-    format: 'iframe';
-    height: number;
-    width: number;
-    params: Record<string, never>;
-  };
-};
-
 const ADSTERRA_REWARD = 0.0005;
 const ADSTERRA_DAILY_LIMIT = 100;
 const ADSTERRA_COUNTDOWN_SECONDS = 30;
-
-const ADSTERRA_BANNER_BATCH: AdScriptDefinition[] = [
-  { src: 'https://interventioncopiedloitering.com/b895987c82805b8778a34f54911e8de0/invoke.js', options: { key: 'b895987c82805b8778a34f54911e8de0', format: 'iframe', height: 50, width: 320, params: {} } },
-  { src: 'https://interventioncopiedloitering.com/ab4615d3d759a81e9b876abbcebaf690/invoke.js', options: { key: 'ab4615d3d759a81e9b876abbcebaf690', format: 'iframe', height: 50, width: 320, params: {} } },
-  { src: 'https://interventioncopiedloitering.com/3b49398bb9242d548c0464f244b621fa/invoke.js', options: { key: '3b49398bb9242d548c0464f244b621fa', format: 'iframe', height: 50, width: 320, params: {} } },
-  { src: 'https://interventioncopiedloitering.com/b3570e82f7fb6c462dfdfded816f1576/invoke.js', options: { key: 'b3570e82f7fb6c462dfdfded816f1576', format: 'iframe', height: 50, width: 320, params: {} } },
-  { src: 'https://interventioncopiedloitering.com/de29a44d70992e967ae5d20275e77fab/invoke.js', options: { key: 'de29a44d70992e967ae5d20275e77fab', format: 'iframe', height: 50, width: 320, params: {} } },
-  { src: 'https://interventioncopiedloitering.com/280eab7c354ed87595a376b2f5e270cb/invoke.js', options: { key: '280eab7c354ed87595a376b2f5e270cb', format: 'iframe', height: 50, width: 320, params: {} } },
-  { src: 'https://interventioncopiedloitering.com/d47f719464108005a03a03e6d49fba1a/invoke.js', options: { key: 'd47f719464108005a03a03e6d49fba1a', format: 'iframe', height: 50, width: 320, params: {} } },
-  { src: 'https://interventioncopiedloitering.com/04bcf6532017b6790ab2ddac95a5621d/invoke.js', options: { key: '04bcf6532017b6790ab2ddac95a5621d', format: 'iframe', height: 50, width: 320, params: {} } },
-  { src: 'https://interventioncopiedloitering.com/8c0574e870e5a3843e89d947bd38aaff/invoke.js', options: { key: '8c0574e870e5a3843e89d947bd38aaff', format: 'iframe', height: 50, width: 320, params: {} } },
-  { src: 'https://interventioncopiedloitering.com/9f6fe4084cb3d8a8eb4d8246ee57ed25/invoke.js', options: { key: '9f6fe4084cb3d8a8eb4d8246ee57ed25', format: 'iframe', height: 50, width: 320, params: {} } },
-];
-
-const ADSTERRA_SOCIAL_SCRIPTS = [
-  'https://interventioncopiedloitering.com/5d/77/0f/5d770ff402768d79ddda9c1cd67e9819.js',
-  'https://interventioncopiedloitering.com/96/90/da/9690da690d344e2579dffa12d4e2ac24.js',
-  'https://interventioncopiedloitering.com/f0/07/9c/f0079c7c7d8c3c01bd28c4116a805f4a.js',
-  'https://interventioncopiedloitering.com/7e/7f/2b/7e7f2b6f7c43d86c6859e5b0a40afe3e.js',
-  'https://interventioncopiedloitering.com/7e/28/55/7e2855c2f9fb53ed0ca536022ca067df.js',
-  'https://interventioncopiedloitering.com/d0/f6/b3/d0f6b318f29b5787025697029ae72f23.js',
-  'https://interventioncopiedloitering.com/58/0d/ca/580dcaa1a10c7fb3943a7ea94b700f42.js',
-  'https://interventioncopiedloitering.com/da/5e/c3/da5ec3a230bfa740492f3f78bd1ed182.js',
-];
 
 function getLocalDayKey() {
   const date = new Date();
@@ -80,38 +50,29 @@ function formatReward(amount: number) {
   return `${amount.toFixed(precision)} USDT`;
 }
 
-function appendIsolatedBanner(
-  root: HTMLElement,
-  definition: (typeof ADSTERRA_BANNER_BATCH)[number],
-) {
+function appendIsolatedAd(root: HTMLElement, ad: AdsteraAd) {
   const frame = document.createElement('iframe');
-  frame.title = `Adsterra banner ${definition.options.key}`;
-  frame.width = String(definition.options.width);
-  frame.height = String(definition.options.height);
+  frame.title = `Adsterra ${ad.name}`;
+  frame.width = '320';
+  frame.height = ad.format === '320x50' ? '50' : '80';
   frame.loading = 'eager';
-  frame.referrerPolicy = 'no-referrer-when-downgrade';
+  frame.referrerPolicy = 'no-referrer';
+  frame.setAttribute('sandbox', 'allow-scripts');
   frame.style.display = 'block';
   frame.style.maxWidth = '100%';
   frame.style.border = '0';
-  frame.dataset.vidrewardAdsterraKey = definition.options.key;
-  frame.srcdoc = `<!doctype html>
-<html>
-  <head><meta charset="utf-8"></head>
-  <body style="margin:0;overflow:hidden;background:transparent">
-    <script>window.atOptions=${JSON.stringify(definition.options)};</script>
-    <script src="${definition.src}"></script>
-  </body>
-</html>`;
+  frame.dataset.vidrewardAdsteraCode = ad.id;
+  frame.srcdoc = buildAdsteraDocument(ad);
   root.appendChild(frame);
 }
 
 function AdsterraBannerSlot({
-  definition,
+  ad,
   active,
   refreshKey,
   index,
 }: {
-  definition: (typeof ADSTERRA_BANNER_BATCH)[number];
+  ad: AdsteraAd;
   active: boolean;
   refreshKey: number;
   index: number;
@@ -126,49 +87,48 @@ function AdsterraBannerSlot({
     }
 
     root.replaceChildren();
-    appendIsolatedBanner(root, definition);
+    appendIsolatedAd(root, ad);
     return () => root.replaceChildren();
-  }, [active, definition, refreshKey]);
+  }, [active, ad, refreshKey]);
 
   return (
     <div
       ref={slotRef}
-      data-testid={`adsterra-banner-slot-${index + 1}`}
-      data-adsterra-key={definition.options.key}
+      data-testid={`adsterra-banner-slot-${ad.id}`}
+      data-adsterra-key={ad.id}
       className="flex min-h-[50px] w-[320px] max-w-full items-center justify-center overflow-hidden rounded-lg bg-white/[0.04] shadow-[0_0_0_1px_rgba(148,163,184,.2)]"
       aria-label={`Adsterra 320 × 50 banner ${index + 1}`}
     />
   );
 }
 
-function AdsterraSocialScripts({ active }: { active: boolean }) {
-
+function AdsterraSocialScripts({ active, ads }: { active: boolean; ads: AdsteraAd[] }) {
   useEffect(() => {
-    if (!active || ADSTERRA_SOCIAL_SCRIPTS.length === 0) return;
+    if (!active || ads.length === 0) return;
 
     let currentIndex = 0;
     let frame: HTMLIFrameElement | null = null;
     const showScript = (index: number) => {
-      const source = ADSTERRA_SOCIAL_SCRIPTS[index];
+      const ad = ads[index];
       frame?.remove();
-      if (!source) return;
+      if (!ad) return;
 
-      // Attach directly to body instead of a dedicated slot, while keeping
-      // third-party code in a disposable sandboxed browsing context.
+      // The ad is attached to the task page body in its own disposable context.
       frame = document.createElement('iframe');
-      frame.title = `Adsterra social ad ${index + 1}`;
+      frame.title = `Adsterra social ad ${ad.name}`;
       frame.width = '320';
       frame.height = '80';
       frame.setAttribute('sandbox', 'allow-scripts');
+      frame.referrerPolicy = 'no-referrer';
       frame.style.cssText = 'position:fixed;right:16px;bottom:16px;display:block;width:min(320px,calc(100vw - 32px));height:80px;border:0;z-index:90;background:transparent';
-      frame.dataset.vidrewardAdsteraSocial = String(index);
-      frame.srcdoc = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;overflow:hidden;background:transparent"><script async src="${source}"></script></body></html>`;
+      frame.dataset.vidrewardAdsteraSocial = ad.id;
+      frame.srcdoc = buildAdsteraDocument(ad);
       document.body.appendChild(frame);
     };
 
     showScript(currentIndex);
     const rotationTimer = window.setInterval(() => {
-      currentIndex = (currentIndex + 1) % ADSTERRA_SOCIAL_SCRIPTS.length;
+      currentIndex = (currentIndex + 1) % ads.length;
       showScript(currentIndex);
     }, 3000);
 
@@ -176,7 +136,7 @@ function AdsterraSocialScripts({ active }: { active: boolean }) {
       window.clearInterval(rotationTimer);
       frame?.remove();
     };
-  }, [active]);
+  }, [active, ads]);
 
   return null;
 }
@@ -184,9 +144,13 @@ function AdsterraSocialScripts({ active }: { active: boolean }) {
 function AdsterraExperience({
   isArabic,
   onClaim,
+  banners,
+  socialAds,
 }: {
   isArabic: boolean;
   onClaim: () => void;
+  banners: AdsteraAd[];
+  socialAds: AdsteraAd[];
 }) {
   const [remaining, setRemaining] = useState(ADSTERRA_COUNTDOWN_SECONDS);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -240,17 +204,22 @@ function AdsterraExperience({
         <h1 className="mt-2 text-center text-base font-bold">{copy.title}</h1>
         <p className="mt-1 text-center text-xs leading-5 text-blue-100/65">{copy.description}</p>
         <div data-testid="container-adsterra-banners" className="mt-6 flex w-full flex-col items-center gap-3">
-          {ADSTERRA_BANNER_BATCH.map((definition, index) => (
+          {banners.map((ad, index) => (
             <AdsterraBannerSlot
-              key={`${definition.src}-${refreshKey}`}
-              definition={definition}
+              key={`${ad.id}-${refreshKey}`}
+              ad={ad}
               active={active}
               refreshKey={refreshKey}
               index={index}
             />
           ))}
+          {banners.length === 0 && (
+            <p className="rounded-lg border border-white/10 px-4 py-3 text-center text-xs text-blue-100/70">
+              {isArabic ? 'لا توجد أكواد بانر مفعّلة حاليًا.' : 'No active banner codes.'}
+            </p>
+          )}
         </div>
-        <AdsterraSocialScripts active={active} />
+        <AdsterraSocialScripts active={active} ads={socialAds} />
       </div>
       {!active && (
         <div
@@ -379,6 +348,7 @@ export function AdsPage({
   onReward: (amount: number, title: string, message: string) => void;
 }) {
   const { dir, isArabic } = useLanguage();
+  const { ads } = useAdsteraAds();
   const storageKey = `vidreward.ads.daily.v1-${userId ?? 'guest'}`;
   const [today, setToday] = useState(getLocalDayKey);
   const [progress, setProgress] = useState(() => loadDailyProgress(storageKey));
@@ -406,14 +376,24 @@ export function AdsPage({
   }, [progress, storageKey]);
 
   const daily = progress.day === today ? progress : emptyProgress(today);
+  const activeBannerAds = ads.filter((ad) => ad.enabled && ad.format === '320x50');
+  const activeSocialAds = ads.filter((ad) => ad.enabled && ad.format === 'social');
+  const hasActiveAds = activeBannerAds.length > 0 || activeSocialAds.length > 0;
+
+  useEffect(() => {
+    if (!hasActiveAds) setAdsteraOpen(false);
+  }, [hasActiveAds]);
+
   const copy = isArabic
     ? {
         eyebrow: 'إعلانات Adsterra',
         title: 'شاهد الإعلان واحصل على مكافأتك.',
         description: 'تصفح البنرات الإعلانية واحصل على مكافأتك بعد إكمال الوقت.',
         adsteraTitle: 'تصفح إعلانات Adsterra',
-        adsteraDescription: 'تصفح صفحة Adsterra لمدة 30 ثانية واحصل على مكافأة 0.0005 USDT.',
-        adsteraLabel: 'تصفح لمدة 30 ثانية',
+        adsteraDescription: hasActiveAds
+          ? 'تصفح صفحة Adsterra لمدة 30 ثانية واحصل على مكافأة 0.0005 USDT.'
+          : 'لا توجد أكواد Adsterra مفعّلة حاليًا.',
+        adsteraLabel: hasActiveAds ? 'تصفح لمدة 30 ثانية' : 'لا توجد إعلانات متاحة',
         rewardAdded: 'تمت إضافة المكافأة',
         rewardMessage: (reward: string) => `أُضيفت ${reward} إلى رصيدك.`,
       }
@@ -422,13 +402,19 @@ export function AdsPage({
         title: 'Watch the ad and earn your reward.',
         description: 'Browse the banner ads and earn your reward after completing the countdown.',
         adsteraTitle: 'Browse Adsterra',
-        adsteraDescription: 'Browse the Adsterra page for 30 seconds and receive 0.0005 USDT.',
-        adsteraLabel: '30-second browse',
+        adsteraDescription: hasActiveAds
+          ? 'Browse the Adsterra page for 30 seconds and receive 0.0005 USDT.'
+          : 'No Adsterra codes are active right now.',
+        adsteraLabel: hasActiveAds ? '30-second browse' : 'No ads available',
         rewardAdded: 'Reward added',
         rewardMessage: (reward: string) => `${reward} was added to your balance.`,
       };
 
   const completeAd = () => {
+    if (!hasActiveAds) {
+      setAdsteraOpen(false);
+      return;
+    }
     const current = progress.day === getLocalDayKey() ? progress : emptyProgress();
     if (current.adstera >= ADSTERRA_DAILY_LIMIT) return;
 
@@ -440,7 +426,7 @@ export function AdsPage({
   };
 
   const startAdstera = () => {
-    if (daily.adstera >= ADSTERRA_DAILY_LIMIT || adsteraOpen) return;
+    if (!hasActiveAds || daily.adstera >= ADSTERRA_DAILY_LIMIT || adsteraOpen) return;
     setAdsteraOpen(true);
   };
 
@@ -463,7 +449,7 @@ export function AdsPage({
           reward={ADSTERRA_REWARD}
           completed={daily.adstera}
           limit={ADSTERRA_DAILY_LIMIT}
-          blocked={adsteraOpen}
+          blocked={adsteraOpen || !hasActiveAds}
           isArabic={isArabic}
           onStart={startAdstera}
         />
@@ -472,6 +458,8 @@ export function AdsPage({
       {adsteraOpen && (
         <AdsterraExperience
           isArabic={isArabic}
+          banners={activeBannerAds}
+          socialAds={activeSocialAds}
           onClaim={() => {
             completeAd();
             setAdsteraOpen(false);

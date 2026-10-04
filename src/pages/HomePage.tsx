@@ -279,10 +279,14 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
   const addPromotionCampaign = (campaign: PromotionCampaign) => {
     setPlatformCampaigns((current) => [{ joinedCount: 0, completedCount: 0, ...campaign }, ...current]);
     setScreen('campaigns');
+    const platformName = campaign.platform === 'telegram' ? 'Telegram' : 'TikTok';
+    const isLive = campaign.status === 'نشط';
     notify(
-      campaign.status === 'نشط' ? 'success' : 'info',
-      campaign.status === 'نشط' ? 'تم نشر الحملة' : 'الحملة بانتظار إعداد البوت',
-      campaign.status === 'نشط' ? 'أضيف إعلان TikTok إلى قائمة إعلاناتك.' : 'لن تظهر حملة Telegram كحملة نشطة حتى يتم التحقق من صلاحيات البوت.',
+      isLive ? 'success' : 'info',
+      isLive ? `تم نشر إعلان ${platformName}` : `إعلان ${platformName} بانتظار إعداد البوت`,
+      isLive
+        ? `تمت إضافة إعلان ${platformName} إلى قائمة إعلاناتك بنجاح.`
+        : `أُضيف إعلان ${platformName} إلى القائمة، ولن يظهر حتى يتم التحقق من صلاحيات البوت على القناة.`,
     );
   };
 
