@@ -6,6 +6,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
 import { SiTelegram, SiTiktok, SiYoutube } from 'react-icons/si';
+import { useLocalPricing } from '@/legacy/pricing';
 import {
   calculateViewerReward, createUniqueIdentifier, durationOptions, formatDuration,
   formatUsd, getEmbedUrl, getUserDisplayName, PlatformSelector,
@@ -25,6 +26,7 @@ export function AddPlatformCampaign({
   onSubmit: (campaign: PromotionCampaign) => void;
 }) {
   const { dir } = useLanguage();
+  const pricing = useLocalPricing();
   const [title, setTitle] = useState('');
   const [link, setLink] = useState('');
   const [image, setImage] = useState('');
@@ -35,7 +37,7 @@ export function AddPlatformCampaign({
   const botCheckRequestId = useRef(0);
   const isTelegram = platform === 'telegram';
   const PlatformIcon = isTelegram ? SiTelegram : SiTiktok;
-  const packages = isTelegram ? telegramPackageOptions : tiktokPackageOptions;
+  const packages = (isTelegram ? pricing.telegram : pricing.tiktok).map(({ value, price }) => ({ count: value, price }));
   const selectedPackage = packages.find((item) => item.count === selectedCount) ?? packages[0];
   const validLink = (() => {
     try {
@@ -211,13 +213,16 @@ export function AddVideo({
   telegramUser: TelegramUser | null;
 }) {
   const { dir, t } = useLanguage();
+  const pricing = useLocalPricing();
   const [selectedPlatform, setSelectedPlatform] = useState<'youtube' | PromotionPlatform>('youtube');
   const videoTitleMaxLength = 12;
   const [title, setTitle] = useState('');
   const [link, setLink] = useState('');
   const [duration, setDuration] = useState(20);
   const [submitted, setSubmitted] = useState(false);
-  const selected = durationOptions.find((option) => option.seconds === duration) ?? durationOptions[1];
+  const advertiserDurationOptions = durationOptions.map((option, index) => ({ ...option, seconds: pricing.youtube[index]?.value ?? option.seconds, cpm: String(pricing.youtube[index]?.price ?? Number(option.cpm)) }));
+  const durationIndex = Math.max(0, durationOptions.findIndex((option) => option.seconds === duration));
+  const selected = advertiserDurationOptions.find((option) => option.seconds === duration) ?? advertiserDurationOptions[durationIndex];
   const embedUrl = getEmbedUrl(link);
   const publisherName = getUserDisplayName(telegramUser);
   const valid = title.trim().length > 2 && link.trim().length > 5;
@@ -231,7 +236,7 @@ export function AddVideo({
     onSubmit({
       title: title.trim().slice(0, videoTitleMaxLength),
       link: link.trim(),
-      duration,
+      duration: selected.seconds,
       creator: publisherName,
       cpm: Number(selected.cpm),
       reward: formatUsd(calculateViewerReward(Number(selected.cpm))),
@@ -247,7 +252,7 @@ export function AddVideo({
           <div className="mt-6 text-xs font-bold text-[#159b89]">تم النشر بنجاح</div>
           <h1 className="mt-2 font-display text-2xl font-bold text-[#12234b] md:text-3xl">فيديوك جاهز للوصول إلى جمهور جديد</h1>
           <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-slate-500">أصبح الفيديو نشطاً الآن. سيظهر للمشاهدين الذين يبحثون عن محتوى جديد مع مكافآت عادلة.</p>
-          <div className={`mx-auto mt-7 flex max-w-sm items-center justify-between rounded-2xl bg-[#f5f8fe] p-4 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}><div><div className="text-xs font-bold text-[#12234b]">{title}</div><div className="mt-1 text-[10px] text-slate-400">{formatDuration(duration)} · CPM ${selected.cpm}</div></div><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#1557ee] text-white"><Film className="h-4 w-4" /></div></div>
+          <div className={`mx-auto mt-7 flex max-w-sm items-center justify-between rounded-2xl bg-[#f5f8fe] p-4 ${dir === 'rtl' ? 'text-right' : 'text-left'}`}><div><div className="text-xs font-bold text-[#12234b]">{title}</div><div className="mt-1 text-[10px] text-slate-400">{formatDuration(selected.seconds)} · CPM ${selected.cpm}</div></div><div className="grid h-9 w-9 place-items-center rounded-lg bg-[#1557ee] text-white"><Film className="h-4 w-4" /></div></div>
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row"><Button type="button" data-testid="button-success-back" onClick={onBack} variant="primary" size="lg" className="text-sm font-bold">العودة إلى لوحة التحكم</Button><Button type="button" data-testid="button-success-another" onClick={() => { setSubmitted(false); setTitle(''); setLink(''); }} variant="secondary" size="lg" className="border-slate-200 text-sm font-bold text-slate-600">إضافة إعلان آخر</Button></div>
         </div>
       </main>
@@ -266,7 +271,7 @@ export function AddVideo({
           <div className="mt-7">
             <div className="flex items-center justify-between"><div><h3 className="text-xs font-bold text-slate-700">المدة الإلزامية للمشاهدة</h3><p className="mt-1 text-[10px] text-slate-400">اختر الوقت الذي سيكمله المشاهد قبل احتساب المكافأة.</p></div><Clock3 className="h-5 w-5 text-[#1557ee]" /></div>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {durationOptions.map((option) => <Button type="button" key={option.seconds} data-testid={`button-duration-${option.seconds}`} onClick={() => setDuration(option.seconds)} variant="unstyled" size="fit" className={`w-full rounded-xl border p-3 transition ${dir === 'rtl' ? 'text-right' : 'text-left'} ${duration === option.seconds ? 'border-[#1557ee] bg-[#edf3ff] text-[#1557ee] shadow-[0_0_0_2px_rgba(21,87,238,.08)]' : 'border-slate-200 text-slate-500 hover:border-blue-200'}`}><div className="text-sm font-bold">{option.label}</div><div className="mt-1 text-[10px] opacity-70">CPM ${option.cpm}</div></Button>)}
+              {advertiserDurationOptions.map((option) => <Button type="button" key={option.seconds} data-testid={`button-duration-${option.seconds}`} onClick={() => setDuration(option.seconds)} variant="unstyled" size="fit" className={`w-full rounded-xl border p-3 transition ${dir === 'rtl' ? 'text-right' : 'text-left'} ${selected.seconds === option.seconds ? 'border-[#1557ee] bg-[#edf3ff] text-[#1557ee] shadow-[0_0_0_2px_rgba(21,87,238,.08)]' : 'border-slate-200 text-slate-500 hover:border-blue-200'}`}><div className="text-sm font-bold">{formatDuration(option.seconds)}</div><div className="mt-1 text-[10px] opacity-70">CPM ${option.cpm}</div></Button>)}
             </div>
           </div>
           <div className="mt-7 flex items-center justify-between rounded-2xl bg-[#f4f8ff] p-4"><div><div className="text-[11px] text-slate-500">تكلفة الألف مشاهدة (CPM)</div><div className="mt-1 text-2xl font-bold text-[#12234b]">${selected.cpm}</div></div><div className="text-left text-[10px] leading-5 text-slate-400">كلما زادت المدة،<br />زادت جودة التفاعل</div></div>
@@ -276,7 +281,7 @@ export function AddVideo({
           <div className="flex items-center justify-between"><div><h2 className="font-display text-lg font-bold text-[#12234b]">المعاينة المباشرة</h2><p className="mt-1 text-xs text-slate-400">هكذا سيظهر الفيديو للمشاهدين.</p></div><span className="flex items-center gap-1 rounded-full bg-[#eafbf8] px-2.5 py-1 text-[10px] font-bold text-[#159b89]"><span className="h-1.5 w-1.5 rounded-full bg-current" /> مباشر</span></div>
           <div className="mt-5 overflow-hidden rounded-2xl bg-[#0e2452]">
             <div className="aspect-video">{embedUrl ? <iframe title="معاينة الفيديو" src={embedUrl} className="h-full w-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /> : <div className="media-art relative grid h-full place-items-center"><div className="text-center text-white/80"><div className="mx-auto grid h-12 w-12 place-items-center rounded-full border border-white/30 bg-white/15"><Play className="h-5 w-5 fill-current" /></div><p className="mt-3 text-[11px]">ستظهر المعاينة هنا</p></div></div>}</div>
-            <div className="border-t border-white/10 bg-[#0b1e47] p-4"><h3 className="truncate text-sm font-bold text-white">{title || 'عنوان الفيديو سيظهر هنا'}</h3><div className="mt-2 flex items-center justify-between text-[10px] text-blue-100/60"><span dir={telegramUser?.username ? 'ltr' : dir}>{publisherName}</span><span className="flex items-center gap-1"><Clock3 className="h-3 w-3" /> {formatDuration(duration)}</span></div></div>
+             <div className="border-t border-white/10 bg-[#0b1e47] p-4"><h3 className="truncate text-sm font-bold text-white">{title || 'عنوان الفيديو سيظهر هنا'}</h3><div className="mt-2 flex items-center justify-between text-[10px] text-blue-100/60"><span dir={telegramUser?.username ? 'ltr' : dir}>{publisherName}</span><span className="flex items-center gap-1"><Clock3 className="h-3 w-3" /> {formatDuration(selected.seconds)}</span></div></div>
           </div>
           <div className="mt-5 rounded-xl border border-dashed border-slate-200 p-4 text-[11px] leading-6 text-slate-400"><div className="mb-1 flex items-center gap-2 font-bold text-slate-600"><PlaySquare className="h-4 w-4 text-[#f04444]" /> روابط مدعومة</div>يمكنك استخدام روابط YouTube أو أي رابط فيديو مباشر قابل للتشغيل.</div>
         </section>
