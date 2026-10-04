@@ -167,8 +167,8 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
         setAdDraft(current=>current?{...current,...patch}:current);
         if(adPreview&&adDraft?.id===adPreview.id)setAdPreview(current=>current?{...current,...patch}:current);
       };
-      const previewFrame=(ad:AdsteraAd)=>ad.code.trim()
-        ? <iframe key={`${ad.id}-${adPreviewKey}`} title={`معاينة ${ad.name||'الكود الجديد'}`} sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={buildAdsteraDocument(ad)} className={`mx-auto block max-w-full rounded-lg border border-slate-200 bg-white ${ad.format==='320x50'?'h-[70px] w-[320px]':'h-[100px] w-[320px]'}`} data-testid="iframe-ad-code-preview"/>
+       const previewFrame=(ad:AdsteraAd)=>ad.code.trim()
+         ? <iframe key={`${ad.id}-${adPreviewKey}`} title={`معاينة ${ad.name||'الكود الجديد'}`} referrerPolicy="no-referrer-when-downgrade" srcDoc={buildAdsteraDocument(ad)} className={`mx-auto block max-w-full rounded-lg border border-slate-200 bg-white ${ad.format==='320x50'?'h-[50px] w-[320px]':'h-[100px] w-[320px]'}`} data-testid="iframe-ad-code-preview"/>
         : <div data-testid="empty-ad-preview" className="grid min-h-[100px] place-items-center rounded-lg border border-dashed border-slate-300 bg-white px-4 text-center text-[11px] leading-5 text-slate-400">أدخل الشيفرة لمعاينتها هنا.</div>;
       const previewAd=adPreview??adDraft;
       if(adDraft) return <div dir="rtl" data-testid="page-ad-code-editor" className="space-y-4">
@@ -197,13 +197,13 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
           <section className="min-w-0 rounded-2xl border border-slate-200 bg-[#f4f7fb] p-4 sm:p-5">
             <div className="mb-4 flex items-start justify-between gap-2"><div><div className="flex items-center gap-2 text-sm font-extrabold text-[#17284d]"><Eye size={16} className="text-[#1557ee]"/>معاينة مباشرة</div><p className="mt-1 text-xs leading-5 text-slate-500">تتحدّث المعاينة مع تعديل الشيفرة؛ زر التحديث يعيد تحميلها يدويًا.</p></div><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold text-emerald-700">معزولة</span></div>
             <div className="grid min-h-36 place-items-center rounded-xl border border-dashed border-slate-200 bg-white p-3">{previewAd?previewFrame(previewAd):null}</div>
-            <p className="mt-3 text-[10px] leading-5 text-slate-500">يعمل الكود داخل إطار معزول بصلاحية تشغيل النصوص فقط. ظهور إعلان Adsterra يعتمد أيضًا على استجابة مزوّد الإعلان.</p>
+             <p className="mt-3 text-[10px] leading-5 text-slate-500">تعمل المعاينة بالطريقة المستخدمة في مهمة التصفح. أضف فقط شيفرات موثوقة من Adsterra.</p>
           </section>
         </form>
       </div>;
       if(adPreview) return <div dir="rtl" data-testid="page-ad-code-preview" className="space-y-4">
         <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e6ebf3] bg-white p-4 sm:p-5">
-          <div><div className="text-[10px] font-extrabold tracking-[.12em] text-[#1557ee]">ADSTERRA PREVIEW</div><h2 className="mt-1 text-lg font-extrabold">معاينة {adPreview.name}</h2><p className="mt-1 text-xs text-slate-500">هذه معاينة فعلية للشيفرة داخل إطار معزول.</p></div>
+          <div><div className="text-[10px] font-extrabold tracking-[.12em] text-[#1557ee]">ADSTERRA PREVIEW</div><h2 className="mt-1 text-lg font-extrabold">معاينة {adPreview.name}</h2><p className="mt-1 text-xs text-slate-500">هذه معاينة فعلية للشيفرة داخل إطار منفصل.</p></div>
           <div className="flex flex-wrap gap-2">
             <button type="button" data-testid="button-back-ad-preview" className={soft} onClick={()=>{setAdPreview(null);window.scrollTo(0,0);}}>العودة إلى الأكواد</button>
             <button type="button" data-testid="button-refresh-ad-preview" className={soft} onClick={()=>refreshPreview(adPreview)}><RefreshCw size={14}/>تحديث المعاينة</button>
@@ -212,14 +212,14 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
         </section>
         <section className="rounded-2xl border border-[#dce5f3] bg-white p-4 shadow-[0_8px_24px_rgba(18,35,75,.045)] sm:p-6">
           <div className="grid min-h-52 place-items-center rounded-xl border border-dashed border-slate-200 bg-[#f4f7fb] p-4">{previewFrame(adPreview)}</div>
-          <p className="mt-4 text-xs leading-5 text-slate-500">إذا بقيت المساحة فارغة، تحقق من صلاحية الشيفرة واستجابة Adsterra. الإطار معزول عمدًا ولا يملك صلاحية الوصول إلى لوحة الإدارة.</p>
+          <p className="mt-4 text-xs leading-5 text-slate-500">إذا بقيت المساحة فارغة، تحقق من صلاحية الشيفرة واستجابة Adsterra. استخدم فقط شيفرات Adsterra التي تثق بها.</p>
         </section>
       </div>;
       return <div dir="rtl" data-testid="page-adstera-management" className="space-y-4">
         <section className="relative overflow-hidden rounded-[1.35rem] bg-[#132449] p-5 text-white shadow-[0_16px_36px_rgba(18,35,75,.12)] sm:p-6">
           <div className="pointer-events-none absolute -left-12 -top-16 h-52 w-52 rounded-full border border-white/10"/><div className="pointer-events-none absolute -left-4 -top-8 h-36 w-36 rounded-full border border-white/10"/>
           <div className="relative flex flex-wrap items-end justify-between gap-5">
-            <div className="max-w-2xl"><div className="mb-2 flex items-center gap-2 text-[10px] font-extrabold tracking-[.14em] text-[#f6c453]"><Code2 size={14}/> ADSTERRA / INVENTORY</div><h2 className="text-xl font-extrabold tracking-tight sm:text-2xl">إدارة أكواد الإعلانات</h2><p className="mt-2 max-w-xl text-xs leading-6 text-blue-100/75 sm:text-sm">تحكّم في الأكواد التي تظهر ضمن حملات صناع المحتوى، وعاين كل موضع داخل بيئة معزولة قبل النشر.</p></div>
+            <div className="max-w-2xl"><div className="mb-2 flex items-center gap-2 text-[10px] font-extrabold tracking-[.14em] text-[#f6c453]"><Code2 size={14}/> ADSTERRA / INVENTORY</div><h2 className="text-xl font-extrabold tracking-tight sm:text-2xl">إدارة أكواد الإعلانات</h2><p className="mt-2 max-w-xl text-xs leading-6 text-blue-100/75 sm:text-sm">تحكّم في الأكواد التي تظهر ضمن حملات صناع المحتوى، وعاين كل موضع داخل إطار قبل النشر.</p></div>
             <button type="button" data-testid="button-add-ad-code" className={`${primary} min-h-11 rounded-xl bg-[#f6c453] px-4 text-[#17213a] hover:bg-[#ffdc7e]`} onClick={beginAdd}><Plus size={16}/> إضافة كود</button>
           </div>
           <div className="relative mt-5 grid grid-cols-2 gap-2 sm:flex sm:gap-2">
@@ -233,7 +233,7 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
             <label className="relative min-w-0 flex-1"><span className="sr-only">البحث في الأكواد</span><Search className="absolute right-3 top-3 h-4 w-4 text-slate-400"/><input data-testid="input-ad-code-search" aria-label="البحث في الأكواد" value={adQuery} onChange={e=>setAdQuery(e.target.value)} placeholder="ابحث بالاسم أو المعرّف…" className={`${editorField} pe-10`}/></label>
             <label className="sr-only" htmlFor="ad-code-status">تصفية الحالة</label><select id="ad-code-status" data-testid="select-ad-code-status" aria-label="تصفية الأكواد حسب الحالة" value={adStatus} onChange={e=>setAdStatus(e.target.value as 'all'|'enabled'|'disabled')} className={`${editorField} sm:w-44`}><option value="all">كل الحالات</option><option value="enabled">مفعّلة فقط</option><option value="disabled">معطّلة فقط</option></select>
           </div>
-          <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-500"><span data-testid="text-ad-code-count">عرض {filteredAds.length} من {adstera.ads.length} كود</span><span className="hidden items-center gap-1.5 sm:flex"><ShieldCheck size={13} className="text-emerald-600"/> معاينة ضمن sandbox بلا صلاحية الوصول للأصل</span></div>
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-500"><span data-testid="text-ad-code-count">عرض {filteredAds.length} من {adstera.ads.length} كود</span><span className="hidden items-center gap-1.5 sm:flex"><ShieldCheck size={13} className="text-emerald-600"/> أكواد الإعلانات تعمل في صفحة المهمة</span></div>
         </section>
         {filteredAds.length===0
           ? <section data-testid="empty-ad-codes" className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-10 text-center"><span className="mx-auto grid h-11 w-11 place-items-center rounded-2xl bg-[#edf3ff] text-[#1557ee]"><Search size={19}/></span><h3 className="mt-3 font-extrabold text-[#12234b]">{adstera.ads.length?'لا توجد نتائج مطابقة':'لا توجد أكواد محفوظة'}</h3><p className="mt-1 text-xs leading-5 text-slate-500">{adstera.ads.length?'جرّب تغيير عبارة البحث أو مرشح الحالة.':'أضف كودًا جديدًا لبدء إدارة مواضع Adstera.'}</p>{!adstera.ads.length&&<button type="button" className={`${primary} mt-4`} onClick={beginAdd}>إضافة أول كود</button>}</section>

@@ -50,20 +50,42 @@ function formatReward(amount: number) {
   return `${amount.toFixed(precision)} USDT`;
 }
 
-function appendIsolatedAd(root: HTMLElement, ad: AdsteraAd) {
+function appendAdsteraBanner(root: HTMLElement, ad: AdsteraAd) {
   const frame = document.createElement('iframe');
   frame.title = `Adsterra ${ad.name}`;
   frame.width = '320';
   frame.height = ad.format === '320x50' ? '50' : '80';
   frame.loading = 'eager';
-  frame.referrerPolicy = 'no-referrer';
-  frame.setAttribute('sandbox', 'allow-scripts');
+  frame.referrerPolicy = 'no-referrer-when-downgrade';
   frame.style.display = 'block';
   frame.style.maxWidth = '100%';
   frame.style.border = '0';
   frame.dataset.vidrewardAdsteraCode = ad.id;
   frame.srcdoc = buildAdsteraDocument(ad);
   root.appendChild(frame);
+}
+
+function appendAdsteraSocialCode(root: HTMLElement, ad: AdsteraAd) {
+  const parsedCode = new DOMParser().parseFromString(ad.code, 'text/html');
+  const scripts = Array.from(parsedCode.body.querySelectorAll('script'));
+
+  if (scripts.length === 0) {
+    root.insertAdjacentHTML('beforeend', ad.code);
+    return;
+  }
+
+  scripts.forEach((source) => {
+    const script = document.createElement('script');
+    Array.from(source.attributes).forEach(({ name, value }) => {
+      if (name !== 'src' && name !== 'async') script.setAttribute(name, value);
+    });
+    script.async = false;
+    const src = source.getAttribute('src');
+    if (src) script.src = new URL(src, document.baseURI).href;
+    script.textContent = source.textContent ?? '';
+    script.dataset.vidrewardAdstera = ad.id;
+    root.appendChild(script);
+  });
 }
 
 function AdsterraBannerSlot({
@@ -87,7 +109,7 @@ function AdsterraBannerSlot({
     }
 
     root.replaceChildren();
-    appendIsolatedAd(root, ad);
+    appendAdsteraBanner(root, ad);
     return () => root.replaceChildren();
   }, [active, ad, refreshKey]);
 
@@ -102,43 +124,34 @@ function AdsterraBannerSlot({
   );
 }
 
-function AdsterraSocialScripts({ active, ads }: { active: boolean; ads: AdsteraAd[] }) {
+function AdsterraSocialScripts({
+  active,
+  ads,
+  refreshKey,
+}: {
+  active: boolean;
+  ads: AdsteraAd[];
+  refreshKey: number;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    if (!active || ads.length === 0) return;
+    const root = rootRef.current;
+    if (!root) return;
 
-    let currentIndex = 0;
-    let frame: HTMLIFrameElement | null = null;
-    const showScript = (index: number) => {
-      const ad = ads[index];
-      frame?.remove();
-      if (!ad) return;
+    root.replaceChildren();
+    if (active) ads.forEach((ad) => appendAdsteraSocialCode(root, ad));
+    return () => root.replaceChildren();
+  }, [active, ads, refreshKey]);
 
-      // The ad is attached to the task page body in its own disposable context.
-      frame = document.createElement('iframe');
-      frame.title = `Adsterra social ad ${ad.name}`;
-      frame.width = '320';
-      frame.height = '80';
-      frame.setAttribute('sandbox', 'allow-scripts');
-      frame.referrerPolicy = 'no-referrer';
-      frame.style.cssText = 'position:fixed;right:16px;bottom:16px;display:block;width:min(320px,calc(100vw - 32px));height:80px;border:0;z-index:90;background:transparent';
-      frame.dataset.vidrewardAdsteraSocial = ad.id;
-      frame.srcdoc = buildAdsteraDocument(ad);
-      document.body.appendChild(frame);
-    };
-
-    showScript(currentIndex);
-    const rotationTimer = window.setInterval(() => {
-      currentIndex = (currentIndex + 1) % ads.length;
-      showScript(currentIndex);
-    }, 3000);
-
-    return () => {
-      window.clearInterval(rotationTimer);
-      frame?.remove();
-    };
-  }, [active, ads]);
-
-  return null;
+  return (
+    <div
+      ref={rootRef}
+      data-testid="adsterra-social-scripts"
+      aria-hidden="true"
+      className="adstera-social-scripts"
+    />
+  );
 }
 
 function AdsterraExperience({
@@ -219,7 +232,11 @@ function AdsterraExperience({
             </p>
           )}
         </div>
-        <AdsterraSocialScripts active={active} ads={socialAds} />
+        <AdsterraSocialScripts
+          active={active}
+          ads={socialAds}
+          refreshKey={refreshKey}
+        />
       </div>
       {!active && (
         <div
