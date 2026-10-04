@@ -13,6 +13,7 @@ export type AdsteraAd = {
 };
 
 const STORAGE_KEY = 'vidreward.adstera.codes.v1';
+const DELETED_BUILT_INS_KEY = 'vidreward.adstera.deleted-built-ins.v1';
 const LEGACY_ADMIN_KEY = 'vidreward.admin.preview.v1';
 const CHANGE_EVENT = 'vidreward:adstera-codes-changed';
 
@@ -112,7 +113,10 @@ function readLegacyCustomAds(): AdsteraAd[] {
 }
 
 export function getAdsteraAds(): AdsteraAd[] {
-  const defaults = makeDefaults();
+  const allDefaults = makeDefaults();
+  const knownIds = new Set(allDefaults.map((ad) => ad.id));
+  const deletedBuiltInIds = readDeletedBuiltInIds();
+  const defaults = allDefaults.filter((ad) => !deletedBuiltInIds.has(ad.id));
   try {
     const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? 'null') as unknown;
     if (!Array.isArray(saved)) return [...defaults, ...readLegacyCustomAds()];
@@ -120,7 +124,6 @@ export function getAdsteraAds(): AdsteraAd[] {
     const storedById = new Map(
       saved.filter(isAdsteraAd).map((ad) => [ad.id, ad]),
     );
-    const knownIds = new Set(defaults.map((ad) => ad.id));
     const restoredDefaults = defaults.map((ad) => ({
       ...ad,
       ...storedById.get(ad.id),
@@ -138,6 +141,28 @@ export function getAdsteraAds(): AdsteraAd[] {
 export function saveAdsteraAds(ads: AdsteraAd[]): void {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ads));
   window.dispatchEvent(new Event(CHANGE_EVENT));
+}
+
+function readDeletedBuiltInIds(): Set<string> {
+  try {
+    const ids = JSON.parse(window.localStorage.getItem(DELETED_BUILT_INS_KEY) ?? '[]') as unknown;
+    return new Set(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function deleteAdsteraAd(id: string): void {
+  const ad = getAdsteraAds().find((item) => item.id === id);
+  if (!ad) return;
+
+  if (ad.builtIn) {
+    const deletedIds = readDeletedBuiltInIds();
+    deletedIds.add(id);
+    window.localStorage.setItem(DELETED_BUILT_INS_KEY, JSON.stringify([...deletedIds]));
+  }
+
+  saveAdsteraAds(getAdsteraAds().filter((item) => item.id !== id));
 }
 
 export function buildAdsteraDocument(ad: AdsteraAd): string {
