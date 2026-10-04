@@ -23,7 +23,7 @@ export function CampaignsPage({
   tab,
   onTab,
   onAdd,
-  onWatch,
+  onDetails,
 }: {
   videos: Video[];
   platformCampaigns: PromotionCampaign[];
@@ -31,7 +31,7 @@ export function CampaignsPage({
   tab: 'all' | 'active' | 'drafts';
   onTab: (tab: 'all' | 'active' | 'drafts') => void;
   onAdd: () => void;
-  onWatch: (video: Video) => void;
+  onDetails: (item: { video: Video } | { campaign: PromotionCampaign }) => void;
 }) {
   const [campaignView, setCampaignView] = useState<'youtube' | 'telegram' | 'tiktok'>('youtube');
   const { dir, isArabic } = useLanguage();
@@ -145,7 +145,7 @@ export function CampaignsPage({
                 <Button type="button" data-testid="button-empty-add" onClick={onAdd} variant="ghost" size="fit" className="mt-4 text-xs font-bold text-[#1557ee]">إضافة أول إعلان</Button>
               </div>
             ) : visibleVideos.map((video) => (
-              <div key={video.id} data-testid={`row-video-${video.id}`} className="group flex items-center gap-3 p-4 transition hover:bg-[#fbfcff] md:gap-4 md:p-5">
+              <div key={video.id} data-testid={`row-video-${video.id}`} role="button" tabIndex={0} onClick={() => onDetails({ video })} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onDetails({ video }); } }} className="group flex cursor-pointer items-center gap-3 p-4 transition hover:bg-[#fbfcff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1557ee] md:gap-4 md:p-5">
                 <div className="relative w-[105px] shrink-0 overflow-hidden rounded-xl md:w-[132px]"><VideoArtwork video={video} compact /></div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -163,10 +163,10 @@ export function CampaignsPage({
                   <div className="text-sm font-bold text-[#12234b]">{video.reward}</div>
                   <div className="mt-1 text-[10px] text-slate-400">لكل إكمال</div>
                 </div>
-                <Button type="button" data-testid={`button-video-menu-${video.id}`} onClick={() => onWatch(video)} variant="ghost" size="icon" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-400 opacity-60 transition hover:bg-[#edf3ff] hover:text-[#1557ee] group-hover:opacity-100" aria-label="خيارات الإعلان"><MoreHorizontal className="h-4 w-4" /></Button>
+                <Button type="button" data-testid={`button-video-menu-${video.id}`} onClick={(event) => { event.stopPropagation(); onDetails({ video }); }} variant="ghost" size="icon" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-400 opacity-60 transition hover:bg-[#edf3ff] hover:text-[#1557ee] group-hover:opacity-100" aria-label="تفاصيل الإعلان"><MoreHorizontal className="h-4 w-4" /></Button>
               </div>
             )).concat(visiblePlatformCampaigns.map((campaign) => (
-              <div key={campaign.id} data-testid={`row-campaign-${campaign.id}`} className="group flex items-center gap-3 p-4 transition hover:bg-[#fbfcff] md:gap-4 md:p-5">
+              <div key={campaign.id} data-testid={`row-campaign-${campaign.id}`} role="button" tabIndex={0} onClick={() => onDetails({ campaign })} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onDetails({ campaign }); } }} className="group flex cursor-pointer items-center gap-3 p-4 transition hover:bg-[#fbfcff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1557ee] md:gap-4 md:p-5">
                 <div className="relative h-[60px] w-[105px] shrink-0 overflow-hidden rounded-xl bg-[#eaf2fc] md:h-[74px] md:w-[132px]">
                   {campaign.image ? <img src={campaign.image} alt={campaign.title} className="h-full w-full object-cover" /> : <div className="media-art grid h-full place-items-center text-white/80">{campaign.platform === 'telegram' ? <SiTelegram aria-hidden="true" className="h-5 w-5" /> : <SiTiktok aria-hidden="true" className="h-5 w-5" />}</div>}
                 </div>
@@ -186,9 +186,9 @@ export function CampaignsPage({
                   <div className="text-sm font-bold text-[#12234b]">${campaign.price.toFixed(2)}</div>
                   <div className="mt-1 text-[10px] text-slate-400">ميزانية الحملة</div>
                 </div>
-                <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${campaign.platform === 'telegram' ? 'bg-[#eaf8fd] text-[#229ED9]' : 'bg-slate-100 text-[#111111]'}`}>
+                <button type="button" data-testid={`button-campaign-details-${campaign.id}`} aria-label="تفاصيل الإعلان" onClick={(event) => { event.stopPropagation(); onDetails({ campaign }); }} className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${campaign.platform === 'telegram' ? 'bg-[#eaf8fd] text-[#229ED9]' : 'bg-slate-100 text-[#111111]'}`}>
                   {campaign.platform === 'telegram' ? <SiTelegram aria-hidden="true" className="h-4 w-4" /> : <SiTiktok aria-hidden="true" className="h-4 w-4" />}
-                </span>
+                </button>
               </div>
             )))}
           </div>

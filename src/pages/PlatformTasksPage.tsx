@@ -20,6 +20,7 @@ export function PlatformTasksPage({
   campaigns,
   proofs,
   onStartTask,
+  onTaskCompleted,
   onNotify,
   telegramUserId,
 }: {
@@ -27,6 +28,7 @@ export function PlatformTasksPage({
   campaigns: PromotionCampaign[];
   proofs: TaskProof[];
   onStartTask?: (campaign: PromotionCampaign) => void;
+  onTaskCompleted?: (campaignId: string, userId: number) => void;
   onNotify?: (tone: 'success' | 'info' | 'warning', title: string, message: string) => void;
   telegramUserId: number | null;
 }) {
@@ -71,6 +73,7 @@ export function PlatformTasksPage({
       if (!response.ok) throw new Error(result.message || 'تعذر التحقق الآن. حاول مرة أخرى.');
       if (result.member) {
         const message = 'تم التحقق من اشتراكك عبر Telegram.';
+        if (telegramUserId !== null) onTaskCompleted?.(task.id, telegramUserId);
         setVerification((current) => ({
           ...current,
           [task.id]: { state: 'member', message },
@@ -136,7 +139,8 @@ export function PlatformTasksPage({
       {isTelegram && campaigns.some((campaign) => campaign.platform === 'telegram' && campaign.status !== 'نشط') && <div className="mb-5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] leading-5 text-amber-900"><Clock3 className="mt-0.5 h-4 w-4 shrink-0" /><span>{t('هناك حملة تنتظر تأكيد صلاحيات البوت قبل ظهورها للمهام.')}</span></div>}
       <div className="grid gap-4 lg:grid-cols-2">
         {tasks.map((task) => {
-          const proof = proofs.find((item) => item.campaignId === task.id);
+          const proof = proofs.find((item) => item.campaignId === task.id
+            && (item.userId === telegramUserId || (item.userId === undefined && telegramUserId === null)));
           const verificationState = verification[task.id] ?? { state: 'idle' as const };
           if (isTelegram) {
             return (
