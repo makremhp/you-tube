@@ -152,7 +152,7 @@ type Video = {
   reward: string;
   cpm: number;
   duration: number;
-  status: 'نشط' | 'مسودة' | 'مكتمل';
+  status: 'نشط' | 'مسودة' | 'مكتمل' | 'موقوف';
   created: string;
   art: string;
   link: string;
@@ -167,13 +167,18 @@ type PromotionCampaign = {
   image?: string;
   targetCount: number;
   price: number;
-  status: 'نشط' | 'بانتظار تحقق البوت';
+  status: 'نشط' | 'بانتظار تحقق البوت' | 'موقوف';
+  joinedCount?: number;
+  completedCount?: number;
+  joinedUserIds?: number[];
+  completedUserIds?: number[];
   created: string;
 };
 type TaskProof = {
   campaignId: string;
+  userId?: number;
   image: string;
-  status: 'قيد المراجعة';
+  status: 'قيد المراجعة' | 'معتمد' | 'مرفوض';
   submittedAt: string;
 };
 
@@ -216,7 +221,7 @@ type TransactionStatus = 'تم' | 'قيد المعالجة' | 'تم الإلغا
 type PaymentMethod = 'stars' | 'binance' | 'web3';
 type DepositMethod = 'stars' | 'web3';
 type WithdrawMethod = 'binance' | 'web3';
-type AppScreen = 'overview' | 'campaigns' | 'watch' | 'publish' | 'add' | 'deposit' | 'withdraw' | 'deposit-history' | 'withdraw-history' | 'telegram-tasks' | 'tiktok-tasks' | 'tiktok-task' | 'ads' | 'admin-overview' | 'admin-users' | 'admin-deposits' | 'admin-withdrawals' | 'admin-campaigns' | 'admin-proofs' | 'admin-ads' | 'admin-settings' | 'admin-notifications' | 'admin-suspicious';
+type AppScreen = 'overview' | 'campaigns' | 'campaign-detail' | 'watch' | 'publish' | 'add' | 'deposit' | 'withdraw' | 'deposit-history' | 'withdraw-history' | 'telegram-tasks' | 'tiktok-tasks' | 'tiktok-task' | 'ads' | 'admin-overview' | 'admin-users' | 'admin-deposits' | 'admin-withdrawals' | 'admin-campaigns' | 'admin-proofs' | 'admin-ads' | 'admin-settings' | 'admin-notifications' | 'admin-suspicious';
 
 type DepositRecord = {
   id: string;
@@ -665,6 +670,8 @@ function Header({
         ? 'إعلان جديد'
         : screen === 'campaigns'
           ? 'إعلاناتي'
+          : screen === 'campaign-detail'
+            ? 'تفاصيل الإعلان'
           : screen === 'watch'
             ? 'شاهد واربح'
               : screen === 'telegram-tasks'
