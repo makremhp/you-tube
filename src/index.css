@@ -435,3 +435,83 @@ input[type='number']::-webkit-outer-spin-button {
   from { opacity: 0; transform: translateY(10px) scale(.985); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+/* Admin operations: tighter reading rhythm and phone-native records. */
+.admin-console button,
+.admin-console select,
+.admin-console input:not([type="checkbox"]) {
+  min-height: 42px;
+}
+.admin-console input:focus-visible,
+.admin-console select:focus-visible,
+.admin-console textarea:focus-visible {
+  outline: 2px solid hsl(var(--ring) / .55);
+  outline-offset: 2px;
+}
+.admin-table {
+  table-layout: fixed;
+}
+.admin-table th,
+.admin-table td {
+  overflow-wrap: anywhere;
+}
+.admin-table td {
+  padding: .55rem .65rem;
+}
+@media (max-width: 640px) {
+  .admin-console > div {
+    max-width: 100%;
+  }
+  .admin-console section {
+    min-width: 0;
+  }
+  .admin-table-wrap {
+    min-width: 0;
+  }
+  .admin-table thead {
+    display: none;
+  }
+  .admin-table,
+  .admin-table tbody {
+    display: block;
+    width: 100%;
+  }
+  .admin-table tbody {
+    display: grid;
+    gap: .65rem;
+  }
+  .admin-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .2rem .75rem;
+    border: 1px solid hsl(var(--border) / .7);
+    border-radius: .9rem;
+    background: hsl(var(--card));
+    padding: .45rem .6rem;
+  }
+  .admin-table tbody td {
+    display: flex;
+    min-width: 0;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: .2rem;
+    border: 0;
+    padding: .4rem 0;
+    text-align: right;
+    font-size: .75rem;
+  }
+  .admin-table tbody td::before {
+    content: attr(data-label);
+    color: hsl(var(--muted-foreground));
+    font-size: .625rem;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+  .admin-table tbody td:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+  .admin-table tbody td > button,
+  .admin-table tbody td > div {
+    max-width: 100%;
+  }
+}
