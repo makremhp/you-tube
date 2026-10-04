@@ -1,6 +1,7 @@
 import { Children, cloneElement, isValidElement, useEffect, useState, type ReactElement } from 'react';
-import { Activity, CircleDollarSign, Copy, Eye, Megaphone, Search, ShieldCheck, Trash2, Users, Wallet, X } from 'lucide-react';
+import { Activity, CircleDollarSign, Copy, Eye, Megaphone, Search, ShieldCheck, Trash2, Users, Wallet, X, Plus, Code2, RefreshCw, Pencil, Check, Monitor, Layers } from 'lucide-react';
 import { saveLocalPricing, useLocalPricing, type LocalPricing, type PricingPlatform } from '@/legacy/pricing';
+import { buildAdsteraDocument, useAdsteraAds, type AdsteraAd, type AdsteraFormat } from '@/lib/adsteraAds';
 
 type User = { id: number; name: string; username: string; avatar: string; advertiserBalance: number; earnedBalance: number; status: 'نشط' | 'محظور'; bannedBySystem?: boolean; joinedAt: string; lastLogin: string; lastActive: string; invitedBy: string };
 type Row = { id: string; userId?: number; amount?: number; createdAt?: string; status?: string; [key: string]: any };
@@ -31,7 +32,7 @@ const seed: State = {
   { id: 'PRF-318', userId: 610258, taskId: 'TASK-TG-41', taskType: 'اشتراك قناة', image: proofMock, reward: 0.003, status: 'قيد المراجعة' },
   { id: 'PRF-312', userId: 610411, taskId: 'TASK-TT-09', taskType: 'متابعة TikTok', image: proofMock, reward: 0.003, status: 'قيد المراجعة' },
  ],
- ads: [{ id: 'AD-01', format: 'social', code: '<div class="vr-social">Social placement</div>', enabled: true, updatedAt: '2025-03-06' }, { id: 'AD-02', format: '320x50', code: '<div class="vr-banner">320 × 50 banner</div>', enabled: false, updatedAt: '2025-03-04' }],
+ ads: [],
  suspicious: [{ id: 'SIG-118', userId: 610411, attempt: 'رصد أدوات المطور + مشاهدة أسرع من المدة المطلوبة', createdAt: '2025-03-08 08:20', status: 'مفتوح' }, { id: 'SIG-112', userId: 610258, attempt: 'عدة حسابات على الجهاز نفسه', createdAt: '2025-03-07 15:10', status: 'مفتوح' }, { id: 'SIG-107', userId: 610309, attempt: 'تلاعب في DOM', createdAt: '2025-03-06 10:22', status: 'تمت المراجعة' }],
   settings: { binanceWithdrawMin: 1, web3WithdrawMin: 2, starsDepositMin: 1, web3DepositMin: 5, userShare: 20, platformShare: 10, durationMin: 10, durationMax: 80, cpmMin: 1.5, cpmMax: 4, telegramCpm: 2.2, tiktokCpm: 2.8, taskReward: 0.02, telegramTaskReward: 0.02, tiktokTaskReward: 0.01, web3Address: '0x0000...9a31', maintenance: false },
  reports: [],
@@ -42,7 +43,7 @@ const cell = 'px-4 py-1.5 text-right align-middle';
 const btn = 'inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition hover:-translate-y-px disabled:opacity-40';
 const primary = `${btn} bg-[#1557ee] text-white`;
 const soft = `${btn} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50`;
-function getState(): State { try { const s = localStorage.getItem(KEY); if (!s) return seed; const stored=JSON.parse(s) as Partial<State>; const campaigns=stored.campaigns??seed.campaigns; const deposits=(stored.deposits??seed.deposits).map(row=>{const baseline=seed.deposits.find(item=>item.id===row.id);return {...baseline,...row,credited:row.credited??baseline?.credited??row.status==='ناجح',balanceBefore:row.balanceBefore??baseline?.balanceBefore,balanceAfter:row.balanceAfter??baseline?.balanceAfter}}); return { ...seed, ...stored, deposits, campaigns:[...campaigns,...seed.campaigns.filter(c=>!campaigns.some(existing=>existing.id===c.id))], settings:{...seed.settings,...stored.settings} }; } catch { return seed; } }
+function getState(): State { try { const s = localStorage.getItem(KEY); if (!s) return seed; const stored=JSON.parse(s) as Partial<State>; const campaigns=stored.campaigns??seed.campaigns; const deposits=(stored.deposits??seed.deposits).map(row=>{const baseline=seed.deposits.find(item=>item.id===row.id);return {...baseline,...row,credited:row.credited??baseline?.credited??row.status==='ناجح',balanceBefore:row.balanceBefore??baseline?.balanceBefore,balanceAfter:row.balanceAfter??baseline?.balanceAfter}}); return { ...seed, ...stored, ads: [], deposits, campaigns:[...campaigns,...seed.campaigns.filter(c=>!campaigns.some(existing=>existing.id===c.id))], settings:{...seed.settings,...stored.settings} }; } catch { return seed; } }
 function Field({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) { return <label className="grid gap-1.5 text-xs font-bold text-slate-600">{label}<input {...props} className={cx('w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100', props.className)} /></label>; }
 function Badge({ children }: { children: React.ReactNode }) { const good = ['نشط','ناجح','معتمد','مفعّل','تمت المراجعة'].includes(String(children)); const bad = ['محظور','فاشل','مرفوض','موقوف'].includes(String(children)); return <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${good?'bg-emerald-50 text-emerald-700':bad?'bg-rose-50 text-rose-700':'bg-amber-50 text-amber-700'}`}>{children}</span>; }
 
@@ -51,7 +52,12 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
  const pricing = useLocalPricing();
  const [page, setPage] = useState(() => activeScreen.startsWith('admin-') ? activeScreen.slice(6) : 'overview');
  const [selectedDepositId, setSelectedDepositId] = useState<string | null>(null);
- const [selectedAdId, setSelectedAdId] = useState<string | null>(null);
+  const adstera = useAdsteraAds();
+  const [adDraft, setAdDraft] = useState<AdsteraAd | null>(null);
+  const [adPreview, setAdPreview] = useState<AdsteraAd | null>(null);
+  const [adPreviewKey, setAdPreviewKey] = useState(0);
+  const [adQuery, setAdQuery] = useState('');
+  const [adStatus, setAdStatus] = useState<'all' | 'enabled' | 'disabled'>('all');
  const [query, setQuery] = useState('');
  const [pageNo, setPageNo] = useState(1);
  const [dialog, setDialog] = useState<{kind:string; id?:string|number}|null>(null);
@@ -120,13 +126,125 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
   if(page==='campaigns') return <div className="space-y-4">{panel(<div className="flex gap-3">{search}{statusSelect(['بانتظار المراجعة','نشطة','موقوفة','مرفوضة','أوقفتها الميزانية'])}</div>)}{table(['الحملة','المستخدم','المنصة','المدة','الميزانية','المشاهدات','الحالة','مراجعة'],rowData('campaigns').map(r=><tr key={r.id} className="border-b border-slate-50"><td className={cell}><b>{r.title}</b><div className="text-xs text-slate-400">{r.id}</div></td><td className={cell}>{userBy(r.userId)?.name}</td><td className={cell}>{r.platform}</td><td className={cell}>{r.duration} ث</td><td className={cell}>{r.budget} USDT</td><td className={cell}>{r.views.toLocaleString()}</td><td className={cell}><Badge>{r.status}</Badge></td><td className={cell}><button className={soft} onClick={()=>setDialog({kind:'campaign',id:r.id})}>فيديو وإجراءات</button></td></tr>))}</div>;
    if(page==='proofs') return <div className="space-y-4">{panel(<div className="flex gap-3">{search}{statusSelect(['قيد المراجعة','معتمد','مرفوض'])}</div>)}{table(['الإثبات','المستخدم','المهمة','المكافأة','الحالة','المرفق','الإجراء'],rowData('proofs').map(r=><tr key={r.id} className="border-b border-slate-50"><td className={cell}>{r.id}</td><td className={cell}>{userBy(r.userId)?.name}</td><td className={cell}>{r.taskId}<div className="text-xs text-slate-400">{r.taskType}</div></td><td className={cell}>{r.reward} USDT</td><td className={cell}><Badge>{r.status}</Badge></td><td className={cell}><button className={soft} onClick={()=>setDialog({kind:'proof',id:r.id})}>عرض الصورة</button></td><td className={cell}>{r.status==='قيد المراجعة'?<div className="flex gap-1">{action('اعتماد المكافأة',()=>{setData(d=>{const p=d.proofs.find(x=>x.id===r.id);if(!p||p.status!=='قيد المراجعة')return d;return {...d,proofs:d.proofs.map(x=>x.id===r.id?{...x,status:'معتمد'}:x),users:d.users.map(u=>u.id===p.userId?{...u,earnedBalance:Number((u.earnedBalance+p.reward).toFixed(6))}:u)}});announce('تم اعتماد الإثبات وإضافة المكافأة')})}{action('رفض',()=>setDialog({kind:'reject-proof',id:r.id}),true)}</div>:r.rejectionReason||<Badge>{r.status}</Badge>}</td></tr>))}</div>;
    if(page==='ads') {
-    const selectedAd=data.ads.find(ad=>ad.id===selectedAdId);
-    const previewDocument=(markup:string,format:string)=>`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:8px;font:12px sans-serif;color:#24324d;background:#f8fafc} .preview-wrap{${format==='320x50'?'width:320px;height:50px;':'min-height:80px;'}display:grid;place-items:center;overflow:hidden;border:1px dashed #aab7ca;border-radius:8px}</style></head><body><div class="preview-wrap">${markup|| (format==='320x50'?'مساحة 320 × 50':'موضع اجتماعي')}</div></body></html>`;
-     const addCode=()=>{const id=`AD-${Date.now()}`;const next={id,format:'social',code:'',enabled:false,updatedAt:new Date().toISOString().slice(0,10)};setData(d=>({...d,ads:[next,...d.ads]}));setSelectedAdId(id);};
-     return <div className="space-y-4">{panel(<div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold">أكواد Adstera</h2><p className="mt-1 text-xs text-slate-500">تُعرض الأكواد داخل إطار معزول عن لوحة الإدارة.</p></div><button data-testid="button-add-ad-code" className={primary} onClick={addCode}>إضافة كود</button></div>)}
-       {table(['المعرّف','النوع','الحالة','آخر تحديث','اختيار'],data.ads.map(ad=><tr key={ad.id} className="border-b border-slate-50"><td className={`${cell} font-mono`}>{ad.id}</td><td className={cell}>{ad.format==='social'?'Social':'320 × 50'}</td><td className={cell}><Badge>{ad.enabled?'مفعّل':'معطّل'}</Badge></td><td className={cell}>{ad.updatedAt}</td><td className={cell}><button data-testid={`button-open-ad-${ad.id}`} className={soft} onClick={()=>setSelectedAdId(ad.id)}>فتح وإدارة</button></td></tr>))}
-       {selectedAd&&panel(<div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(280px,.75fr)]"><div className="space-y-4"><div className="flex items-center justify-between gap-3"><h3 className="font-extrabold">تعديل {selectedAd.id}</h3><button data-testid="button-toggle-ad-code" className={soft} onClick={()=>updateRows('ads',selectedAd.id,{enabled:!selectedAd.enabled})}>{selectedAd.enabled?'تعطيل':'تفعيل'}</button></div><label className="grid gap-1.5 text-xs font-bold">نوع الموضع<select data-testid="select-ad-code-format" value={selectedAd.format} onChange={e=>updateRows('ads',selectedAd.id,{format:e.target.value})} className="rounded-xl border border-slate-200 bg-white p-3"><option value="social">Social</option><option value="320x50">320 × 50</option></select></label><label className="grid gap-1.5 text-xs font-bold">الشيفرة<textarea data-testid="textarea-ad-code" value={selectedAd.code} onChange={e=>updateRows('ads',selectedAd.id,{code:e.target.value})} rows={7} className="w-full rounded-xl bg-[#101b32] p-3 font-mono text-xs text-emerald-100 outline-none"/></label><div className="flex flex-wrap gap-2"><button data-testid="button-save-ad-code" className={primary} onClick={()=>updateRows('ads',selectedAd.id,{updatedAt:new Date().toISOString().slice(0,10)})}>حفظ الشيفرة</button><span className="self-center text-[11px] text-slate-400">تُحفظ التعديلات تلقائيًا</span></div></div><div className="rounded-xl border border-dashed border-slate-300 bg-[#f7f9fc] p-3"><div className="mb-2 flex items-center gap-2 text-xs font-bold"><Eye size={14}/> معاينة معزولة</div><iframe title={`معاينة كود ${selectedAd.id}`} sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={previewDocument(selectedAd.code,selectedAd.format)} className={`w-full rounded-lg border border-slate-200 bg-white ${selectedAd.format==='320x50'?'h-[90px]':'h-[150px]'}`} data-testid="iframe-ad-code-preview"/></div></div>)}
-    </div>;
+      const filteredAds=adstera.ads.filter(ad=>
+        (adStatus==='all'||(adStatus==='enabled'?ad.enabled:!ad.enabled))
+        &&(!adQuery||`${ad.name} ${ad.id} ${ad.format}`.toLowerCase().includes(adQuery.trim().toLowerCase()))
+      );
+      const beginAdd=()=>{
+        setAdDraft({id:`adstera-custom-${Date.now()}`,name:'',format:'social',code:'',enabled:false,updatedAt:new Date().toISOString().slice(0,10),builtIn:false});
+        setAdPreview(null);
+        window.scrollTo(0,0);
+      };
+      const startEdit=(ad:AdsteraAd)=>{
+        setAdDraft({...ad});
+        setAdPreview({...ad});
+        window.scrollTo(0,0);
+      };
+      const refreshPreview=(ad:AdsteraAd)=>{
+        setAdPreview({...ad});
+        setAdPreviewKey(value=>value+1);
+        window.scrollTo(0,0);
+      };
+      const saveDraft=()=>{
+        if(!adDraft){return;}
+        if(!adDraft.name.trim()){announce('أدخل اسمًا واضحًا للكود قبل الحفظ');return;}
+        if(!adDraft.code.trim()){announce('أضف الشيفرة المطلوبة قبل الحفظ');return;}
+        try{
+          const nextAd={...adDraft,name:adDraft.name.trim(),updatedAt:new Date().toISOString().slice(0,10)};
+          adstera.save(adstera.ads.some(ad=>ad.id===nextAd.id)?adstera.ads.map(ad=>ad.id===nextAd.id?nextAd:ad):[nextAd,...adstera.ads]);
+           setAdDraft(null);
+           setAdPreview(null);
+          announce('تم حفظ كود Adstera بنجاح');
+           window.scrollTo(0,0);
+        }catch{announce('تعذر حفظ الكود. تحقق من مساحة التخزين ثم حاول مجددًا');}
+      };
+      const toggleAd=(ad:AdsteraAd)=>{
+        try{adstera.save(adstera.ads.map(item=>item.id===ad.id?{...item,enabled:!item.enabled,updatedAt:new Date().toISOString().slice(0,10)}:item));announce(ad.enabled?'تم تعطيل الكود':'تم تفعيل الكود');}
+        catch{announce('تعذر تحديث حالة الكود');}
+      };
+      const editorField='w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-[#12234b] outline-none transition focus:border-[#1557ee] focus:ring-2 focus:ring-blue-100';
+      const draftChange=(patch:Partial<AdsteraAd>)=>{
+        setAdDraft(current=>current?{...current,...patch}:current);
+        if(adPreview&&adDraft?.id===adPreview.id)setAdPreview(current=>current?{...current,...patch}:current);
+      };
+      const previewFrame=(ad:AdsteraAd)=>ad.code.trim()
+        ? <iframe key={`${ad.id}-${adPreviewKey}`} title={`معاينة ${ad.name||'الكود الجديد'}`} sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={buildAdsteraDocument(ad)} className={`mx-auto block max-w-full rounded-lg border border-slate-200 bg-white ${ad.format==='320x50'?'h-[70px] w-[320px]':'h-[100px] w-[320px]'}`} data-testid="iframe-ad-code-preview"/>
+        : <div data-testid="empty-ad-preview" className="grid min-h-[100px] place-items-center rounded-lg border border-dashed border-slate-300 bg-white px-4 text-center text-[11px] leading-5 text-slate-400">أدخل الشيفرة لمعاينتها هنا.</div>;
+      const previewAd=adPreview??adDraft;
+      if(adDraft) return <div dir="rtl" data-testid="page-ad-code-editor" className="space-y-4">
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e6ebf3] bg-white p-4 sm:p-5">
+          <div><div className="text-[10px] font-extrabold tracking-[.12em] text-[#1557ee]">{adDraft.builtIn?'EDIT ADSTERRA CODE':'NEW ADSTERRA CODE'}</div><h2 className="mt-1 text-lg font-extrabold">{adDraft.builtIn?'تعديل الكود':'إضافة كود جديد'}</h2><p className="mt-1 text-xs text-slate-500">أدخل اسم الكود ونوعه والشيفرة كاملة، ثم راجع المعاينة قبل الحفظ.</p></div>
+          <button type="button" data-testid="button-close-ad-editor" className={soft} onClick={()=>{setAdDraft(null);setAdPreview(null);window.scrollTo(0,0);}}>العودة إلى الأكواد</button>
+        </section>
+        <form data-testid="form-ad-code-editor" onSubmit={event=>{event.preventDefault();saveDraft();}} className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,.8fr)]">
+          <section className="space-y-4 rounded-2xl border border-[#dce5f3] bg-white p-4 shadow-[0_12px_30px_rgba(18,35,75,.06)] sm:p-5">
+            <label className="grid gap-1.5 text-xs font-bold text-slate-600">اسم الكود
+              <input required data-testid="input-ad-code-name" aria-label="اسم الكود" value={adDraft.name} onChange={event=>draftChange({name:event.target.value})} placeholder="مثال: موضع Social للحملات" className={editorField}/>
+            </label>
+            <label className="grid gap-1.5 text-xs font-bold text-slate-600">نوع الإعلان
+              <select required data-testid="select-ad-code-format" aria-label="نوع الإعلان" value={adDraft.format} onChange={event=>draftChange({format:event.target.value as AdsteraFormat})} className={`${editorField} font-bold`}>
+                <option value="social">Social</option><option value="320x50">Banner · 320 × 50</option>
+              </select>
+            </label>
+            <label className="grid gap-1.5 text-xs font-bold text-slate-600">الشيفرة الإعلانية
+              <textarea required data-testid="textarea-ad-code" aria-label="الشيفرة الإعلانية" value={adDraft.code} onChange={event=>draftChange({code:event.target.value})} rows={12} spellCheck={false} dir="ltr" placeholder="ألصق الشيفرة كاملة كما استلمتها من Adsterra…" className="w-full resize-y rounded-xl border border-[#243655] bg-[#111c32] p-3.5 font-mono text-xs leading-6 text-emerald-100 outline-none placeholder:text-slate-500 focus:border-[#7198ff] focus:ring-2 focus:ring-blue-100"/>
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="submit" data-testid="button-save-ad-code" className={primary}><Check size={15}/>حفظ الكود</button>
+              <button type="button" data-testid="button-refresh-ad-preview" className={soft} onClick={()=>refreshPreview(adDraft)}><RefreshCw size={14}/>تحديث المعاينة</button>
+            </div>
+          </section>
+          <section className="min-w-0 rounded-2xl border border-slate-200 bg-[#f4f7fb] p-4 sm:p-5">
+            <div className="mb-4 flex items-start justify-between gap-2"><div><div className="flex items-center gap-2 text-sm font-extrabold text-[#17284d]"><Eye size={16} className="text-[#1557ee]"/>معاينة مباشرة</div><p className="mt-1 text-xs leading-5 text-slate-500">تتحدّث المعاينة مع تعديل الشيفرة؛ زر التحديث يعيد تحميلها يدويًا.</p></div><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold text-emerald-700">معزولة</span></div>
+            <div className="grid min-h-36 place-items-center rounded-xl border border-dashed border-slate-200 bg-white p-3">{previewAd?previewFrame(previewAd):null}</div>
+            <p className="mt-3 text-[10px] leading-5 text-slate-500">يعمل الكود داخل إطار معزول بصلاحية تشغيل النصوص فقط. ظهور إعلان Adsterra يعتمد أيضًا على استجابة مزوّد الإعلان.</p>
+          </section>
+        </form>
+      </div>;
+      if(adPreview) return <div dir="rtl" data-testid="page-ad-code-preview" className="space-y-4">
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e6ebf3] bg-white p-4 sm:p-5">
+          <div><div className="text-[10px] font-extrabold tracking-[.12em] text-[#1557ee]">ADSTERRA PREVIEW</div><h2 className="mt-1 text-lg font-extrabold">معاينة {adPreview.name}</h2><p className="mt-1 text-xs text-slate-500">هذه معاينة فعلية للشيفرة داخل إطار معزول.</p></div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" data-testid="button-back-ad-preview" className={soft} onClick={()=>{setAdPreview(null);window.scrollTo(0,0);}}>العودة إلى الأكواد</button>
+            <button type="button" data-testid="button-refresh-ad-preview" className={soft} onClick={()=>refreshPreview(adPreview)}><RefreshCw size={14}/>تحديث المعاينة</button>
+            <button type="button" data-testid="button-edit-previewed-ad" className={primary} onClick={()=>startEdit(adPreview)}><Pencil size={14}/>تعديل</button>
+          </div>
+        </section>
+        <section className="rounded-2xl border border-[#dce5f3] bg-white p-4 shadow-[0_8px_24px_rgba(18,35,75,.045)] sm:p-6">
+          <div className="grid min-h-52 place-items-center rounded-xl border border-dashed border-slate-200 bg-[#f4f7fb] p-4">{previewFrame(adPreview)}</div>
+          <p className="mt-4 text-xs leading-5 text-slate-500">إذا بقيت المساحة فارغة، تحقق من صلاحية الشيفرة واستجابة Adsterra. الإطار معزول عمدًا ولا يملك صلاحية الوصول إلى لوحة الإدارة.</p>
+        </section>
+      </div>;
+      return <div dir="rtl" data-testid="page-adstera-management" className="space-y-4">
+        <section className="relative overflow-hidden rounded-[1.35rem] bg-[#132449] p-5 text-white shadow-[0_16px_36px_rgba(18,35,75,.12)] sm:p-6">
+          <div className="pointer-events-none absolute -left-12 -top-16 h-52 w-52 rounded-full border border-white/10"/><div className="pointer-events-none absolute -left-4 -top-8 h-36 w-36 rounded-full border border-white/10"/>
+          <div className="relative flex flex-wrap items-end justify-between gap-5">
+            <div className="max-w-2xl"><div className="mb-2 flex items-center gap-2 text-[10px] font-extrabold tracking-[.14em] text-[#f6c453]"><Code2 size={14}/> ADSTERRA / INVENTORY</div><h2 className="text-xl font-extrabold tracking-tight sm:text-2xl">إدارة أكواد الإعلانات</h2><p className="mt-2 max-w-xl text-xs leading-6 text-blue-100/75 sm:text-sm">تحكّم في الأكواد التي تظهر ضمن حملات صناع المحتوى، وعاين كل موضع داخل بيئة معزولة قبل النشر.</p></div>
+            <button type="button" data-testid="button-add-ad-code" className={`${primary} min-h-11 rounded-xl bg-[#f6c453] px-4 text-[#17213a] hover:bg-[#ffdc7e]`} onClick={beginAdd}><Plus size={16}/> إضافة كود</button>
+          </div>
+          <div className="relative mt-5 grid grid-cols-2 gap-2 sm:flex sm:gap-2">
+            <div className="min-w-[120px] rounded-xl border border-white/10 bg-white/[.06] px-3 py-2"><div className="text-[10px] font-bold text-blue-100/65">إجمالي الأكواد</div><div data-testid="text-ad-code-total" className="mt-1 font-mono text-lg font-bold">{adstera.ads.length}</div></div>
+            <div className="min-w-[120px] rounded-xl border border-white/10 bg-white/[.06] px-3 py-2"><div className="text-[10px] font-bold text-blue-100/65">مفعّلة</div><div className="mt-1 font-mono text-lg font-bold text-emerald-300">{adstera.ads.filter(ad=>ad.enabled).length}</div></div>
+            <div className="min-w-[120px] rounded-xl border border-white/10 bg-white/[.06] px-3 py-2"><div className="text-[10px] font-bold text-blue-100/65">معطّلة</div><div className="mt-1 font-mono text-lg font-bold text-amber-200">{adstera.ads.filter(ad=>!ad.enabled).length}</div></div>
+          </div>
+        </section>
+        <section className="rounded-2xl border border-[#e6ebf3] bg-white p-3 shadow-[0_5px_18px_rgba(18,35,75,.035)] sm:p-4">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <label className="relative min-w-0 flex-1"><span className="sr-only">البحث في الأكواد</span><Search className="absolute right-3 top-3 h-4 w-4 text-slate-400"/><input data-testid="input-ad-code-search" aria-label="البحث في الأكواد" value={adQuery} onChange={e=>setAdQuery(e.target.value)} placeholder="ابحث بالاسم أو المعرّف…" className={`${editorField} pe-10`}/></label>
+            <label className="sr-only" htmlFor="ad-code-status">تصفية الحالة</label><select id="ad-code-status" data-testid="select-ad-code-status" aria-label="تصفية الأكواد حسب الحالة" value={adStatus} onChange={e=>setAdStatus(e.target.value as 'all'|'enabled'|'disabled')} className={`${editorField} sm:w-44`}><option value="all">كل الحالات</option><option value="enabled">مفعّلة فقط</option><option value="disabled">معطّلة فقط</option></select>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-500"><span data-testid="text-ad-code-count">عرض {filteredAds.length} من {adstera.ads.length} كود</span><span className="hidden items-center gap-1.5 sm:flex"><ShieldCheck size={13} className="text-emerald-600"/> معاينة ضمن sandbox بلا صلاحية الوصول للأصل</span></div>
+        </section>
+        {filteredAds.length===0
+          ? <section data-testid="empty-ad-codes" className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-10 text-center"><span className="mx-auto grid h-11 w-11 place-items-center rounded-2xl bg-[#edf3ff] text-[#1557ee]"><Search size={19}/></span><h3 className="mt-3 font-extrabold text-[#12234b]">{adstera.ads.length?'لا توجد نتائج مطابقة':'لا توجد أكواد محفوظة'}</h3><p className="mt-1 text-xs leading-5 text-slate-500">{adstera.ads.length?'جرّب تغيير عبارة البحث أو مرشح الحالة.':'أضف كودًا جديدًا لبدء إدارة مواضع Adstera.'}</p>{!adstera.ads.length&&<button type="button" className={`${primary} mt-4`} onClick={beginAdd}>إضافة أول كود</button>}</section>
+          : table(['الكود','التنسيق','الحالة','آخر تحديث','الإجراءات'],filteredAds.map(ad=><tr data-testid={`row-ad-code-${ad.id}`} key={ad.id} className="border-b border-slate-50 transition hover:bg-[#f8faff]">
+              <td className={cell}><div className="flex min-w-0 items-center gap-2.5"><span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${ad.format==='social'?'bg-[#edf3ff] text-[#1557ee]':'bg-[#fff5dd] text-[#9a6b09]'}`}>{ad.format==='social'?<Layers size={16}/>:<Monitor size={16}/>}</span><div className="min-w-0"><div className="truncate font-extrabold text-[#17284d]">{ad.name||'كود بلا اسم'}</div><div className="truncate font-mono text-[10px] text-slate-400" dir="ltr">{ad.id}{ad.builtIn?' · مدمج':''}</div></div></div></td>
+              <td className={cell}><span className={`inline-flex rounded-lg px-2.5 py-1 text-[11px] font-extrabold ${ad.format==='social'?'bg-blue-50 text-blue-700':'bg-amber-50 text-amber-800'}`} dir="ltr">{ad.format==='social'?'Social':'320 × 50'}</span></td>
+              <td className={cell}><span data-testid={`status-ad-code-${ad.id}`}><Badge>{ad.enabled?'مفعّل':'معطّل'}</Badge></span></td>
+              <td className={`${cell} text-xs text-slate-500`}>{ad.updatedAt||'—'}</td>
+              <td className={cell}><div className="flex flex-wrap gap-1.5"><button type="button" data-testid={`button-preview-ad-${ad.id}`} aria-label={`معاينة ${ad.name}`} className={`${soft} min-h-9 px-2.5`} onClick={()=>refreshPreview(ad)}><Eye size={14}/>معاينة</button><button type="button" data-testid={`button-edit-ad-${ad.id}`} aria-label={`تعديل ${ad.name}`} className={`${soft} min-h-9 px-2.5`} onClick={()=>startEdit(ad)}><Pencil size={14}/>تعديل</button><button type="button" data-testid={`button-toggle-ad-${ad.id}`} aria-label={`${ad.enabled?'تعطيل':'تفعيل'} ${ad.name}`} className={`${btn} min-h-9 px-2.5 ${ad.enabled?'bg-amber-50 text-amber-800':'bg-emerald-50 text-emerald-800'}`} onClick={()=>toggleAd(ad)}>{ad.enabled?'تعطيل':'تفعيل'}</button></div></td>
+            </tr>))}
+      </div>;
    }
    if(page==='settings') return <SettingsPanel values={data.settings} pricing={pricing} onSave={v=>{setData(d=>({...d,settings:v}));announce('تم حفظ الإعدادات')}} onPricingSave={nextPricing=>{saveLocalPricing(nextPricing);announce('تم تحديث الأسعار')}}/>;
    if(page==='notifications') return <NotificationPanel reports={data.reports} onSend={r=>{setData(d=>({...d,reports:[{...r,id:`NTF-${Date.now()}`,createdAt:new Date().toLocaleString('ar'),status:'مسودة'},...d.reports]}));announce('تم حفظ التقرير')}}/>;
