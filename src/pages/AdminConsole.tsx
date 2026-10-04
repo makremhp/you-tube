@@ -1,12 +1,13 @@
 import { Children, cloneElement, isValidElement, useEffect, useState, type ReactElement } from 'react';
 import { Activity, CircleDollarSign, Copy, Eye, Megaphone, Search, ShieldCheck, Trash2, Users, Wallet, X, Plus, Code2, RefreshCw, Pencil, Check, Monitor, Layers } from 'lucide-react';
 import { saveLocalPricing, useLocalPricing, type LocalPricing, type PricingPlatform } from '@/legacy/pricing';
-import { buildAdsteraDocument, useAdsteraAds, type AdsteraAd, type AdsteraFormat } from '@/lib/adsteraAds';
+import { buildAdsteraDocument, deleteAdsteraAd, useAdsteraAds, type AdsteraAd, type AdsteraFormat } from '@/lib/adsteraAds';
 
 type User = { id: number; name: string; username: string; avatar: string; advertiserBalance: number; earnedBalance: number; status: 'نشط' | 'محظور'; bannedBySystem?: boolean; joinedAt: string; lastLogin: string; lastActive: string; invitedBy: string };
 type Row = { id: string; userId?: number; amount?: number; createdAt?: string; status?: string; [key: string]: any };
 type State = { users: User[]; deposits: Row[]; withdrawals: Row[]; campaigns: Row[]; proofs: Row[]; ads: Row[]; suspicious: Row[]; settings: Record<string, any>; reports: Row[] };
 const KEY = 'vidreward.admin.preview.v1';
+const TASK_REWARD_MIGRATION_KEY = 'vidreward.admin.migration.task-rewards.v1';
 const proofMock = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500"><rect width="100%" height="100%" fill="#e9eef8"/><rect x="120" y="72" width="560" height="356" rx="28" fill="#fff"/><rect x="155" y="112" width="84" height="84" rx="24" fill="#edf3ff"/><path d="M179 154h36M197 136v36" stroke="#1557ee" stroke-width="8" stroke-linecap="round"/><rect x="268" y="118" width="340" height="16" rx="8" fill="#d8e1f2"/><rect x="268" y="150" width="240" height="12" rx="6" fill="#e9eef8"/><rect x="155" y="238" width="450" height="20" rx="10" fill="#e9eef8"/><rect x="155" y="276" width="390" height="20" rx="10" fill="#e9eef8"/><rect x="155" y="344" width="156" height="42" rx="12" fill="#1557ee"/><text x="333" y="371" font-family="sans-serif" font-size="17" fill="#52627e">TASK PROOF IMAGE</text></svg>')}`;
 const seed: State = {
  users: [
@@ -30,11 +31,11 @@ const seed: State = {
  ],
  proofs: [
   { id: 'PRF-318', userId: 610258, taskId: 'TASK-TG-41', taskType: 'اشتراك قناة', image: proofMock, reward: 0.003, status: 'قيد المراجعة' },
-  { id: 'PRF-312', userId: 610411, taskId: 'TASK-TT-09', taskType: 'متابعة TikTok', image: proofMock, reward: 0.003, status: 'قيد المراجعة' },
+  { id: 'PRF-312', userId: 610411, taskId: 'TASK-TT-09', taskType: 'متابعة TikTok', image: proofMock, reward: 0.01, status: 'قيد المراجعة' },
  ],
  ads: [],
  suspicious: [{ id: 'SIG-118', userId: 610411, attempt: 'رصد أدوات المطور + مشاهدة أسرع من المدة المطلوبة', createdAt: '2025-03-08 08:20', status: 'مفتوح' }, { id: 'SIG-112', userId: 610258, attempt: 'عدة حسابات على الجهاز نفسه', createdAt: '2025-03-07 15:10', status: 'مفتوح' }, { id: 'SIG-107', userId: 610309, attempt: 'تلاعب في DOM', createdAt: '2025-03-06 10:22', status: 'تمت المراجعة' }],
-  settings: { binanceWithdrawMin: 1, web3WithdrawMin: 2, starsDepositMin: 1, web3DepositMin: 5, userShare: 20, platformShare: 10, durationMin: 10, durationMax: 80, cpmMin: 1.5, cpmMax: 4, telegramCpm: 2.2, tiktokCpm: 2.8, taskReward: 0.02, telegramTaskReward: 0.02, tiktokTaskReward: 0.01, web3Address: '0x0000...9a31', maintenance: false },
+  settings: { binanceWithdrawMin: 1, web3WithdrawMin: 2, starsDepositMin: 1, web3DepositMin: 5, userShare: 20, platformShare: 10, durationMin: 10, durationMax: 80, cpmMin: 1.5, cpmMax: 4, telegramCpm: 2.2, tiktokCpm: 2.8, taskReward: 0.02, telegramTaskReward: 0.003, tiktokTaskReward: 0.01, web3Address: '0x0000...9a31', maintenance: false },
  reports: [],
 };
 const labels: Record<string, string> = { overview:'نظرة عامة', users:'مستخدمو Telegram', deposits:'الإيداعات', 'deposit-detail':'تفاصيل المعاملة', withdrawals:'السحوبات', campaigns:'الحملات', proofs:'إثباتات المهام', ads:'مخزون Adstera', settings:'الإعدادات', notifications:'الإشعارات', suspicious:'مستخدمون مشبوهون' };
@@ -43,7 +44,85 @@ const cell = 'px-4 py-1.5 text-right align-middle';
 const btn = 'inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition hover:-translate-y-px disabled:opacity-40';
 const primary = `${btn} bg-[#1557ee] text-white`;
 const soft = `${btn} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50`;
-function getState(): State { try { const s = localStorage.getItem(KEY); if (!s) return seed; const stored=JSON.parse(s) as Partial<State>; const campaigns=stored.campaigns??seed.campaigns; const deposits=(stored.deposits??seed.deposits).map(row=>{const baseline=seed.deposits.find(item=>item.id===row.id);return {...baseline,...row,credited:row.credited??baseline?.credited??row.status==='ناجح',balanceBefore:row.balanceBefore??baseline?.balanceBefore,balanceAfter:row.balanceAfter??baseline?.balanceAfter}}); return { ...seed, ...stored, ads: [], deposits, campaigns:[...campaigns,...seed.campaigns.filter(c=>!campaigns.some(existing=>existing.id===c.id))], settings:{...seed.settings,...stored.settings} }; } catch { return seed; } }
+function getState(): State {
+ try {
+  const s = localStorage.getItem(KEY);
+  const rewardsMigrated = localStorage.getItem(TASK_REWARD_MIGRATION_KEY) === 'done';
+  if (!s) {
+   if (!rewardsMigrated) localStorage.setItem(TASK_REWARD_MIGRATION_KEY, 'done');
+   return seed;
+  }
+  const stored = JSON.parse(s) as Partial<State>;
+  const campaigns = stored.campaigns ?? seed.campaigns;
+  const deposits = (stored.deposits ?? seed.deposits).map(row => {
+   const baseline = seed.deposits.find(item => item.id === row.id);
+   return { ...baseline, ...row, credited: row.credited ?? baseline?.credited ?? row.status === 'ناجح', balanceBefore: row.balanceBefore ?? baseline?.balanceBefore, balanceAfter: row.balanceAfter ?? baseline?.balanceAfter };
+  });
+  const settings = { ...seed.settings, ...stored.settings };
+  const proofs = stored.proofs ?? seed.proofs;
+  if (!rewardsMigrated) {
+   // Migrate only the old defaults; later admin-configured values stay intact.
+   if (Number(settings.telegramTaskReward) === 0.02) settings.telegramTaskReward = 0.003;
+   const migratedProofs = proofs.map(row =>
+    row.id === 'PRF-312' && Number(row.reward) === 0.003 ? { ...row, reward: 0.01 } : row,
+   );
+   localStorage.setItem(TASK_REWARD_MIGRATION_KEY, 'done');
+   return { ...seed, ...stored, proofs: migratedProofs, ads: [], deposits, campaigns: [...campaigns, ...seed.campaigns.filter(c => !campaigns.some(existing => existing.id === c.id))], settings };
+  }
+  return { ...seed, ...stored, proofs, ads: [], deposits, campaigns: [...campaigns, ...seed.campaigns.filter(c => !campaigns.some(existing => existing.id === c.id))], settings };
+ } catch {
+  return seed;
+ }
+}
+function readLocalRows(key: string): Row[] {
+ try {
+  const rows = JSON.parse(localStorage.getItem(key) ?? '[]') as unknown;
+  return Array.isArray(rows) ? rows.filter((row): row is Row => Boolean(row) && typeof row === 'object') : [];
+ } catch {
+  return [];
+ }
+}
+function platformEarnings(data: State) {
+ const youtubeDeposits = data.campaigns
+  .filter(campaign => String(campaign.platform ?? '').toLowerCase() === 'youtube' && campaign.status !== 'مرفوضة' && campaign.status !== 'مرفوض')
+  .reduce((sum, campaign) => sum + Math.max(0, Number(campaign.spent ?? campaign.budget ?? campaign.price ?? 0) || 0), 0);
+
+ const taskCampaigns = new Map<string, Row>();
+ [...data.campaigns, ...readLocalRows('vidreward.promotion-campaigns.v1')].forEach(campaign => {
+  const platform = String(campaign.platform ?? '').toLowerCase();
+  if ((platform === 'tiktok' || platform === 'telegram') && campaign.id !== undefined) {
+   taskCampaigns.set(String(campaign.id), campaign);
+  }
+ });
+ const proofs = [...data.proofs, ...readLocalRows('vidreward.task-proofs.v1')];
+ const taskNet = { tiktok: 0, telegram: 0 };
+
+ taskCampaigns.forEach(campaign => {
+  const platform = String(campaign.platform).toLowerCase() as 'tiktok' | 'telegram';
+  const budget = Math.max(0, Number(campaign.price ?? campaign.budget ?? 0) || 0);
+  const target = Math.max(0, Number(campaign.targetCount ?? 0) || 0);
+  if (budget <= 0 || target <= 0) return;
+
+  const linkedProofs = proofs.filter(proof => String(proof.campaignId ?? '') === String(campaign.id));
+  const recordedCompletions = Math.max(
+   0,
+   Number(campaign.completedCount ?? 0) || 0,
+   Array.isArray(campaign.completedUserIds) ? campaign.completedUserIds.length : 0,
+  );
+  const approvedProofs = linkedProofs.filter(proof => proof.status === 'معتمد' || proof.status === 'approved').length;
+  const completions = Math.min(target, linkedProofs.length > 0 ? approvedProofs : recordedCompletions);
+  const userReward = platform === 'tiktok' ? 0.01 : 0.003;
+  const marginPerTask = budget / target - userReward;
+  taskNet[platform] += marginPerTask * completions;
+ });
+
+ return {
+  youtube: youtubeDeposits * 0.7,
+  tiktok: taskNet.tiktok,
+  telegram: taskNet.telegram,
+  total: youtubeDeposits * 0.7 + taskNet.tiktok + taskNet.telegram,
+ };
+}
 function Field({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) { return <label className="grid gap-1.5 text-xs font-bold text-slate-600">{label}<input {...props} className={cx('w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100', props.className)} /></label>; }
 function Badge({ children }: { children: React.ReactNode }) { const good = ['نشط','ناجح','معتمد','مفعّل','تمت المراجعة'].includes(String(children)); const bad = ['محظور','فاشل','مرفوض','موقوف'].includes(String(children)); return <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${good?'bg-emerald-50 text-emerald-700':bad?'bg-rose-50 text-rose-700':'bg-amber-50 text-amber-700'}`}>{children}</span>; }
 
@@ -62,6 +141,7 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
  const [pageNo, setPageNo] = useState(1);
  const [dialog, setDialog] = useState<{kind:string; id?:string|number}|null>(null);
  const [pendingAction, setPendingAction] = useState<(()=>void)|null>(null);
+ const [pendingSuccessMessage, setPendingSuccessMessage] = useState('تم تطبيق الإجراء');
  const [filter, setFilter] = useState('الكل');
  const [toast, setToast] = useState('');
  useEffect(() => {
@@ -97,21 +177,28 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
    const labeledRows=rows.map((row,rowIndex)=>{if(!isValidElement(row))return row;const element=row as ReactElement<{children?:React.ReactNode}>;const cells=Children.toArray(element.props.children).map((child,index)=>isValidElement(child)?cloneElement(child as ReactElement<Record<string,unknown>>,{ 'data-label':head[index] }):child);return cloneElement(element,{key:element.key??rowIndex},...cells);});
    return panel(<div className="admin-table-wrap"><table className="admin-table w-full border-collapse text-sm"><thead><tr className="border-b border-slate-100 bg-slate-50/80 text-[11px] text-slate-500">{head.map(x=><th className={cell} key={x}>{x}</th>)}</tr></thead><tbody>{labeledRows}</tbody></table></div>);
   };
- const confirm = (message:string, onConfirm:()=>void) => { setPendingAction(()=>onConfirm); setDialog({kind:'confirm', id:message}); };
+ const confirm = (message:string, onConfirm:()=>void, successMessage='تم تطبيق الإجراء') => { setPendingAction(()=>onConfirm); setPendingSuccessMessage(successMessage); setDialog({kind:'confirm', id:message}); };
  const action = (text:string, cb:()=>void, danger=false) => <button onClick={cb} className={`${btn} ${danger?'bg-rose-50 text-rose-700':'bg-slate-100 text-slate-700'}`}>{text}</button>;
 
  const content = () => {
-   if(page==='overview') return <div className="space-y-4">
+   if(page==='overview') {
+    const net = platformEarnings(data);
+    return <div className="space-y-4">
     <div className="grid grid-cols-2 gap-x-4 rounded-2xl bg-white px-4 sm:grid-cols-3">{[
     ['مستخدمون مسجلون',data.users.length,Users],
     ['حملات نشطة',data.campaigns.filter(x=>x.status==='نشطة').length,Megaphone],
     ['حملات أوقفتها الميزانية',data.campaigns.filter(x=>x.status==='أوقفتها الميزانية').length,Activity],
     ['إيداعات ناجحة · USDT',data.deposits.filter(x=>x.status==='ناجح').reduce((sum,x)=>sum+(x.method==='Stars'?Number(x.amount??0)*0.01:Number(x.amount??0)),0).toFixed(2),CircleDollarSign],
-    ['إجمالي أرباح الفيديو',data.users.reduce((sum,u)=>sum+u.earnedBalance,0).toFixed(3),Wallet],
+    ['إجمالي أرباح المستخدمين',data.users.reduce((sum,u)=>sum+u.earnedBalance,0).toFixed(3),Wallet],
+    ['صافي أرباح المنصة',`$${net.total.toFixed(3)}`,CircleDollarSign],
     ['مستخدمون حظرهم النظام',data.users.filter(x=>x.bannedBySystem).length,ShieldCheck]
      ].map(([l,v,I]:any)=><div key={l} className="flex min-h-[74px] items-center justify-between gap-2 border-b border-slate-100 py-2.5"><div className="min-w-0"><div className="text-[10px] font-bold leading-4 text-slate-500">{l}</div><div className="mt-0.5 flex flex-wrap items-baseline gap-x-2"><span className="text-xl font-extrabold text-[#12234b]">{v}</span></div></div><I className="h-4 w-4 shrink-0 text-[#1557ee]"/></div>)}</div>
+    {panel(<div className="grid gap-3 sm:grid-cols-3" data-testid="platform-net-breakdown">
+      {[['YouTube',net.youtube,'70% من ميزانية حملات الفيديو'],['TikTok',net.tiktok,'بعد مكافأة 0.01$ لكل مهمة مكتملة'],['Telegram',net.telegram,'بعد مكافأة 0.003$ لكل مهمة مكتملة']].map(([platform,amount,description])=><div key={String(platform)} className="rounded-xl bg-[#f7f9fc] p-3"><div className="text-xs font-extrabold">{platform}</div><div className="mt-1 font-mono text-lg font-bold text-[#1557ee]">${Number(amount).toFixed(3)}</div><p className="mt-1 text-[10px] leading-4 text-slate-500">{description}</p></div>)}
+    </div>)}
     {panel(<><div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#edf3ff] text-[#1557ee]"><ShieldCheck size={20}/></span><div><h2 className="font-extrabold">مركز العمليات</h2><p className="mt-1 text-sm leading-6 text-slate-500">تابع الطلبات والإثباتات وإشارات المخاطر من مساحة واحدة.</p></div></div><div className="mt-5 grid gap-3 md:grid-cols-2">{[['طلبات السحب',data.withdrawals.filter(x=>x.status==='قيد المراجعة').length,'withdrawals'],['إثباتات المهام',data.proofs.filter(x=>x.status==='قيد المراجعة').length,'proofs'],['إشارات المخاطر',data.suspicious.filter(x=>x.status==='مفتوح').length,'suspicious'],['تقارير الإرسال',data.reports.length,'notifications']].map(([a,b,c])=><button key={c} onClick={()=>navigateToPage(String(c))} className="flex items-center justify-between rounded-xl bg-[#f7f9fc] p-4 text-right"><span className="text-sm font-bold">{a}</span><span className="font-mono text-lg font-bold text-[#1557ee]">{b}</span></button>)}</div></>)}
   </div>;
+   }
   if(page==='users') return <div className="space-y-4">{panel(<div className="flex flex-wrap gap-3">{search}<span className="self-center text-xs text-slate-400">حد أقصى 100 مستخدم في الصفحة</span></div>)}{table(['المستخدم','Telegram ID','رصيد المعلن','الأرباح','الحالة','آخر نشاط',''],visibleUsers.map(u=><tr key={u.id} className="border-b border-slate-50 hover:bg-slate-50/70"><td className={cell}><div className="flex items-center gap-2"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#edf3ff] text-xs font-extrabold text-[#1557ee]">{u.avatar}</span><div><b>{u.name}</b><div className="text-xs text-slate-400">@{u.username}</div></div></div></td><td className={`${cell} font-mono`}>{u.id}</td><td className={`${cell} font-mono`}>{u.advertiserBalance.toFixed(2)} $</td><td className={`${cell} font-mono`}>{u.earnedBalance.toFixed(3)} $</td><td className={cell}><Badge>{u.status}</Badge></td><td className={cell}>{u.lastActive}</td><td className={cell}><button className={soft} onClick={()=>setDialog({kind:'user',id:u.id})}>التفاصيل</button></td></tr>))}{panel(<div className="flex items-center justify-between text-xs text-slate-500"><span>{filteredUsers.length} مستخدم</span><div className="flex gap-2"><button className={soft} disabled={pageNo<=1} onClick={()=>setPageNo(n=>n-1)}>السابق</button><span className="px-2 py-2">صفحة {pageNo} / {Math.max(1,Math.ceil(filteredUsers.length/pageSize))}</span><button className={soft} disabled={pageNo>=Math.ceil(filteredUsers.length/pageSize)} onClick={()=>setPageNo(n=>n+1)}>التالي</button></div></div>)}</div>;
    if(page==='deposits') return <div className="space-y-4">{panel(<div className="flex flex-wrap gap-3">{search}{statusSelect(['ناجح','فاشل'])}</div>)}{table(['العملية / المعاملة','المستخدم','الطريقة','المبلغ','Memo / Tag','المحفظة','الحالة / الوقت'],rowData('deposits').map(r=><tr key={r.id} tabIndex={0} role="button" onClick={()=>{setSelectedDepositId(r.id);setPage('deposit-detail')}} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setSelectedDepositId(r.id);setPage('deposit-detail')}}} className="cursor-pointer border-b border-slate-50 hover:bg-blue-50/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1557ee]"><td className={cell}><b>{r.id}</b><div className="text-[11px] text-slate-400">{r.txId}</div></td><td className={cell}>{userBy(r.userId)?.name}</td><td className={cell}>{r.method}</td><td className={`${cell} font-mono`}>{r.amount} {r.method==='Stars'?'XTR':'USDT'}</td><td className={`${cell} font-mono`}>{r.memoTag}</td><td className={`${cell} font-mono`}>{r.wallet||'—'}</td><td className={cell}><Badge>{r.status}</Badge><div className="mt-1 text-[10px] text-slate-400">{r.createdAt}</div>{r.reason&&<div className="mt-1 max-w-40 text-[10px] text-rose-600">{r.reason}</div>}</td></tr>))}</div>;
    if(page==='deposit-detail') {
@@ -162,6 +249,14 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
         try{adstera.save(adstera.ads.map(item=>item.id===ad.id?{...item,enabled:!item.enabled,updatedAt:new Date().toISOString().slice(0,10)}:item));announce(ad.enabled?'تم تعطيل الكود':'تم تفعيل الكود');}
         catch{announce('تعذر تحديث حالة الكود');}
       };
+      const removeAd=(ad:AdsteraAd)=>{
+        confirm(`حذف "${ad.name}" نهائيًا؟ لا يمكن التراجع عن هذا الإجراء.`,()=>{
+          deleteAdsteraAd(ad.id);
+          setAdDraft(current=>current?.id===ad.id?null:current);
+          setAdPreview(current=>current?.id===ad.id?null:current);
+          window.scrollTo(0,0);
+        },'تم حذف الكود نهائيًا');
+      };
       const editorField='w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-[#12234b] outline-none transition focus:border-[#1557ee] focus:ring-2 focus:ring-blue-100';
       const draftChange=(patch:Partial<AdsteraAd>)=>{
         setAdDraft(current=>current?{...current,...patch}:current);
@@ -171,10 +266,14 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
          ? <iframe key={`${ad.id}-${adPreviewKey}`} title={`معاينة ${ad.name||'الكود الجديد'}`} referrerPolicy="no-referrer-when-downgrade" srcDoc={buildAdsteraDocument(ad)} className={`mx-auto block max-w-full rounded-lg border border-slate-200 bg-white ${ad.format==='320x50'?'h-[50px] w-[320px]':'h-[100px] w-[320px]'}`} data-testid="iframe-ad-code-preview"/>
         : <div data-testid="empty-ad-preview" className="grid min-h-[100px] place-items-center rounded-lg border border-dashed border-slate-300 bg-white px-4 text-center text-[11px] leading-5 text-slate-400">أدخل الشيفرة لمعاينتها هنا.</div>;
       const previewAd=adPreview??adDraft;
+      const savedEditorAd=adDraft?adstera.ads.find(ad=>ad.id===adDraft.id):undefined;
       if(adDraft) return <div dir="rtl" data-testid="page-ad-code-editor" className="space-y-4">
         <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e6ebf3] bg-white p-4 sm:p-5">
-          <div><div className="text-[10px] font-extrabold tracking-[.12em] text-[#1557ee]">{adDraft.builtIn?'EDIT ADSTERRA CODE':'NEW ADSTERRA CODE'}</div><h2 className="mt-1 text-lg font-extrabold">{adDraft.builtIn?'تعديل الكود':'إضافة كود جديد'}</h2><p className="mt-1 text-xs text-slate-500">أدخل اسم الكود ونوعه والشيفرة كاملة، ثم راجع المعاينة قبل الحفظ.</p></div>
-          <button type="button" data-testid="button-close-ad-editor" className={soft} onClick={()=>{setAdDraft(null);setAdPreview(null);window.scrollTo(0,0);}}>العودة إلى الأكواد</button>
+            <div><div className="text-[10px] font-extrabold tracking-[.12em] text-[#1557ee]">{adDraft.builtIn?'EDIT ADSTERRA CODE':'NEW ADSTERRA CODE'}</div><h2 className="mt-1 text-lg font-extrabold">{adDraft.builtIn?'تعديل الكود':'إضافة كود جديد'}</h2><p className="mt-1 text-xs text-slate-500">أدخل اسم الكود ونوعه والشيفرة كاملة، ثم راجع المعاينة قبل الحفظ.</p></div>
+            <div className="flex flex-wrap gap-2">
+              {savedEditorAd&&<button type="button" data-testid={`button-delete-ad-editor-${savedEditorAd.id}`} className={`${btn} min-h-10 bg-rose-50 text-rose-700 hover:bg-rose-100`} onClick={()=>removeAd(savedEditorAd)}><Trash2 size={14}/>حذف نهائي</button>}
+              <button type="button" data-testid="button-close-ad-editor" className={soft} onClick={()=>{setAdDraft(null);setAdPreview(null);window.scrollTo(0,0);}}>العودة إلى الأكواد</button>
+            </div>
         </section>
         <form data-testid="form-ad-code-editor" onSubmit={event=>{event.preventDefault();saveDraft();}} className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,.8fr)]">
           <section className="space-y-4 rounded-2xl border border-[#dce5f3] bg-white p-4 shadow-[0_12px_30px_rgba(18,35,75,.06)] sm:p-5">
@@ -242,7 +341,7 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
               <td className={cell}><span className={`inline-flex rounded-lg px-2.5 py-1 text-[11px] font-extrabold ${ad.format==='social'?'bg-blue-50 text-blue-700':'bg-amber-50 text-amber-800'}`} dir="ltr">{ad.format==='social'?'Social':'320 × 50'}</span></td>
               <td className={cell}><span data-testid={`status-ad-code-${ad.id}`}><Badge>{ad.enabled?'مفعّل':'معطّل'}</Badge></span></td>
               <td className={`${cell} text-xs text-slate-500`}>{ad.updatedAt||'—'}</td>
-              <td className={cell}><div className="flex flex-wrap gap-1.5"><button type="button" data-testid={`button-preview-ad-${ad.id}`} aria-label={`معاينة ${ad.name}`} className={`${soft} min-h-9 px-2.5`} onClick={()=>refreshPreview(ad)}><Eye size={14}/>معاينة</button><button type="button" data-testid={`button-edit-ad-${ad.id}`} aria-label={`تعديل ${ad.name}`} className={`${soft} min-h-9 px-2.5`} onClick={()=>startEdit(ad)}><Pencil size={14}/>تعديل</button><button type="button" data-testid={`button-toggle-ad-${ad.id}`} aria-label={`${ad.enabled?'تعطيل':'تفعيل'} ${ad.name}`} className={`${btn} min-h-9 px-2.5 ${ad.enabled?'bg-amber-50 text-amber-800':'bg-emerald-50 text-emerald-800'}`} onClick={()=>toggleAd(ad)}>{ad.enabled?'تعطيل':'تفعيل'}</button></div></td>
+              <td className={cell}><div className="flex flex-wrap gap-1.5"><button type="button" data-testid={`button-preview-ad-${ad.id}`} aria-label={`معاينة ${ad.name}`} className={`${soft} min-h-9 px-2.5`} onClick={()=>refreshPreview(ad)}><Eye size={14}/>معاينة</button><button type="button" data-testid={`button-edit-ad-${ad.id}`} aria-label={`تعديل ${ad.name}`} className={`${soft} min-h-9 px-2.5`} onClick={()=>startEdit(ad)}><Pencil size={14}/>تعديل</button><button type="button" data-testid={`button-toggle-ad-${ad.id}`} aria-label={`${ad.enabled?'تعطيل':'تفعيل'} ${ad.name}`} className={`${btn} min-h-9 px-2.5 ${ad.enabled?'bg-amber-50 text-amber-800':'bg-emerald-50 text-emerald-800'}`} onClick={()=>toggleAd(ad)}>{ad.enabled?'تعطيل':'تفعيل'}</button><button type="button" data-testid={`button-delete-ad-${ad.id}`} aria-label={`حذف ${ad.name} نهائيًا`} className={`${btn} min-h-9 bg-rose-50 px-2.5 text-rose-700 hover:bg-rose-100`} onClick={()=>removeAd(ad)}><Trash2 size={14}/>حذف</button></div></td>
             </tr>))}
       </div>;
    }
@@ -256,7 +355,7 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
     <div className="mt-5">{content()}</div>
   </div>
   {toast&&<div role="status" className="fixed bottom-20 right-4 z-[110] rounded-xl bg-[#12234b] px-4 py-3 text-sm font-bold text-white shadow-xl">{toast}</div>}
-  {dialog&&<Dialog dialog={dialog} data={data} userBy={userBy} onClose={()=>setDialog(null)} onConfirmAction={()=>{pendingAction?.();setPendingAction(null);setDialog(null);announce('تم تطبيق الإجراء')}} onConfirm={(id,patch)=>{if(dialog.kind==='user-edit'||dialog.kind==='user'){setData(d=>({...d,users:d.users.map(u=>u.id===id?{...u,...patch}:u)}))}else if(dialog.kind==='reject-proof'){updateRows('proofs',id as string,patch)}else if(dialog.kind==='campaign'){updateRows('campaigns',id as string,patch)}setDialog(null);announce('تم حفظ التغيير')}} onDelete={id=>{setData(d=>({...d,users:d.users.filter(u=>u.id!==id)}));setDialog(null)}} onAction={cb=>{confirm('تأكيد الإجراء؟',cb)}}/>}
+  {dialog&&<Dialog dialog={dialog} data={data} userBy={userBy} onClose={()=>setDialog(null)} onConfirmAction={()=>{try{pendingAction?.();announce(pendingSuccessMessage)}catch{announce('تعذر تنفيذ الإجراء')}finally{setPendingAction(null);setDialog(null)}}} onConfirm={(id,patch)=>{if(dialog.kind==='user-edit'||dialog.kind==='user'){setData(d=>({...d,users:d.users.map(u=>u.id===id?{...u,...patch}:u)}))}else if(dialog.kind==='reject-proof'){updateRows('proofs',id as string,patch)}else if(dialog.kind==='campaign'){updateRows('campaigns',id as string,patch)}setDialog(null);announce('تم حفظ التغيير')}} onDelete={id=>{setData(d=>({...d,users:d.users.filter(u=>u.id!==id)}));setDialog(null)}} onAction={cb=>{confirm('تأكيد الإجراء؟',cb)}}/>}
  </main>;
 }
 

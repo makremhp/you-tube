@@ -157,7 +157,7 @@ export function PlatformTasksPage({
                       {t(verificationState.message ?? (returnedIds[task.id] && !telegramUserId ? 'افتح التطبيق من Telegram للتحقق الآلي من العضوية.' : `${task.targetCount.toLocaleString()} ${t('مشترك')} · ${task.link}`))}
                     </p>
                   </div>
-                  <span className="shrink-0 rounded-full bg-[#eafbf8] px-2 py-1 text-[9px] font-bold text-[#159b89]">{isTelegram ? '$0.02' : '$0.01'}</span>
+                  <span className="shrink-0 rounded-full bg-[#eafbf8] px-2 py-1 text-[9px] font-bold text-[#159b89]">{isTelegram ? '$0.003' : '$0.01'}</span>
                   <Button
                     type="button"
                     data-testid={`button-join-${task.id}`}
