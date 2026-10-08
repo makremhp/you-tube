@@ -6,16 +6,18 @@ import { SiTelegram, SiTiktok, SiYoutube } from 'react-icons/si';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
 import {
-  createBlockchainTxId, createBrowserWatchUrl, createUniqueIdentifier,
-  calculateViewerReward, getCompletedVideoIds, getTelegramUser,
-  getTelegramUserFromHash, initialVideos, readLocalState,
-  promotionCampaignsStorageKey, taskProofsStorageKey, ToastViewport, Sidebar,
+  createBrowserWatchUrl, createUniqueIdentifier,
+  formatUsd, getTelegramUser,
+  getTelegramUserFromHash, ToastViewport, Sidebar,
   Header, WatchPanel,
   type AdvertisementSession, type AdvertisementSessionStatus, type AppScreen,
   type DepositRecord, type PromotionCampaign, type TaskProof, type TelegramUser,
   type ToastTone, type ToastMessage, type Video, type WithdrawRecord,
 } from '@/legacy/shared';
-import { initialDepositHistory, initialWithdrawHistory } from '@/lib/data';
+import {
+  apiDelete, apiGet, apiPatch, apiPost, toDepositRecord, toPromotion, toTaskProof, toVideo, toWithdrawRecord,
+  type ApiBalance, type ApiCampaignRow, type ApiHistoryRecordRow, type ApiProofRecordRow,
+} from '@/lib/api';
 import { AddVideo } from '@/pages/AddCampaignPage';
 import { CampaignsPage } from '@/pages/CampaignsPage';
 import { CampaignDetailsPage } from '@/pages/CampaignDetailsPage';
@@ -38,7 +40,7 @@ type HomePageProps = {
 };
 
 export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [browserEarningPage] = useState(() => new URLSearchParams(window.location.search).get('view') === 'earn');
   const [mode, setMode] = useState<'creator' | 'viewer' | 'admin'>(() => browserEarningPage ? 'viewer' : initialMode);
   const [screen, setScreen] = useState<AppScreen>(() => browserEarningPage
@@ -46,24 +48,12 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     : initialScreen ?? (initialMode === 'viewer' ? 'watch' : 'overview'));
   const [telegramUser, setTelegramUser] = useState<TelegramUser | null>(() => getTelegramUser() ?? getTelegramUserFromHash());
   const [insideTelegram, setInsideTelegram] = useState(() => !browserEarningPage && Boolean(window.Telegram?.WebApp?.initData));
-  const [videos, setVideos] = useState<Video[]>(() => readLocalState('vidreward.videos.v1', initialVideos));
-  const [taskProofs, setTaskProofs] = useState<TaskProof[]>(() => readLocalState(taskProofsStorageKey, []));
-  const [platformCampaigns, setPlatformCampaigns] = useState<PromotionCampaign[]>(() => {
-    const proofs = readLocalState<TaskProof[]>(taskProofsStorageKey, []);
-    return readLocalState<PromotionCampaign[]>(promotionCampaignsStorageKey, []).map((campaign) => {
-      const campaignProofs = proofs.filter((proof) => proof.campaignId === campaign.id);
-      return {
-        ...campaign,
-        joinedCount: Math.max(campaign.joinedCount ?? 0, campaign.joinedUserIds?.length ?? 0, campaignProofs.length),
-        completedCount: Math.max(
-          campaign.completedCount ?? 0,
-          campaign.completedUserIds?.length ?? 0,
-          campaignProofs.filter((proof) => proof.status !== 'مرفوض').length,
-        ),
-      };
-    });
-  });
-  const [completedVideoIds, setCompletedVideoIds] = useState<Set<number>>(() => getCompletedVideoIds());
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [taskVideos, setTaskVideos] = useState<Video[]>([]);
+  const [taskProofs, setTaskProofs] = useState<TaskProof[]>([]);
+  const [platformCampaigns, setPlatformCampaigns] = useState<PromotionCampaign[]>([]);
+  const [taskCampaigns, setTaskCampaigns] = useState<PromotionCampaign[]>([]);
+  const [completedVideoIds, setCompletedVideoIds] = useState<Set<number>>(() => new Set());
   const [tab, setTab] = useState<'all' | 'active' | 'drafts'>('all');
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [selectedTikTokTask, setSelectedTikTokTask] = useState<PromotionCampaign | null>(null);
@@ -73,8 +63,8 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
   const [mobileMenu, setMobileMenu] = useState(false);
   const [advertiserBalance, setAdvertiserBalance] = useState(0);
   const [viewerBalance, setViewerBalance] = useState(0);
-  const [depositHistory, setDepositHistory] = useState<DepositRecord[]>(initialDepositHistory);
-  const [withdrawHistory, setWithdrawHistory] = useState<WithdrawRecord[]>(initialWithdrawHistory);
+  const [depositHistory, setDepositHistory] = useState<DepositRecord[]>([]);
+  const [withdrawHistory, setWithdrawHistory] = useState<WithdrawRecord[]>([]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [watchSession, setWatchSession] = useState<AdvertisementSession | null>(null);
   const watchElapsedRef = useRef(0);
@@ -93,16 +83,6 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       setInsideTelegram(true);
     }
   }, [browserEarningPage]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(promotionCampaignsStorageKey, JSON.stringify(platformCampaigns));
-      window.localStorage.setItem(taskProofsStorageKey, JSON.stringify(taskProofs));
-      window.localStorage.setItem('vidreward.videos.v1', JSON.stringify(videos));
-    } catch {
-      // Keep the original app usable if browser storage is unavailable or full.
-    }
-  }, [platformCampaigns, taskProofs, videos]);
 
   const saveWatchSession = (
     video: Video,
@@ -135,6 +115,37 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     setToasts((current) => [...current.slice(-3), { id, tone, title, message }]);
     window.setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), 6000);
   }, []);
+
+  const refreshData = useCallback(async () => {
+    try {
+      const [balance, ownCampaigns, tasks, proofs, deposits, withdrawals] = await Promise.all([
+        apiGet<ApiBalance>('balance'),
+        apiGet<ApiCampaignRow[]>('campaigns'),
+        apiGet<ApiCampaignRow[]>('tasks'),
+        apiGet<ApiProofRecordRow[]>('proofs'),
+        apiGet<ApiHistoryRecordRow[]>('deposits'),
+        apiGet<ApiHistoryRecordRow[]>('withdrawals'),
+      ]);
+      setAdvertiserBalance(Number(balance?.advertiserBalance ?? 0));
+      setViewerBalance(Number(balance?.viewerBalance ?? 0));
+      setVideos(ownCampaigns.filter((row) => row.platform === 'youtube').map(toVideo));
+      setPlatformCampaigns(ownCampaigns.filter((row) => row.platform !== 'youtube').map(toPromotion));
+      setTaskVideos(tasks.filter((row) => row.platform === 'youtube').map(toVideo));
+      setTaskCampaigns(tasks.filter((row) => row.platform !== 'youtube').map(toPromotion));
+      const completedIds = new Set(tasks.filter((row) => row.platform === 'youtube' && row.completed).map((row) => Number(row.id)));
+      creditedVideosRef.current = new Set([...creditedVideosRef.current, ...completedIds]);
+      setCompletedVideoIds(completedIds);
+      setTaskProofs(proofs.map(toTaskProof));
+      setDepositHistory(deposits.map((row) => toDepositRecord(row, language)));
+      setWithdrawHistory(withdrawals.map((row) => toWithdrawRecord(row, language)));
+    } catch {
+      notify('warning', 'تعذر تحميل البيانات', 'تعذر الاتصال بالخادم. أعد المحاولة بعد قليل.');
+    }
+  }, [language, notify]);
+
+  useEffect(() => {
+    void refreshData();
+  }, [refreshData, telegramUser?.id]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -194,12 +205,12 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
   }, [selectedVideo]);
 
   const completed = Boolean(selectedVideo && progress >= selectedVideo.duration);
-  const viewerCount = useMemo(() => videos.filter((video) => video.status === 'نشط').length, [videos]);
+  const viewerCount = useMemo(() => taskVideos.filter((video) => video.status === 'نشط').length, [taskVideos]);
 
   const selectVideo = (video: Video) => {
     const now = Date.now();
     let restoredElapsed = 0;
-    let restoredCredited = false;
+    let restoredCredited = completedVideoIds.has(video.id);
     let restoredSessionId = '';
     let restoredStatus: AdvertisementSessionStatus = 'paused';
     try {
@@ -213,7 +224,6 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
             ? Math.max(0, now - lastStartedAt)
             : 0;
           restoredElapsed = Math.min(savedElapsed + activeElapsed, video.duration * 1000);
-          restoredCredited = Boolean(parsed.credited);
           restoredSessionId = parsed.id ?? '';
           restoredStatus = parsed.status === 'completed' ? 'completed' : 'paused';
         }
@@ -237,7 +247,13 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     } catch {
       // The current watch session should still work when storage is unavailable.
     }
-    if (restoredCredited) creditedVideosRef.current.add(video.id);
+    if (restoredCredited) {
+      creditedVideosRef.current.add(video.id);
+    } else {
+      apiPost(`tasks/${video.id}/start`).catch(() => {
+        notify('warning', 'تعذر بدء المهمة', 'لم يسجل الخادم بداية المشاهدة. أغلق الفيديو وافتحه مرة أخرى.');
+      });
+    }
     externalWatchPendingRef.current = false;
     if (restoredElapsed > 0 && restoredElapsed < video.duration * 1000 && !restoredCredited) {
       notify('warning', 'الإعلان غير مكتمل', 'تمت استعادة تقدم المشاهدة دون مكافأة. أكمل المدة المطلوبة ثم تحقق.');
@@ -249,77 +265,112 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     setIsPlaying(false);
   };
 
-  const addVideo = (video: Omit<Video, 'id' | 'views' | 'status' | 'created' | 'art'>) => {
-    setVideos((current) => [{ ...video, id: Date.now(), views: '0', status: 'نشط', created: 'الآن', art: 'media-art' }, ...current]);
+  const addVideo = async (video: Omit<Video, 'id' | 'views' | 'status' | 'created' | 'art'>) => {
+    try {
+      await apiPost('campaigns', {
+        platform: 'youtube',
+        title: video.title,
+        creator: video.creator,
+        link: video.link,
+        cpm: video.cpm,
+        duration: video.duration,
+      });
+      await refreshData();
+      notify('success', 'تم نشر الإعلان', 'أصبح الفيديو نشطًا ويمكن للمشاهدين اكتشافه الآن.');
+    } catch {
+      notify('warning', 'تعذر نشر الإعلان', 'لم يحفظ الخادم الإعلان. تحقق من البيانات وحاول مرة أخرى.');
+    }
   };
 
-  const saveCampaignDetailVideo = (updated: Video) => setVideos((current) => current.map((item) => item.id === updated.id ? updated : item));
-  const saveCampaignDetailPlatform = (updated: PromotionCampaign) => setPlatformCampaigns((current) => current.map((item) => item.id === updated.id ? updated : item));
-  const toggleCampaignDetailStatus = () => {
+  const saveCampaignDetailVideo = async (updated: Video) => {
+    try {
+      await apiPatch(`campaigns/${updated.id}`, { title: updated.title, link: updated.link, status: updated.status });
+      await refreshData();
+    } catch {
+      notify('warning', 'تعذر حفظ التعديل', 'لم يحفظ الخادم التعديل. حاول مرة أخرى.');
+    }
+  };
+  const saveCampaignDetailPlatform = async (updated: PromotionCampaign) => {
+    try {
+      await apiPatch(`campaigns/${updated.id}`, { title: updated.title, link: updated.link, status: updated.status });
+      await refreshData();
+    } catch {
+      notify('warning', 'تعذر حفظ التعديل', 'لم يحفظ الخادم التعديل. حاول مرة أخرى.');
+    }
+  };
+  const toggleCampaignDetailStatus = async () => {
     if (selectedCampaignDetail?.video) {
       const selected = selectedCampaignDetail.video;
       const next = { ...selected, status: selected.status === 'موقوف' ? 'نشط' as const : 'موقوف' as const };
-      saveCampaignDetailVideo(next);
+      await saveCampaignDetailVideo(next);
       setSelectedCampaignDetail({ video: next });
     } else if (selectedCampaignDetail?.campaign) {
       const selected = selectedCampaignDetail.campaign;
       const next = { ...selected, status: selected.status === 'موقوف' ? (selected.platform === 'telegram' ? 'بانتظار تحقق البوت' as const : 'نشط' as const) : 'موقوف' as const };
-      saveCampaignDetailPlatform(next);
+      await saveCampaignDetailPlatform(next);
       setSelectedCampaignDetail({ campaign: next });
     }
   };
-  const deleteCampaignDetail = () => {
-    if (selectedCampaignDetail?.video) setVideos((current) => current.filter((item) => item.id !== selectedCampaignDetail.video?.id));
-    if (selectedCampaignDetail?.campaign) setPlatformCampaigns((current) => current.filter((item) => item.id !== selectedCampaignDetail.campaign?.id));
-    setSelectedCampaignDetail(null);
-    setScreen('campaigns');
-    notify('success', 'تم حذف الإعلان', 'تمت إزالة الإعلان من قائمتك.');
+  const deleteCampaignDetail = async () => {
+    const targetId = selectedCampaignDetail?.video?.id ?? selectedCampaignDetail?.campaign?.id;
+    if (targetId === undefined) return;
+    try {
+      await apiDelete(`campaigns/${targetId}`);
+      await refreshData();
+      setSelectedCampaignDetail(null);
+      setScreen('campaigns');
+      notify('success', 'تم حذف الإعلان', 'تمت إزالة الإعلان من قائمتك.');
+    } catch {
+      notify('warning', 'تعذر حذف الإعلان', 'لم يحذف الخادم الإعلان. حاول مرة أخرى.');
+    }
   };
 
-  const addPromotionCampaign = (campaign: PromotionCampaign) => {
-    setPlatformCampaigns((current) => [{ joinedCount: 0, completedCount: 0, ...campaign }, ...current]);
-    setScreen('campaigns');
+  const addPromotionCampaign = async (campaign: PromotionCampaign) => {
     const platformName = campaign.platform === 'telegram' ? 'Telegram' : 'TikTok';
-    const isLive = campaign.status === 'نشط';
-    notify(
-      isLive ? 'success' : 'info',
-      isLive ? `تم نشر إعلان ${platformName}` : `إعلان ${platformName} بانتظار إعداد البوت`,
-      isLive
-        ? `تمت إضافة إعلان ${platformName} إلى قائمة إعلاناتك بنجاح.`
-        : `أُضيف إعلان ${platformName} إلى القائمة، ولن يظهر حتى يتم التحقق من صلاحيات البوت على القناة.`,
-    );
+    try {
+      const saved = await apiPost<{ id: string; status: PromotionCampaign['status'] }>('campaigns', {
+        platform: campaign.platform,
+        title: campaign.title,
+        link: campaign.link,
+        image: campaign.image,
+        targetCount: campaign.targetCount,
+        price: campaign.price,
+      });
+      await refreshData();
+      setScreen('campaigns');
+      const isLive = saved.status === 'نشط';
+      notify(
+        isLive ? 'success' : 'info',
+        isLive ? `تم نشر إعلان ${platformName}` : `إعلان ${platformName} بانتظار إعداد البوت`,
+        isLive
+          ? `تمت إضافة إعلان ${platformName} إلى قائمة إعلاناتك بنجاح.`
+          : `أُضيف إعلان ${platformName} إلى القائمة، ولن يظهر حتى يتم التحقق من صلاحيات البوت على القناة.`,
+      );
+    } catch {
+      notify('warning', `تعذر نشر إعلان ${platformName}`, 'لم يحفظ الخادم الإعلان. تحقق من البيانات وحاول مرة أخرى.');
+    }
   };
 
-  const recordCampaignCompletion = (campaignId: string, userId?: number) => {
-    setPlatformCampaigns((current) => current.map((campaign) => {
-      if (campaign.id !== campaignId) return campaign;
-      if (userId === undefined) {
-        return {
-          ...campaign,
-          joinedCount: (campaign.joinedCount ?? 0) + 1,
-          completedCount: (campaign.completedCount ?? 0) + 1,
-        };
-      }
-      const joinedUserIds = campaign.joinedUserIds ?? [];
-      const completedUserIds = campaign.completedUserIds ?? [];
-      const alreadyJoined = joinedUserIds.includes(userId);
-      const alreadyCompleted = completedUserIds.includes(userId);
-      return {
-        ...campaign,
-        joinedUserIds: alreadyJoined ? joinedUserIds : [...joinedUserIds, userId],
-        completedUserIds: alreadyCompleted ? completedUserIds : [...completedUserIds, userId],
-        joinedCount: Math.max(campaign.joinedCount ?? 0, joinedUserIds.length) + (alreadyJoined ? 0 : 1),
-        completedCount: Math.max(campaign.completedCount ?? 0, completedUserIds.length) + (alreadyCompleted ? 0 : 1),
-      };
-    }));
+  const recordCampaignCompletion = async (campaignId: string) => {
+    try {
+      const result = await apiPost<{ reward: number }>(`tasks/${campaignId}/complete`);
+      await refreshData();
+      notify('success', 'تمت إضافة المكافأة', `أضيفت ${formatUsd(result.reward)} إلى رصيدك بعد التحقق من المهمة.`);
+    } catch {
+      notify('warning', 'تعذر احتساب المهمة', 'لم يؤكد الخادم اكتمال المهمة. تأكد من إتمامها ثم حاول مرة أخرى.');
+    }
   };
 
-  const submitTaskProof = (campaignId: string, image: string) => {
+  const submitTaskProof = async (campaignId: string, image: string) => {
     const userId = telegramUser?.id;
     if (taskProofs.some((proof) => proof.campaignId === campaignId && proof.userId === userId)) return;
-    setTaskProofs((current) => [{ campaignId, userId, image, status: 'قيد المراجعة', submittedAt: new Date().toISOString() }, ...current]);
-    recordCampaignCompletion(campaignId, userId);
-    notify('info', 'الإثبات قيد المراجعة', 'تم تسجيل صورة الإثبات محليًا للمراجعة اليدوية.');
+    try {
+      await apiPost(`tasks/${campaignId}/proof`, { image });
+      await refreshData();
+      notify('info', 'الإثبات قيد المراجعة', 'تم إرسال صورة الإثبات للمراجعة اليدوية.');
+    } catch {
+      notify('warning', 'تعذر إرسال الإثبات', 'لم يستلم الخادم الإثبات. حاول مرة أخرى.');
+    }
   };
 
   const openTikTokTask = (campaign: PromotionCampaign) => {
@@ -327,44 +378,58 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     setScreen('tiktok-task');
   };
 
-  const withdrawEarnings = (record: WithdrawRecord) => {
-    setViewerBalance((current) => Number(Math.max(0, current - record.amount).toFixed(4)));
-    setWithdrawHistory((current) => [record, ...current]);
-    notify('success', 'تم إرسال طلب السحب', `أضيف الطلب ${record.id} إلى سجل السحب بحالة قيد المعالجة.`);
-  };
-
-  const requestDeposit = (record: DepositRecord) => {
-    setDepositHistory((current) => [record, ...current]);
-    notify('info', 'تم إنشاء الفاتورة', `المعرّف الداخلي ${record.id} · Memo / Tag ${record.memoTag}`);
-  };
-
-  const completeDeposit = (id: string) => {
-    const record = depositHistory.find((item) => item.id === id);
-    const blockchainTxId = record?.blockchainTxId ?? createBlockchainTxId();
-    setDepositHistory((current) => current.map((item) => item.id === id ? { ...item, status: 'تم', blockchainTxId } : item));
-    if (record) {
-      setAdvertiserBalance((current) => Number((current + record.amount).toFixed(2)));
-      notify('success', 'تم تأكيد الإيداع', `تمت إضافة ${record.amount.toFixed(2)} USDT إلى رصيد المعلن.`);
+  const withdrawEarnings = async (record: WithdrawRecord) => {
+    try {
+      const saved = await apiPost<ApiHistoryRecordRow>('withdrawals', {
+        amount: record.amount,
+        method: record.method,
+        destination: record.destination,
+      });
+      await refreshData();
+      notify('success', 'تم إرسال طلب السحب', `أضيف الطلب ${saved.id} إلى سجل السحب بحالة قيد المعالجة.`);
+    } catch {
+      notify('warning', 'تعذر إرسال طلب السحب', 'لم يقبل الخادم الطلب. تحقق من الرصيد والوجهة وحاول مرة أخرى.');
     }
   };
 
+  const requestDeposit = (record: DepositRecord) => {
+    setDepositHistory((current) => [record, ...current.filter((item) => item.id !== record.id)]);
+    notify('info', 'تم إنشاء الفاتورة', `المعرّف الداخلي ${record.id} · Memo / Tag ${record.memoTag}`);
+  };
+
+  const completeDeposit = async (id: string) => {
+    await refreshData();
+    notify('info', 'تم استلام الدفع', `سيتم تحديث رصيد المعلن بعد تأكيد الإيداع ${id} من الخادم.`);
+  };
+
   const expireDeposit = (id: string) => {
-    setDepositHistory((current) => current.map((record) => record.id === id ? { ...record, status: 'تم الإلغاء' } : record));
+    setDepositHistory((current) => current.map((record) => record.id === id && record.status === 'قيد المعالجة' ? { ...record, status: 'تم الإلغاء' } : record));
     notify('warning', 'انتهت صلاحية الفاتورة', 'لم يصل تحويل مؤكد قبل انتهاء مدة الفاتورة.');
   };
 
-  const creditViewer = (video: Video) => {
+  const creditViewer = async (video: Video) => {
     if (creditedVideosRef.current.has(video.id)) return;
     creditedVideosRef.current.add(video.id);
-    setCompletedVideoIds((current) => new Set(current).add(video.id));
-    saveWatchSession(video, video.duration * 1000, 'completed');
-    setViewerBalance((current) => Number((current + calculateViewerReward(video.cpm)).toFixed(4)));
-    notify('success', 'تمت إضافة المكافأة', `أضيفت ${video.reward} إلى رصيدك بعد إكمال المدة المطلوبة.`);
+    try {
+      const result = await apiPost<{ reward: number }>(`tasks/${video.id}/complete`);
+      setCompletedVideoIds((current) => new Set(current).add(video.id));
+      saveWatchSession(video, video.duration * 1000, 'completed');
+      notify('success', 'تمت إضافة المكافأة', `أضيفت ${formatUsd(result.reward)} إلى رصيدك بعد إكمال المدة المطلوبة.`);
+      void refreshData();
+    } catch {
+      creditedVideosRef.current.delete(video.id);
+      notify('warning', 'تعذر احتساب المكافأة', 'لم يؤكد الخادم اكتمال المشاهدة. أكمل المدة كاملة ثم حاول مرة أخرى.');
+    }
   };
 
-  const creditAdReward = (amount: number, title: string, message: string) => {
-    setViewerBalance((current) => Number((current + amount).toFixed(4)));
-    notify('success', title, message);
+  const creditAdReward = async (_amount: number, title: string, message: string) => {
+    try {
+      await apiPost('ads/reward');
+      await refreshData();
+      notify('success', title, message);
+    } catch {
+      notify('warning', 'المكافأة غير متاحة', 'لم يقبل الخادم المكافأة الآن. انتظر قليلًا أو تحقق من الحد اليومي.');
+    }
   };
 
   const openWatchInBrowser = (_video: Video) => {
@@ -397,20 +462,20 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
         <div className={`min-w-0 flex-1 ${browserEarningPage ? '' : 'overflow-hidden rounded-none bg-[#f7f9fc] lg:rounded-[26px] lg:border lg:border-slate-200/80 lg:bg-[#fbfcfe]'}`}>
           {!browserEarningPage && <Header mode={mode} screen={screen} telegramUser={telegramUser} viewerBalance={viewerBalance} advertiserBalance={advertiserBalance} onMenu={() => setMobileMenu(true)} onAdd={openAdvertiserCampaignForm} />}
             {mode === 'admin' ? <AdminConsole activeScreen={screen} onPageChange={(page) => setScreen(`admin-${page}` as AppScreen)} />
-             : screen === 'add' && mode === 'creator' ? <AddVideo telegramUser={telegramUser} onBack={() => setScreen('campaigns')} onPromotionSubmit={addPromotionCampaign} onSubmit={(video) => { addVideo(video); notify('success', 'تم نشر الإعلان', 'أصبح الفيديو نشطًا ويمكن للمشاهدين اكتشافه الآن.'); }} />
+             : screen === 'add' && mode === 'creator' ? <AddVideo telegramUser={telegramUser} onBack={() => setScreen('campaigns')} onPromotionSubmit={addPromotionCampaign} onSubmit={(video) => { void addVideo(video); }} />
             : screen === 'deposit' && mode === 'creator' ? <DepositPage advertiserBalance={advertiserBalance} telegramUser={telegramUser} onDepositRequested={requestDeposit} onDepositCompleted={completeDeposit} onDepositExpired={expireDeposit} />
                 : screen === 'deposit-history' && mode === 'creator' ? <DepositHistoryPage records={depositHistory} onDeposit={() => setScreen('deposit')} />
                 : screen === 'withdraw' && mode === 'viewer' ? <WithdrawPage viewerBalance={viewerBalance} telegramUser={telegramUser} onWithdraw={withdrawEarnings} />
                   : screen === 'withdraw-history' && mode === 'viewer' ? <WithdrawHistoryPage records={withdrawHistory} onWithdraw={() => setScreen('withdraw')} />
              : screen === 'campaigns' && mode === 'creator' ? <CampaignsPage videos={videos} platformCampaigns={platformCampaigns} telegramUser={telegramUser} tab={tab} onTab={setTab} onAdd={() => setScreen('add')} onDetails={(item) => { setSelectedCampaignDetail(item); setScreen('campaign-detail'); }} />
                : screen === 'campaign-detail' && mode === 'creator' ? <CampaignDetailsPage video={selectedCampaignDetail?.video} campaign={selectedCampaignDetail?.campaign} onBack={() => setScreen('campaigns')} onSaveVideo={(video) => { saveCampaignDetailVideo(video); setSelectedCampaignDetail({ video }); }} onSaveCampaign={(campaign) => { saveCampaignDetailPlatform(campaign); setSelectedCampaignDetail({ campaign }); }} onDelete={deleteCampaignDetail} onToggle={toggleCampaignDetailStatus} />
-                      : screen === 'telegram-tasks' && mode === 'viewer' ? <PlatformTasksPage platform="telegram" campaigns={platformCampaigns} proofs={taskProofs} onTaskCompleted={recordCampaignCompletion} onNotify={notify} telegramUserId={telegramUser?.id ?? null} />
-                      : screen === 'tiktok-tasks' && mode === 'viewer' ? <PlatformTasksPage platform="tiktok" campaigns={platformCampaigns} proofs={taskProofs} onTaskCompleted={recordCampaignCompletion} onStartTask={openTikTokTask} onNotify={notify} telegramUserId={telegramUser?.id ?? null} />
+                      : screen === 'telegram-tasks' && mode === 'viewer' ? <PlatformTasksPage platform="telegram" campaigns={taskCampaigns} proofs={taskProofs} onTaskCompleted={recordCampaignCompletion} onNotify={notify} telegramUserId={telegramUser?.id ?? null} />
+                      : screen === 'tiktok-tasks' && mode === 'viewer' ? <PlatformTasksPage platform="tiktok" campaigns={taskCampaigns} proofs={taskProofs} onTaskCompleted={recordCampaignCompletion} onStartTask={openTikTokTask} onNotify={notify} telegramUserId={telegramUser?.id ?? null} />
                        : screen === 'tiktok-task' && mode === 'viewer' && selectedTikTokTask ? <TikTokTaskPage campaign={selectedTikTokTask} proof={taskProofs.find((item) => item.campaignId === selectedTikTokTask.id && item.userId === telegramUser?.id)} onSubmitProof={submitTaskProof} onBack={() => setScreen('tiktok-tasks')} />
                          : screen === 'ads' && mode === 'viewer' ? <AdsPage key={telegramUser?.id ?? 'guest'} userId={telegramUser?.id ?? null} onReward={creditAdReward} />
                  : screen === 'publish' && mode === 'viewer' ? <PublishingSystemPage telegramUser={telegramUser} />
-                : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={videos} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
-                    : <CreatorOverview telegramUser={telegramUser} platformCampaigns={platformCampaigns} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
+                : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={taskVideos} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
+                    : <CreatorOverview telegramUser={telegramUser} platformCampaigns={platformCampaigns} videos={videos} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
            {!browserEarningPage && mode !== 'admin' && <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 p-2 backdrop-blur lg:hidden">
              <div className={`mx-auto grid max-w-md ${mode === 'viewer' ? 'grid-cols-5' : 'grid-cols-4'} items-end gap-1`}>
               {mode === 'creator' ? (

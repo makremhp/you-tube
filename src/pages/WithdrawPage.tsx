@@ -3,7 +3,7 @@ import { ArrowUpLeft, CheckCircle2, Clipboard, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
 import {
-  createMemoTag, createUniqueIdentifier, formatHistoryDate, formatUsd,
+  createUniqueIdentifier, formatHistoryDate, formatUsd,
   WalletArtwork,
   type TelegramUser, type WithdrawMethod, type WithdrawRecord,
 } from '@/legacy/shared';
@@ -36,7 +36,7 @@ export function WithdrawPage({
       amount: numericAmount,
       method,
       destination: destination.trim(),
-      memoTag: createMemoTag(telegramUser?.id),
+      memoTag: '',
       createdAt: formatHistoryDate(new Date(), language),
       status: 'قيد المعالجة',
     });

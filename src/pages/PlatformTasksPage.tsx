@@ -37,16 +37,7 @@ export function PlatformTasksPage({
   const BrandIcon = isTelegram ? SiTelegram : SiTiktok;
   const brandColor = isTelegram ? '#229ED9' : '#111111';
   const activeCampaigns = campaigns.filter((campaign) => campaign.platform === platform && campaign.status === 'نشط');
-  const demoTasks: PromotionCampaign[] = isTelegram
-    ? [
-        { id: 'demo-telegram-1', platform, title: 'قناة أخبار التقنية العربية', link: 'https://t.me/telegram', targetCount: 100, price: 0.7, status: 'نشط', created: 'مثال' },
-        { id: 'demo-telegram-2', platform, title: 'مجتمع المبدعين الرقميين', link: 'https://t.me/telegram', targetCount: 100, price: 0.7, status: 'نشط', created: 'مثال' },
-      ]
-    : [
-        { id: 'demo-tiktok-1', platform, title: 'اكتشف حساب صناع المحتوى', link: 'https://www.tiktok.com/@tiktok', targetCount: 100, price: 2, status: 'نشط', created: 'مثال' },
-        { id: 'demo-tiktok-2', platform, title: 'تابع أحدث المقاطع القصيرة', link: 'https://www.tiktok.com/@tiktok', targetCount: 100, price: 2, status: 'نشط', created: 'مثال' },
-      ];
-  const tasks = activeCampaigns.length ? activeCampaigns : demoTasks;
+  const tasks = activeCampaigns;
   const [joiningId, setJoiningId] = useState('');
   const [returnedIds, setReturnedIds] = useState<Record<string, boolean>>({});
   const [verification, setVerification] = useState<Record<string, TaskVerification>>({});
@@ -135,7 +126,7 @@ export function PlatformTasksPage({
           <p className="mt-1 text-xs leading-5 text-slate-500">{t(isTelegram ? 'انضم إلى القناة، ثم تحقّق تلقائيًا من اشتراكك.' : 'تابع الحساب وارفع لقطة شاشة واضحة لإثبات المتابعة.')}</p>
         </div>
       </div>
-      {!activeCampaigns.length && <div className="mb-5 flex items-start gap-2 rounded-xl border border-blue-100 bg-[#f4f8ff] px-4 py-3 text-[11px] leading-5 text-slate-600"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#1557ee]" /><span>{t('هذه أمثلة للمعاينة فقط. ستظهر الحملات الحقيقية هنا بعد نشرها.')}</span></div>}
+      {!activeCampaigns.length && <div className="mb-5 flex items-start gap-2 rounded-xl border border-blue-100 bg-[#f4f8ff] px-4 py-3 text-[11px] leading-5 text-slate-600"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#1557ee]" /><span>{t('لا توجد مهام متاحة حاليًا. ستظهر المهام الحقيقية هنا فور إضافتها.')}</span></div>}
       {isTelegram && campaigns.some((campaign) => campaign.platform === 'telegram' && campaign.status !== 'نشط') && <div className="mb-5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] leading-5 text-amber-900"><Clock3 className="mt-0.5 h-4 w-4 shrink-0" /><span>{t('هناك حملة تنتظر تأكيد صلاحيات البوت قبل ظهورها للمهام.')}</span></div>}
       <div className="grid gap-4 lg:grid-cols-2">
         {tasks.map((task) => {

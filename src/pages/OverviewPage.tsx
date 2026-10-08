@@ -4,28 +4,37 @@ import { useLanguage } from '@/i18n';
 import { SiTelegram, SiTiktok, SiYoutube } from 'react-icons/si';
 import {
   getGreetingName, StatCard,
-  type PromotionCampaign, type TelegramUser,
+  type PromotionCampaign, type TelegramUser, type Video,
 } from '@/legacy/shared';
 
 export function CreatorOverview({
   telegramUser,
   platformCampaigns,
+  videos,
   onAdd,
   onDeposit,
 }: {
   telegramUser: TelegramUser | null;
   platformCampaigns: PromotionCampaign[];
+  videos: Video[];
   onAdd: () => void;
   onDeposit: () => void;
 }) {
   const { dir, t, isArabic } = useLanguage();
   const telegramGoal = platformCampaigns.filter((campaign) => campaign.platform === 'telegram').reduce((total, campaign) => total + campaign.targetCount, 0);
   const tiktokGoal = platformCampaigns.filter((campaign) => campaign.platform === 'tiktok').reduce((total, campaign) => total + campaign.targetCount, 0);
+  const videoViews = videos.reduce((total, video) => total + (Number(video.views.replace(/,/g, '')) || 0), 0);
+  const youtubeSpend = videos.reduce((total, video) => total + (Number(video.views.replace(/,/g, '')) || 0) * video.cpm / 1000, 0);
+  const joinedTotal = platformCampaigns.reduce((total, campaign) => total + (campaign.joinedCount ?? 0), 0);
+  const completedTotal = platformCampaigns.reduce((total, campaign) => total + (campaign.completedCount ?? 0), 0);
+  const completionRate = joinedTotal > 0 ? (completedTotal / joinedTotal) * 100 : 0;
+  const todayLabel = new Intl.DateTimeFormat(isArabic ? 'ar' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
+  const monthlyBars = Array.from({ length: 12 }, () => 0);
   return (
     <main className="mx-auto w-full max-w-[1370px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12" dir={dir}>
       <section className="animate-rise flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
-          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#1557ee]"><span className="h-1.5 w-1.5 rounded-full bg-[#23bdc9]" /> {t('الأربعاء، ٢٣ سبتمبر ٢٠٢٦')}</div>
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[#1557ee]"><span className="h-1.5 w-1.5 rounded-full bg-[#23bdc9]" /> {todayLabel}</div>
           <h1 data-testid="text-greeting-overview" className="creator-greeting flex items-baseline gap-2 whitespace-nowrap font-display text-[25px] font-bold leading-tight tracking-[-.04em] text-[#12234b] sm:text-[29px] md:text-[36px]">
             <span>{t('صباح الخير')}{' '}</span>
             <span className="text-[#1557ee]">{getGreetingName(telegramUser)}..</span>
@@ -38,10 +47,10 @@ export function CreatorOverview({
       </section>
 
       <section className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
-        <div className="animate-rise"><StatCard icon={SiYoutube} iconClassName="text-[#FF0000]" label={t('إجمالي المشاهدات')} value="27,584" change="12.8%" tone="blue" /></div>
-        <div className="animate-rise delay-1"><StatCard icon={DollarSign} label={t('إجمالي الإنفاق')} value="$124.80" change="8.4%" tone="cyan" /></div>
-        <div className="animate-rise delay-2"><StatCard icon={Users} label={t('مشاهدون جدد')} value="1,892" change="18.2%" tone="navy" /></div>
-        <div className="animate-rise delay-3"><StatCard icon={TrendingUp} label={t('متوسط الإكمال')} value="76.4%" change="4.6%" tone="sand" /></div>
+        <div className="animate-rise"><StatCard icon={SiYoutube} iconClassName="text-[#FF0000]" label={t('إجمالي المشاهدات')} value={videoViews.toLocaleString(isArabic ? 'ar' : 'en-US')} tone="blue" /></div>
+        <div className="animate-rise delay-1"><StatCard icon={DollarSign} label={t('إجمالي الإنفاق')} value={`$${youtubeSpend.toFixed(2)}`} tone="cyan" /></div>
+        <div className="animate-rise delay-2"><StatCard icon={Users} label={t('مشاهدون جدد')} value={joinedTotal.toLocaleString(isArabic ? 'ar' : 'en-US')} tone="navy" /></div>
+        <div className="animate-rise delay-3"><StatCard icon={TrendingUp} label={t('متوسط الإكمال')} value={`${completionRate.toFixed(1)}%`} tone="sand" /></div>
       </section>
       <section className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
         <div className="animate-rise"><StatCard icon={SiTelegram} iconClassName="text-[#229ED9]" label="هدف مشتركي Telegram" value={telegramGoal.toLocaleString(isArabic ? 'ar' : 'en-US')} change={`${platformCampaigns.filter((campaign) => campaign.platform === 'telegram').length} حملات`} tone="cyan" /></div>
@@ -52,11 +61,11 @@ export function CreatorOverview({
         <div className="rounded-[22px] bg-[#0e2452] p-6 text-white shadow-[0_15px_34px_rgba(14,36,82,.16)]">
           <div className="flex items-center justify-between"><span className="text-xs font-bold text-blue-100">{t('أداء هذا الشهر')}</span><BarChart3 className="h-5 w-5 text-cyan-300" /></div>
           <div className="mt-6 flex items-end justify-between">
-            <div><div className="text-3xl font-bold">9,428</div><div className="mt-1 text-[11px] text-blue-100/60">{t('إكمالات الفيديو')}</div></div>
-            <div className="text-left"><div className="text-xl font-bold text-cyan-300">+14.8%</div><div className="mt-1 text-[10px] text-blue-100/60">{t('مقارنة بالأسبوع الماضي')}</div></div>
+            <div><div className="text-3xl font-bold">{completedTotal.toLocaleString(isArabic ? 'ar' : 'en-US')}</div><div className="mt-1 text-[11px] text-blue-100/60">{t('إكمالات الفيديو')}</div></div>
+            <div className="text-left"><div className="text-xl font-bold text-cyan-300">—</div><div className="mt-1 text-[10px] text-blue-100/60">{t('مقارنة بالأسبوع الماضي')}</div></div>
           </div>
           <div className="mt-7 flex h-16 items-end gap-2 border-b border-white/10">
-            {[32, 46, 40, 64, 55, 74, 67, 86, 77, 96, 87, 100].map((height, i) => <div key={i} className="flex h-full flex-1 items-end"><div className={`w-full rounded-t-sm ${i === 11 ? 'bg-cyan-300' : 'bg-blue-300/30'}`} style={{ height: `${height}%` }} /></div>)}
+            {monthlyBars.map((height, i) => <div key={i} className="flex h-full flex-1 items-end"><div className={`w-full rounded-t-sm ${i === 11 ? 'bg-cyan-300' : 'bg-blue-300/30'}`} style={{ height: `${Math.max(height, 4)}%` }} /></div>)}
           </div>
         </div>
       </section>

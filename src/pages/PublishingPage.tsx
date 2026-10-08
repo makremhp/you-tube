@@ -20,8 +20,8 @@ export function PublishingSystemPage({ telegramUser }: { telegramUser: TelegramU
   const promotionalPost = isArabic
     ? `بصراحة تجربة VidReward عجبتني 😄 بدأت أشاهد فيديوهات قصيرة في وقت فراغي، وكل مشاهدة مكتملة تضيف لي مكافأة على رصيدي 💸\n\nوالأجمل أنني أربح 20% من أرباح أي شخص يدخل عن طريق رابط الإحالة الخاص بي. إذا تحب تجربها وتربح من وقتك، ادخل من هنا 👇\n${promotionalLink}`
     : `Honestly, I have been enjoying VidReward 😄 I started watching short videos in my free time, and every completed view adds a reward to my balance 💸\n\nEven better, I earn 20% of the rewards of anyone who joins through my referral link. If you want to try it and earn from your time, join here 👇\n${promotionalLink}`;
-  const invitedUsers = 24;
-  const referralEarnings = '$1.84';
+  const invitedUsers = 0;
+  const referralEarnings = '$0.00';
   const statusConfig: Record<PublishStatus, {
     title: string;
     description: string;

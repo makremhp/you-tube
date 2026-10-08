@@ -6,11 +6,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
 import {
-  CompactInvoiceValue, createMemoTag, createUniqueIdentifier, formatHistoryDate,
+  CompactInvoiceValue, formatHistoryDate,
   formatRemaining, invoiceLifetime, methodLabel, PaymentMethodBadge, StatusBadge,
-  WalletArtwork, depositAddress,
+  WalletArtwork,
   type DepositMethod, type DepositRecord, type TelegramUser,
 } from '@/legacy/shared';
+import { apiPost, type ApiHistoryRecordRow } from '@/lib/api';
 
 export function DepositPage({
   advertiserBalance,
@@ -49,9 +50,9 @@ export function DepositPage({
     setIsCreatingInvoice(true);
     setError('');
     const createdAt = Date.now();
-    let destination = depositAddress;
+    let destination = '';
     let stars: number | undefined;
-    let paymentPayload = createMemoTag(telegramUser?.id);
+    let paymentPayload = '';
     if (method === 'stars') {
       try {
         const response = await fetch(`${import.meta.env.BASE_URL}api/telegram/stars/invoice`, {
@@ -65,14 +66,29 @@ export function DepositPage({
         }
         destination = data.invoiceUrl;
         stars = data.stars;
-        paymentPayload = data.payload || paymentPayload;
+        paymentPayload = data.payload || '';
       } catch (requestError) {
         setError(requestError instanceof Error ? requestError.message : t('تعذر إنشاء فاتورة Stars.'));
         setIsCreatingInvoice(false);
         return;
       }
     }
-    const transactionId = createUniqueIdentifier('DEP');
+    let transactionId = '';
+    try {
+      const saved = await apiPost<ApiHistoryRecordRow>('deposits', {
+        amount: numericAmount,
+        method,
+        destination,
+        memoTag: paymentPayload,
+      });
+      transactionId = saved.id;
+      destination = saved.destination;
+      paymentPayload = saved.memoTag;
+    } catch {
+      setError(t('تعذر إنشاء الفاتورة. حاول مرة أخرى.'));
+      setIsCreatingInvoice(false);
+      return;
+    }
     const nextInvoice = {
       id: transactionId,
       amount: numericAmount,

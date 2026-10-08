@@ -1,43 +1,15 @@
 import { Children, cloneElement, isValidElement, useEffect, useState, type ReactElement } from 'react';
 import { Activity, CircleDollarSign, Copy, Eye, Megaphone, Search, ShieldCheck, Trash2, Users, Wallet, X, Plus, Code2, RefreshCw, Pencil, Check, Monitor, Layers } from 'lucide-react';
 import { saveLocalPricing, useLocalPricing, type LocalPricing, type PricingPlatform } from '@/legacy/pricing';
+import { apiGet, apiPatch } from '@/lib/api';
 import { buildAdsteraDocument, deleteAdsteraAd, useAdsteraAds, type AdsteraAd, type AdsteraFormat } from '@/lib/adsteraAds';
 
 type User = { id: number; name: string; username: string; avatar: string; advertiserBalance: number; earnedBalance: number; status: 'نشط' | 'محظور'; bannedBySystem?: boolean; joinedAt: string; lastLogin: string; lastActive: string; invitedBy: string };
 type Row = { id: string; userId?: number; amount?: number; createdAt?: string; status?: string; [key: string]: any };
 type State = { users: User[]; deposits: Row[]; withdrawals: Row[]; campaigns: Row[]; proofs: Row[]; ads: Row[]; suspicious: Row[]; settings: Record<string, any>; reports: Row[] };
-const KEY = 'vidreward.admin.preview.v1';
-const TASK_REWARD_MIGRATION_KEY = 'vidreward.admin.migration.task-rewards.v1';
-const proofMock = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500"><rect width="100%" height="100%" fill="#e9eef8"/><rect x="120" y="72" width="560" height="356" rx="28" fill="#fff"/><rect x="155" y="112" width="84" height="84" rx="24" fill="#edf3ff"/><path d="M179 154h36M197 136v36" stroke="#1557ee" stroke-width="8" stroke-linecap="round"/><rect x="268" y="118" width="340" height="16" rx="8" fill="#d8e1f2"/><rect x="268" y="150" width="240" height="12" rx="6" fill="#e9eef8"/><rect x="155" y="238" width="450" height="20" rx="10" fill="#e9eef8"/><rect x="155" y="276" width="390" height="20" rx="10" fill="#e9eef8"/><rect x="155" y="344" width="156" height="42" rx="12" fill="#1557ee"/><text x="333" y="371" font-family="sans-serif" font-size="17" fill="#52627e">TASK PROOF IMAGE</text></svg>')}`;
-const seed: State = {
- users: [
-   { id: 610241, name: 'ليان السالمي', username: 'layan_s', avatar: 'لس', advertiserBalance: 18.5, earnedBalance: 2.38, status: 'نشط', joinedAt: '2025-02-11', lastLogin: '2025-03-08 09:42', lastActive: 'قبل 4 دقائق', invitedBy: '—' },
-   { id: 610258, name: 'عمر الراشد', username: 'omar_r', avatar: 'عر', advertiserBalance: 0, earnedBalance: 0.74, status: 'نشط', joinedAt: '2025-02-18', lastLogin: '2025-03-08 08:16', lastActive: 'قبل 22 دقيقة', invitedBy: '610241' },
-   { id: 610309, name: 'نور حمدان', username: 'nour_h', avatar: 'نح', advertiserBalance: 43, earnedBalance: 5.12, status: 'نشط', joinedAt: '2025-02-26', lastLogin: '2025-03-07 19:30', lastActive: 'أمس', invitedBy: '610258' },
-   { id: 610411, name: 'سامي فؤاد', username: 'sami_f', avatar: 'سف', advertiserBalance: 2.2, earnedBalance: 0.16, status: 'محظور', bannedBySystem: true, joinedAt: '2025-03-01', lastLogin: '2025-03-06 12:01', lastActive: 'منذ يومين', invitedBy: '—' },
- ],
- deposits: [
-  { id: 'DEP-4821', userId: 610241, method: 'Stars', amount: 12, createdAt: '2025-03-08 09:14', memoTag: 'VR-610241-A', txId: 'TG-ST-89021', status: 'ناجح', credited: true, balanceBefore: 6.5, balanceAfter: 18.5 },
-  { id: 'DEP-4818', userId: 610309, method: 'USDT', amount: 31, createdAt: '2025-03-07 17:05', memoTag: 'VR-610309-B', wallet: '0x81…b029', txId: '0xa21f…', status: 'فاشل', reason: 'لم يصل التحويل إلى الشبكة المحددة', credited: false, balanceBefore: 43, balanceAfter: 43 },
- ],
- withdrawals: [
-  { id: 'WDR-2064', userId: 610258, amount: 1.24, method: 'Binance', destination: '684291037', createdAt: '2025-03-08 08:50', status: 'قيد المراجعة' },
-  { id: 'WDR-2059', userId: 610309, amount: 3.5, method: 'Web3', destination: '0x901c...7d4e', createdAt: '2025-03-07 11:34', status: 'قيد المراجعة' },
- ],
- campaigns: [
-  { id: 'CMP-094', userId: 610241, title: 'أدوات العمل عن بعد', platform: 'YouTube', videoUrl: 'https://www.youtube.com/embed/aqz-KE-bpKQ', duration: 40, budget: 32, views: 840, status: 'بانتظار المراجعة' },
-  { id: 'CMP-091', userId: 610309, title: 'مراجعة تطبيقات السفر', platform: 'TikTok', videoUrl: 'https://www.youtube.com/embed/ScMzIvxBSi4', duration: 20, budget: 18, views: 1260, status: 'نشطة' },
-  { id: 'CMP-088', userId: 610258, title: 'دليل التطبيقات اليومية', platform: 'YouTube', videoUrl: 'https://www.youtube.com/embed/aqz-KE-bpKQ', duration: 40, budget: 7, views: 350, status: 'أوقفتها الميزانية', spent: 7 },
- ],
- proofs: [
-  { id: 'PRF-318', userId: 610258, taskId: 'TASK-TG-41', taskType: 'اشتراك قناة', image: proofMock, reward: 0.003, status: 'قيد المراجعة' },
-  { id: 'PRF-312', userId: 610411, taskId: 'TASK-TT-09', taskType: 'متابعة TikTok', image: proofMock, reward: 0.01, status: 'قيد المراجعة' },
- ],
- ads: [],
- suspicious: [{ id: 'SIG-118', userId: 610411, attempt: 'رصد أدوات المطور + مشاهدة أسرع من المدة المطلوبة', createdAt: '2025-03-08 08:20', status: 'مفتوح' }, { id: 'SIG-112', userId: 610258, attempt: 'عدة حسابات على الجهاز نفسه', createdAt: '2025-03-07 15:10', status: 'مفتوح' }, { id: 'SIG-107', userId: 610309, attempt: 'تلاعب في DOM', createdAt: '2025-03-06 10:22', status: 'تمت المراجعة' }],
-  settings: { binanceWithdrawMin: 1, web3WithdrawMin: 2, starsDepositMin: 1, web3DepositMin: 5, userShare: 20, platformShare: 10, durationMin: 10, durationMax: 80, cpmMin: 1.5, cpmMax: 4, telegramCpm: 2.2, tiktokCpm: 2.8, taskReward: 0.02, telegramTaskReward: 0.003, tiktokTaskReward: 0.01, web3Address: '0x0000...9a31', maintenance: false },
- reports: [],
-};
+const SETTINGS_KEY = 'vidreward.admin.settings.v1';
+const defaultSettings: Record<string, any> = { binanceWithdrawMin: 1, web3WithdrawMin: 2, starsDepositMin: 1, web3DepositMin: 5, userShare: 20, platformShare: 10, durationMin: 10, durationMax: 80, cpmMin: 1.5, cpmMax: 4, telegramCpm: 2.2, tiktokCpm: 2.8, taskReward: 0.02, telegramTaskReward: 0.003, tiktokTaskReward: 0.01, web3Address: '', maintenance: false };
+const emptyState: State = { users: [], deposits: [], withdrawals: [], campaigns: [], proofs: [], ads: [], suspicious: [], settings: defaultSettings, reports: [] };
 const labels: Record<string, string> = { overview:'نظرة عامة', users:'مستخدمو Telegram', deposits:'الإيداعات', 'deposit-detail':'تفاصيل المعاملة', withdrawals:'السحوبات', campaigns:'الحملات', proofs:'إثباتات المهام', ads:'مخزون Adstera', settings:'الإعدادات', notifications:'الإشعارات', suspicious:'مستخدمون مشبوهون' };
 const cx = (...classes: Array<string | undefined>) => classes.filter(Boolean).join(' ');
 const cell = 'px-4 py-1.5 text-right align-middle';
@@ -46,40 +18,10 @@ const primary = `${btn} bg-[#1557ee] text-white`;
 const soft = `${btn} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50`;
 function getState(): State {
  try {
-  const s = localStorage.getItem(KEY);
-  const rewardsMigrated = localStorage.getItem(TASK_REWARD_MIGRATION_KEY) === 'done';
-  if (!s) {
-   if (!rewardsMigrated) localStorage.setItem(TASK_REWARD_MIGRATION_KEY, 'done');
-   return seed;
-  }
-  const stored = JSON.parse(s) as Partial<State>;
-  const campaigns = stored.campaigns ?? seed.campaigns;
-  const deposits = (stored.deposits ?? seed.deposits).map(row => {
-   const baseline = seed.deposits.find(item => item.id === row.id);
-   return { ...baseline, ...row, credited: row.credited ?? baseline?.credited ?? row.status === 'ناجح', balanceBefore: row.balanceBefore ?? baseline?.balanceBefore, balanceAfter: row.balanceAfter ?? baseline?.balanceAfter };
-  });
-  const settings = { ...seed.settings, ...stored.settings };
-  const proofs = stored.proofs ?? seed.proofs;
-  if (!rewardsMigrated) {
-   // Migrate only the old defaults; later admin-configured values stay intact.
-   if (Number(settings.telegramTaskReward) === 0.02) settings.telegramTaskReward = 0.003;
-   const migratedProofs = proofs.map(row =>
-    row.id === 'PRF-312' && Number(row.reward) === 0.003 ? { ...row, reward: 0.01 } : row,
-   );
-   localStorage.setItem(TASK_REWARD_MIGRATION_KEY, 'done');
-   return { ...seed, ...stored, proofs: migratedProofs, ads: [], deposits, campaigns: [...campaigns, ...seed.campaigns.filter(c => !campaigns.some(existing => existing.id === c.id))], settings };
-  }
-  return { ...seed, ...stored, proofs, ads: [], deposits, campaigns: [...campaigns, ...seed.campaigns.filter(c => !campaigns.some(existing => existing.id === c.id))], settings };
+  const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') as Partial<State>;
+  return { ...emptyState, settings: { ...defaultSettings, ...stored.settings }, reports: Array.isArray(stored.reports) ? stored.reports : [] };
  } catch {
-  return seed;
- }
-}
-function readLocalRows(key: string): Row[] {
- try {
-  const rows = JSON.parse(localStorage.getItem(key) ?? '[]') as unknown;
-  return Array.isArray(rows) ? rows.filter((row): row is Row => Boolean(row) && typeof row === 'object') : [];
- } catch {
-  return [];
+  return emptyState;
  }
 }
 function platformEarnings(data: State) {
@@ -88,13 +30,13 @@ function platformEarnings(data: State) {
   .reduce((sum, campaign) => sum + Math.max(0, Number(campaign.spent ?? campaign.budget ?? campaign.price ?? 0) || 0), 0);
 
  const taskCampaigns = new Map<string, Row>();
- [...data.campaigns, ...readLocalRows('vidreward.promotion-campaigns.v1')].forEach(campaign => {
+ data.campaigns.forEach(campaign => {
   const platform = String(campaign.platform ?? '').toLowerCase();
   if ((platform === 'tiktok' || platform === 'telegram') && campaign.id !== undefined) {
    taskCampaigns.set(String(campaign.id), campaign);
   }
  });
- const proofs = [...data.proofs, ...readLocalRows('vidreward.task-proofs.v1')];
+ const proofs = data.proofs;
  const taskNet = { tiktok: 0, telegram: 0 };
 
  taskCampaigns.forEach(campaign => {
@@ -153,7 +95,7 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
    setPageNo(1);
   }
  }, [activeScreen]);
- useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch {} }, [data]);
+ useEffect(() => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ settings: data.settings, reports: data.reports })); } catch {} }, [data.settings, data.reports]);
  const navigateToPage = (nextPage: string) => {
   setPage(nextPage);
   setQuery('');
@@ -161,7 +103,29 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
   setPageNo(1);
   onPageChange(nextPage);
  };
- const updateRows = (key: keyof State, id: string|number, patch: Record<string, any>) => setData(d => ({...d, [key]: (d[key] as any[]).map(x => x.id===id ? {...x,...patch}:x)}));
+ const loadRemote = async () => {
+  try {
+   const remote = await apiGet<Pick<State, 'users' | 'deposits' | 'withdrawals' | 'campaigns' | 'proofs' | 'suspicious'>>('admin/state');
+   setData(d => ({
+    ...d,
+    users: (remote.users ?? []).map(user => ({ ...user, avatar: String(user.name ?? '').trim().slice(0, 2) || '—' })),
+    deposits: remote.deposits ?? [],
+    withdrawals: remote.withdrawals ?? [],
+    campaigns: remote.campaigns ?? [],
+    proofs: remote.proofs ?? [],
+    suspicious: remote.suspicious ?? [],
+   }));
+  } catch {
+   setData(d => ({ ...d, users: [], deposits: [], withdrawals: [], campaigns: [], proofs: [], suspicious: [] }));
+  }
+ };
+ useEffect(() => { void loadRemote(); }, []);
+ const updateRows = (key: keyof State, id: string|number, patch: Record<string, any>) => {
+  setData(d => ({...d, [key]: (d[key] as any[]).map(x => x.id===id ? {...x,...patch}:x)}));
+  if (key === 'users' || key === 'deposits' || key === 'withdrawals' || key === 'proofs' || key === 'campaigns' || key === 'suspicious') {
+   apiPatch(`admin/${key}/${id}`, patch).then(loadRemote).catch(() => { announce('تعذر حفظ الإجراء على الخادم'); void loadRemote(); });
+  }
+ };
  const userBy = (id:number|undefined) => data.users.find(u=>u.id===id);
  const announce = (s:string) => { setToast(s); window.setTimeout(()=>setToast(''),2300); };
  const title = labels[page] || 'نظرة عامة';
@@ -206,12 +170,12 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
     const user=userBy(deposit?.userId);
     if(!deposit) return <div className="space-y-4">{panel(<><p className="font-bold">تعذر العثور على المعاملة.</p><button className={`${soft} mt-3`} onClick={()=>navigateToPage('deposits')}>العودة إلى الإيداعات</button></>)}</div>;
     const balanceBefore=Number(deposit.balanceBefore ?? (deposit.credited ? (user?.advertiserBalance ?? 0)-Number(deposit.amount??0) : user?.advertiserBalance ?? 0));
-    const markFailed=()=>{setData(current=>({...current,deposits:current.deposits.map(row=>row.id===deposit.id?{...row,status:'فاشل',credited:false,reason:row.reason||'تم وضع علامة فاشل يدويًا'}:row),users:deposit.credited?current.users.map(item=>item.id===deposit.userId?{...item,advertiserBalance:Number(Math.max(0,item.advertiserBalance-Number(deposit.amount??0)).toFixed(2))}:item):current.users}));announce('تم وضع علامة فاشل وعكس الرصيد المضاف');};
+    const markFailed=()=>{updateRows('deposits',deposit.id,{status:'فاشل',reason:deposit.reason||'تم وضع علامة فاشل يدويًا'});announce('تم وضع علامة فاشل وعكس الرصيد المضاف');};
     return <div className="space-y-4">{panel(<div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold text-slate-400">معاملة إيداع</p><h2 className="mt-1 font-mono text-xl font-extrabold">{deposit.id}</h2></div><button className={soft} onClick={()=>navigateToPage('deposits')}>العودة إلى الإيداعات</button></div>)}{panel(<div className="grid gap-4 sm:grid-cols-2"><div><div className="text-xs text-slate-400">المستخدم</div><div className="mt-1 font-bold">{user?.name ?? 'مستخدم غير معروف'} · {deposit.userId}</div></div><div><div className="text-xs text-slate-400">الطريقة والمبلغ</div><div className="mt-1 font-bold">{deposit.method} · {deposit.amount} {deposit.method==='Stars'?'XTR':'USDT'}</div></div><div><div className="text-xs text-slate-400">Memo / Tag</div><div className="mt-1 font-mono text-sm">{deposit.memoTag||'—'}</div></div><div><div className="text-xs text-slate-400">معرّف التحويل</div><div className="mt-1 font-mono text-sm">{deposit.txId||'—'}</div></div><div><div className="text-xs text-slate-400">المحفظة</div><div className="mt-1 font-mono text-sm" dir="ltr">{deposit.wallet||'—'}</div></div><div><div className="text-xs text-slate-400">التاريخ</div><div className="mt-1 text-sm">{deposit.createdAt||'—'}</div></div><div><div className="text-xs text-slate-400">الرصيد قبل الإيداع</div><div className="mt-1 font-mono text-lg font-bold">{balanceBefore.toFixed(2)} USDT</div></div><div><div className="text-xs text-slate-400">الرصيد الحالي</div><div className="mt-1 font-mono text-lg font-bold">{Number(user?.advertiserBalance??0).toFixed(2)} USDT</div></div><div><div className="text-xs text-slate-400">الحالة</div><div className="mt-1"><Badge>{deposit.status}</Badge></div></div>{deposit.reason&&<div className="sm:col-span-2 text-sm text-rose-600">{deposit.reason}</div>}</div>)}{panel(<div className="flex flex-wrap items-center justify-between gap-3"><div className="text-xs leading-5 text-slate-500">عكس الرصيد يحدث فقط إذا كان هذا الإيداع قد أضافه فعلًا.</div><div className="flex gap-2"><button className={soft} onClick={()=>{navigateToPage('users');setDialog({kind:'user',id:deposit.userId})}} disabled={!user}>فتح تفاصيل المستخدم</button>{deposit.status!=='فاشل'&&<button className={`${btn} bg-rose-50 text-rose-700`} onClick={markFailed}>وضع علامة فاشل</button>}</div></div>)}</div>;
    }
    if(page==='withdrawals') return <div className="space-y-4">{panel(<div className="flex gap-3">{search}{statusSelect(['قيد المراجعة','معتمد','مرفوض'])}</div>)}{table(['الطلب','المستخدم','القناة','المبلغ','الوجهة','التاريخ','الإجراء'],rowData('withdrawals').map(r=><tr key={r.id} className="border-b border-slate-50"><td className={cell}><b>{r.id}</b></td><td className={cell}>{userBy(r.userId)?.name}</td><td className={cell}>{r.method}</td><td className={cell}><button className="inline-flex items-center gap-1 font-mono" aria-label="نسخ المبلغ" onClick={()=>{navigator.clipboard?.writeText(`${r.amount} USDT`);announce('تم نسخ المبلغ')}}>{r.amount} USDT<Copy size={13}/></button></td><td className={cell}><div className="flex items-center gap-1 font-mono"><span dir="ltr">{r.destination}</span><button aria-label="نسخ الوجهة" onClick={()=>{navigator.clipboard?.writeText(r.destination);announce('تم النسخ')}}><Copy size={14}/></button></div></td><td className={cell}>{r.createdAt}</td><td className={cell}>{r.status==='قيد المراجعة'?<div className="flex gap-1">{action('اعتماد',()=>{updateRows('withdrawals',r.id,{status:'معتمد'});announce('تم اعتماد الطلب')})}{action('رفض',()=>confirm('رفض طلب السحب؟',()=>{updateRows('withdrawals',r.id,{status:'مرفوض'});setDialog(null)}),true)}</div>:<Badge>{r.status}</Badge>}</td></tr>))}</div>;
   if(page==='campaigns') return <div className="space-y-4">{panel(<div className="flex gap-3">{search}{statusSelect(['بانتظار المراجعة','نشطة','موقوفة','مرفوضة','أوقفتها الميزانية'])}</div>)}{table(['الحملة','المستخدم','المنصة','المدة','الميزانية','المشاهدات','الحالة','مراجعة'],rowData('campaigns').map(r=><tr key={r.id} className="border-b border-slate-50"><td className={cell}><b>{r.title}</b><div className="text-xs text-slate-400">{r.id}</div></td><td className={cell}>{userBy(r.userId)?.name}</td><td className={cell}>{r.platform}</td><td className={cell}>{r.duration} ث</td><td className={cell}>{r.budget} USDT</td><td className={cell}>{r.views.toLocaleString()}</td><td className={cell}><Badge>{r.status}</Badge></td><td className={cell}><button className={soft} onClick={()=>setDialog({kind:'campaign',id:r.id})}>فيديو وإجراءات</button></td></tr>))}</div>;
-   if(page==='proofs') return <div className="space-y-4">{panel(<div className="flex gap-3">{search}{statusSelect(['قيد المراجعة','معتمد','مرفوض'])}</div>)}{table(['الإثبات','المستخدم','المهمة','المكافأة','الحالة','المرفق','الإجراء'],rowData('proofs').map(r=><tr key={r.id} className="border-b border-slate-50"><td className={cell}>{r.id}</td><td className={cell}>{userBy(r.userId)?.name}</td><td className={cell}>{r.taskId}<div className="text-xs text-slate-400">{r.taskType}</div></td><td className={cell}>{r.reward} USDT</td><td className={cell}><Badge>{r.status}</Badge></td><td className={cell}><button className={soft} onClick={()=>setDialog({kind:'proof',id:r.id})}>عرض الصورة</button></td><td className={cell}>{r.status==='قيد المراجعة'?<div className="flex gap-1">{action('اعتماد المكافأة',()=>{setData(d=>{const p=d.proofs.find(x=>x.id===r.id);if(!p||p.status!=='قيد المراجعة')return d;return {...d,proofs:d.proofs.map(x=>x.id===r.id?{...x,status:'معتمد'}:x),users:d.users.map(u=>u.id===p.userId?{...u,earnedBalance:Number((u.earnedBalance+p.reward).toFixed(6))}:u)}});announce('تم اعتماد الإثبات وإضافة المكافأة')})}{action('رفض',()=>setDialog({kind:'reject-proof',id:r.id}),true)}</div>:r.rejectionReason||<Badge>{r.status}</Badge>}</td></tr>))}</div>;
+   if(page==='proofs') return <div className="space-y-4">{panel(<div className="flex gap-3">{search}{statusSelect(['قيد المراجعة','معتمد','مرفوض'])}</div>)}{table(['الإثبات','المستخدم','المهمة','المكافأة','الحالة','المرفق','الإجراء'],rowData('proofs').map(r=><tr key={r.id} className="border-b border-slate-50"><td className={cell}>{r.id}</td><td className={cell}>{userBy(r.userId)?.name}</td><td className={cell}>{r.taskId}<div className="text-xs text-slate-400">{r.taskType}</div></td><td className={cell}>{r.reward} USDT</td><td className={cell}><Badge>{r.status}</Badge></td><td className={cell}><button className={soft} onClick={()=>setDialog({kind:'proof',id:r.id})}>عرض الصورة</button></td><td className={cell}>{r.status==='قيد المراجعة'?<div className="flex gap-1">{action('اعتماد المكافأة',()=>{updateRows('proofs',r.id,{status:'معتمد'});announce('تم اعتماد الإثبات وإضافة المكافأة')})}{action('رفض',()=>setDialog({kind:'reject-proof',id:r.id}),true)}</div>:r.rejectionReason||<Badge>{r.status}</Badge>}</td></tr>))}</div>;
    if(page==='ads') {
       const filteredAds=adstera.ads.filter(ad=>
         (adStatus==='all'||(adStatus==='enabled'?ad.enabled:!ad.enabled))
@@ -347,7 +311,7 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
    }
    if(page==='settings') return <SettingsPanel values={data.settings} pricing={pricing} onSave={v=>{setData(d=>({...d,settings:v}));announce('تم حفظ الإعدادات')}} onPricingSave={nextPricing=>{saveLocalPricing(nextPricing);announce('تم تحديث الأسعار')}}/>;
    if(page==='notifications') return <NotificationPanel reports={data.reports} onSend={r=>{setData(d=>({...d,reports:[{...r,id:`NTF-${Date.now()}`,createdAt:new Date().toLocaleString('ar'),status:'مسودة'},...d.reports]}));announce('تم حفظ التقرير')}}/>;
-  return <div className="space-y-4">{panel(<div className="flex gap-3">{search}{statusSelect(['مفتوح','تمت المراجعة'])}</div>)}{table(['الإشارة','المستخدم','نوع الإشارة','الوقت','الحالة','الإجراء'],rowData('suspicious').map(r=><tr key={r.id} className="border-b border-slate-50"><td className={cell}>{r.id}</td><td className={cell}>{userBy(r.userId)?.name} · {r.userId}</td><td className={cell}>{r.attempt}</td><td className={cell}>{r.createdAt}</td><td className={cell}><Badge>{r.status}</Badge></td><td className={cell}>{action('حظر المستخدم',()=>confirm('حظر هذا المستخدم؟',()=>{setData(d=>({...d,users:d.users.map(u=>u.id===r.userId?{...u,status:'محظور'}:u),suspicious:d.suspicious.map(x=>x.id===r.id?{...x,status:'تمت المراجعة'}:x)}));setDialog(null)}),true)}</td></tr>))}</div>;
+  return <div className="space-y-4">{panel(<div className="flex gap-3">{search}{statusSelect(['مفتوح','تمت المراجعة'])}</div>)}{table(['الإشارة','المستخدم','نوع الإشارة','الوقت','الحالة','الإجراء'],rowData('suspicious').map(r=><tr key={r.id} className="border-b border-slate-50"><td className={cell}>{r.id}</td><td className={cell}>{userBy(r.userId)?.name} · {r.userId}</td><td className={cell}>{r.attempt}</td><td className={cell}>{r.createdAt}</td><td className={cell}><Badge>{r.status}</Badge></td><td className={cell}>{action('حظر المستخدم',()=>confirm('حظر هذا المستخدم؟',()=>{updateRows('users',r.userId as number,{status:'محظور'});updateRows('suspicious',r.id,{status:'تمت المراجعة'});setDialog(null)}),true)}</td></tr>))}</div>;
  };
 
   return <main dir="rtl" className="admin-console min-h-[100dvh] bg-[#f7f9fc] px-3 pb-28 pt-4 text-[#12234b] sm:px-6 lg:px-8">
@@ -355,7 +319,7 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
     <div className="mt-5">{content()}</div>
   </div>
   {toast&&<div role="status" className="fixed bottom-20 right-4 z-[110] rounded-xl bg-[#12234b] px-4 py-3 text-sm font-bold text-white shadow-xl">{toast}</div>}
-  {dialog&&<Dialog dialog={dialog} data={data} userBy={userBy} onClose={()=>setDialog(null)} onConfirmAction={()=>{try{pendingAction?.();announce(pendingSuccessMessage)}catch{announce('تعذر تنفيذ الإجراء')}finally{setPendingAction(null);setDialog(null)}}} onConfirm={(id,patch)=>{if(dialog.kind==='user-edit'||dialog.kind==='user'){setData(d=>({...d,users:d.users.map(u=>u.id===id?{...u,...patch}:u)}))}else if(dialog.kind==='reject-proof'){updateRows('proofs',id as string,patch)}else if(dialog.kind==='campaign'){updateRows('campaigns',id as string,patch)}setDialog(null);announce('تم حفظ التغيير')}} onDelete={id=>{setData(d=>({...d,users:d.users.filter(u=>u.id!==id)}));setDialog(null)}} onAction={cb=>{confirm('تأكيد الإجراء؟',cb)}}/>}
+  {dialog&&<Dialog dialog={dialog} data={data} userBy={userBy} onClose={()=>setDialog(null)} onConfirmAction={()=>{try{pendingAction?.();announce(pendingSuccessMessage)}catch{announce('تعذر تنفيذ الإجراء')}finally{setPendingAction(null);setDialog(null)}}} onConfirm={(id,patch)=>{if(dialog.kind==='user-edit'||dialog.kind==='user'){updateRows('users',id as number,{status:patch.status})}else if(dialog.kind==='reject-proof'){updateRows('proofs',id as string,patch)}else if(dialog.kind==='campaign'){updateRows('campaigns',id as string,patch)}setDialog(null);announce('تم حفظ التغيير')}} onDelete={id=>{updateRows('users',id,{status:'محظور'});setDialog(null)}} onAction={cb=>{confirm('تأكيد الإجراء؟',cb)}}/>}
  </main>;
 }
 
