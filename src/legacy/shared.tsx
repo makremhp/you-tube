@@ -103,29 +103,14 @@ function getShortName(name?: string) {
   return Array.from((name ?? '').trim()).slice(0, 5).join('') || 'زائر';
 }
 
-function getUserDisplayName(user: TelegramUser | null, fallback = 'محمد العتيبي') {
+function getUserDisplayName(user: TelegramUser | null, fallback = 'زائر') {
   if (user?.username) return `@${user.username.replace(/^@/, '')}`;
   if (user) return [user.first_name, user.last_name].filter(Boolean).join(' ');
   return fallback;
 }
 
-function getGreetingName(user: TelegramUser | null, fallback = 'محمد') {
+function getGreetingName(user: TelegramUser | null, fallback = 'زائر') {
   return Array.from((user?.first_name?.trim() || fallback)).slice(0, 5).join('');
-}
-
-function getCompletedVideoIds() {
-  const completedIds = new Set<number>();
-  try {
-    for (let index = 0; index < window.localStorage.length; index += 1) {
-      const key = window.localStorage.key(index);
-      if (!key?.startsWith('vidreward.watch.')) continue;
-      const session = JSON.parse(window.localStorage.getItem(key) ?? 'null') as Partial<AdvertisementSession> | null;
-      if (session?.credited && Number.isSafeInteger(session.videoId)) completedIds.add(Number(session.videoId));
-    }
-  } catch {
-    // Local storage may be unavailable or contain an invalid session.
-  }
-  return completedIds;
 }
 
 function UserAvatar({ user, className = '', size = 36 }: { user: TelegramUser | null; className?: string; size?: number }) {
@@ -182,8 +167,6 @@ type TaskProof = {
   submittedAt: string;
 };
 
-const promotionCampaignsStorageKey = 'vidreward.promotion-campaigns.v1';
-const taskProofsStorageKey = 'vidreward.task-proofs.v1';
 const telegramPackageOptions = [
   { count: 100, price: 0.7 },
   { count: 300, price: 1.9 },
@@ -196,15 +179,6 @@ const tiktokPackageOptions = [
   { count: 350, price: 5.5 },
   { count: 500, price: 7 },
 ];
-
-function readLocalState<T>(key: string, fallback: T): T {
-  try {
-    const value = window.localStorage.getItem(key);
-    return value ? JSON.parse(value) as T : fallback;
-  } catch {
-    return fallback;
-  }
-}
 
 function formatDuration(seconds: number) {
   return `${seconds}s`;
@@ -270,61 +244,6 @@ function formatBalanceUsd(amount: number) {
   const precision = amount > 0 && amount < 0.01 ? 4 : 2;
   return `$${amount.toFixed(precision)}`;
 }
-
-const initialVideos: Video[] = [
-  {
-    id: 1,
-    title: 'كيف صنعت أول منتج رقمي لي؟',
-    creator: 'سارة العتيبي',
-    views: '12,480',
-    reward: formatUsd(calculateViewerReward(2.8)),
-    cpm: 2.8,
-    duration: 40,
-    status: 'نشط',
-    created: 'منذ يومين',
-    art: 'media-art',
-    link: 'https://www.youtube.com/watch?v=ScMzIvxBSi4',
-  },
-  {
-    id: 2,
-    title: 'جولة صباحية في استوديو التصميم',
-    creator: 'محمود ناصر',
-    views: '8,920',
-    reward: formatUsd(calculateViewerReward(2)),
-    cpm: 2,
-    duration: 20,
-    status: 'نشط',
-    created: 'منذ 4 أيام',
-    art: 'media-art-alt',
-    link: 'https://www.youtube.com/watch?v=aqz-KE-bpKQ',
-  },
-  {
-    id: 3,
-    title: 'ثلاث أفكار لتطوير عاداتك',
-    creator: 'نوف الحربي',
-    views: '6,184',
-    reward: formatUsd(calculateViewerReward(1.5)),
-    cpm: 1.5,
-    duration: 10,
-    status: 'نشط',
-    created: 'منذ أسبوع',
-    art: 'media-art-dark',
-    link: 'https://www.youtube.com/watch?v=ysz5S6PUM-U',
-  },
-  {
-    id: 4,
-    title: 'دليل المبتدئين إلى التصوير بالهاتف',
-    creator: 'ستوديو عدسة',
-    views: '—',
-    reward: formatUsd(calculateViewerReward(3.2)),
-    cpm: 3.2,
-    duration: 80,
-    status: 'مسودة',
-    created: 'منذ 9 أيام',
-    art: 'media-art-alt',
-    link: '',
-  },
-];
 
 function getEmbedUrl(url: string) {
   if (!url) return '';
@@ -597,7 +516,7 @@ function Sidebar({
         <div className="flex items-center gap-3 border-t border-slate-100 pt-4">
           <UserAvatar user={telegramUser} className="bg-[#dbe8ff] text-[#1557ee] ring-0" />
           <div className="min-w-0">
-            <div className="truncate text-xs font-bold text-slate-800">{telegramUser ? [telegramUser.first_name, telegramUser.last_name].filter(Boolean).join(' ') : 'محمد العتيبي'}</div>
+            <div className="truncate text-xs font-bold text-slate-800">{telegramUser ? [telegramUser.first_name, telegramUser.last_name].filter(Boolean).join(' ') : 'زائر'}</div>
             <div className="mt-0.5 truncate text-[10px] text-slate-400">{telegramUser ? `Telegram ID: ${telegramUser.id}` : 'حساب منشئ'}</div>
           </div>
           <Settings2 className="mr-auto h-4 w-4 text-slate-400" />
@@ -904,13 +823,8 @@ function PlatformSelector({
   );
 }
 
-const depositAddress = '0x71B4f6eA8D9c3A17F48E6b5D2A0C9e12B7F1a4C8';
-const depositBinanceId = '782946315';
 const invoiceLifetime = 15 * 60;
-const demoUserId = '62182212';
-const memoSequenceStorageKey = 'vidreward.memo-sequence';
 const generatedIdentifiers = new Set<string>();
-let nextMemoSequence = 3;
 
 function createUniqueIdentifier(prefix: string, size = 10) {
   let identifier = '';
@@ -922,24 +836,6 @@ function createUniqueIdentifier(prefix: string, size = 10) {
   } while (generatedIdentifiers.has(identifier));
   generatedIdentifiers.add(identifier);
   return identifier;
-}
-
-function createMemoTag(telegramUserId?: number) {
-  let sequence = nextMemoSequence;
-  try {
-    const storedSequence = Number(window.localStorage.getItem(memoSequenceStorageKey));
-    if (Number.isFinite(storedSequence)) sequence = Math.max(sequence, storedSequence);
-    window.localStorage.setItem(memoSequenceStorageKey, String(sequence + 1));
-  } catch {
-    // Local storage may be unavailable in a restricted browser context.
-  }
-  nextMemoSequence = sequence + 1;
-  return `${telegramUserId ?? demoUserId}#${sequence}`;
-}
-
-function createBlockchainTxId() {
-  const entropy = createUniqueIdentifier('TX', 20).replace('TX-', '').toLowerCase();
-  return `0x${entropy.padEnd(64, '0').slice(0, 64)}`;
 }
 
 function formatHistoryDate(date = new Date(), language: 'ar' | 'en' = 'ar') {
@@ -1158,8 +1054,6 @@ export {
   getTelegramUserFromHash,
   getUserDisplayName,
   getGreetingName,
-  getCompletedVideoIds,
-  readLocalState,
   formatDuration,
   calculateViewerReward,
   formatUsd,
@@ -1169,8 +1063,6 @@ export {
   getVideoThumbnail,
   createBrowserWatchUrl,
   createUniqueIdentifier,
-  createMemoTag,
-  createBlockchainTxId,
   formatHistoryDate,
   formatRemaining,
   methodLabel,
@@ -1193,15 +1085,8 @@ export {
   HistoryStat,
   CompactCopyableIdentifier,
   CompactHistoryRow,
-  promotionCampaignsStorageKey,
-  taskProofsStorageKey,
   telegramPackageOptions,
   tiktokPackageOptions,
   durationOptions,
-  initialVideos,
-  depositAddress,
-  depositBinanceId,
   invoiceLifetime,
-  demoUserId,
-  memoSequenceStorageKey,
 };
