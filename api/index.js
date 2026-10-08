@@ -1,687 +1,999 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
-import { Pool } from "@neondatabase/serverless";
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import { neon } from '@neondatabase/serverless';
+
+/*
+ * VidReward backend — single entry point.
+ *
+ * Environment variables (server only, never exposed to the frontend):
+ *   DATABASE_URL            Neon PostgreSQL connection string
+ *   TELEGRAM_BOT_TOKEN      Bot token, used to verify Telegram initData and channel membership
+ *   ADMIN_TELEGRAM_IDS      Comma separated Telegram IDs allowed to use /api/admin/*
+ *   DEPOSIT_WALLET_ADDRESS  Wallet address shown for Web3 (USDT) deposits
+ *
+ * Every response is { success: true, data } or { success: false, error }.
+ * When DATABASE_URL is missing or a table is empty, GET endpoints return empty data.
+ */
 
 const INIT_DATA_MAX_AGE_SECONDS = 24 * 60 * 60;
-const TELEGRAM_TIMEOUT_MS = 8_000;
-let pool;
+const TELEGRAM_TASK_REWARD = Number(process.env.TELEGRAM_TASK_REWARD ?? 0.003);
+const TIKTOK_TASK_REWARD = Number(process.env.TIKTOK_TASK_REWARD ?? 0.01);
+const VIEW_REWARD_SHARE = 0.2;
+const AD_REWARD = Number(process.env.AD_REWARD ?? 0.0005);
+const AD_DAILY_LIMIT = Number(process.env.AD_DAILY_LIMIT ?? 100);
+const AD_MIN_INTERVAL_SECONDS = Number(process.env.AD_MIN_INTERVAL_SECONDS ?? 10);
+const MIN_WATCH_TOLERANCE = 0.95;
 
-class ApiError extends Error {
+function loadYoutubePricing() {
+  try {
+    const parsed = JSON.parse(process.env.YOUTUBE_PRICING ?? 'null');
+    if (parsed && typeof parsed === 'object') return parsed;
+  } catch {
+    return { 10: 1.5, 20: 2, 40: 2.8, 80: 3.2 };
+  }
+  return { 10: 1.5, 20: 2, 40: 2.8, 80: 3.2 };
+}
+
+const YOUTUBE_PRICING = loadYoutubePricing();
+
+const sql = process.env.DATABASE_URL ? neon(process.env.DATABASE_URL) : null;
+
+let schemaReady = null;
+
+function ensureSchema() {
+  if (!sql) return Promise.resolve();
+  if (!schemaReady) {
+    schemaReady = (async () => {
+      const statements = [
+        `CREATE TABLE IF NOT EXISTS users (
+          id BIGINT PRIMARY KEY,
+          first_name TEXT NOT NULL DEFAULT '',
+          last_name TEXT,
+          username TEXT,
+          photo_url TEXT,
+          advertiser_balance NUMERIC(18,6) NOT NULL DEFAULT 0,
+          earned_balance NUMERIC(18,6) NOT NULL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'نشط',
+          banned_by_system BOOLEAN NOT NULL DEFAULT FALSE,
+          invited_by BIGINT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          last_active_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )`,
+        `CREATE TABLE IF NOT EXISTS campaigns (
+          id BIGSERIAL PRIMARY KEY,
+          owner_id BIGINT NOT NULL REFERENCES users(id),
+          platform TEXT NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT,
+          creator TEXT,
+          link TEXT NOT NULL DEFAULT '',
+          thumbnail TEXT,
+          duration INTEGER,
+          cpm NUMERIC(12,4),
+          reward NUMERIC(18,6),
+          price NUMERIC(18,6),
+          target_count INTEGER,
+          country TEXT,
+          device TEXT,
+          status TEXT NOT NULL DEFAULT 'نشط',
+          views BIGINT NOT NULL DEFAULT 0,
+          joined_count INTEGER NOT NULL DEFAULT 0,
+          completed_count INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )`,
+        `CREATE TABLE IF NOT EXISTS completions (
+          campaign_id BIGINT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+          user_id BIGINT NOT NULL REFERENCES users(id),
+          status TEXT NOT NULL,
+          proof_image TEXT,
+          reward NUMERIC(18,6),
+          started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          completed_at TIMESTAMPTZ,
+          PRIMARY KEY (campaign_id, user_id)
+        )`,
+        `CREATE SEQUENCE IF NOT EXISTS memo_seq START 1`,
+        `CREATE TABLE IF NOT EXISTS deposits (
+          id TEXT PRIMARY KEY,
+          user_id BIGINT NOT NULL REFERENCES users(id),
+          amount NUMERIC(18,6) NOT NULL,
+          method TEXT NOT NULL,
+          destination TEXT NOT NULL,
+          memo_tag TEXT NOT NULL,
+          blockchain_tx_id TEXT,
+          credited BOOLEAN NOT NULL DEFAULT FALSE,
+          reason TEXT,
+          status TEXT NOT NULL DEFAULT 'قيد المعالجة',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )`,
+        `CREATE TABLE IF NOT EXISTS withdrawals (
+          id TEXT PRIMARY KEY,
+          user_id BIGINT NOT NULL REFERENCES users(id),
+          amount NUMERIC(18,6) NOT NULL,
+          method TEXT NOT NULL,
+          destination TEXT NOT NULL,
+          memo_tag TEXT NOT NULL,
+          blockchain_tx_id TEXT,
+          status TEXT NOT NULL DEFAULT 'قيد المعالجة',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )`,
+        `CREATE TABLE IF NOT EXISTS ad_rewards (
+          user_id BIGINT NOT NULL REFERENCES users(id),
+          day DATE NOT NULL,
+          count INTEGER NOT NULL DEFAULT 0,
+          last_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (user_id, day)
+        )`,
+        `CREATE TABLE IF NOT EXISTS suspicious_signals (
+          id BIGSERIAL PRIMARY KEY,
+          user_id BIGINT NOT NULL REFERENCES users(id),
+          attempt TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'مفتوح',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )`,
+        `CREATE INDEX IF NOT EXISTS campaigns_owner_idx ON campaigns (owner_id)`,
+        `CREATE INDEX IF NOT EXISTS campaigns_platform_status_idx ON campaigns (platform, status)`,
+        `CREATE INDEX IF NOT EXISTS deposits_user_idx ON deposits (user_id, created_at DESC)`,
+        `CREATE INDEX IF NOT EXISTS withdrawals_user_idx ON withdrawals (user_id, created_at DESC)`,
+      ];
+      for (const statement of statements) {
+        await sql.query(statement);
+      }
+    })().catch((error) => {
+      schemaReady = null;
+      throw error;
+    });
+  }
+  return schemaReady;
+}
+
+function ok(res, data, status = 200) {
+  res.status(status).json({ success: true, data });
+}
+
+function fail(res, status, error) {
+  res.status(status).json({ success: false, error });
+}
+
+class HttpError extends Error {
   constructor(status, message) {
     super(message);
     this.status = status;
   }
 }
 
-function getPool() {
-  const connectionString = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new ApiError(503, "Database is not configured.");
-  }
-  pool ??= new Pool({ connectionString, max: 5, idleTimeoutMillis: 10_000 });
-  return pool;
-}
-
-function apiPath(req) {
-  const url = new URL(req.url || "/api", `http://${req.headers.host || "localhost"}`);
-  const rewrittenPath = url.searchParams.get("route");
-  if (rewrittenPath) return `/${rewrittenPath.replace(/^\/+/, "")}`;
-  return url.pathname.replace(/^\/api(?=\/|$)/, "") || "/";
-}
-
-function requestBody(req) {
-  if (req.body && typeof req.body === "object" && !Array.isArray(req.body)) return req.body;
-  if (typeof req.body === "string") {
-    try {
-      const parsed = JSON.parse(req.body);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-    } catch {
-      return {};
-    }
-  }
-  return {};
-}
-
-function verifyTelegramInitData(initData) {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  if (!botToken) throw new ApiError(503, "Telegram authentication is not configured.");
-  if (typeof initData !== "string" || !initData || initData.length > 10_000) {
-    throw new ApiError(401, "Telegram initData is invalid or expired.");
-  }
-
+function verifiedTelegramUser(initData, botToken) {
+  if (typeof initData !== 'string' || !initData || initData.length > 10000) return null;
   const parameters = new URLSearchParams(initData);
-  const suppliedHash = parameters.get("hash");
-  if (!suppliedHash || !/^[a-f0-9]{64}$/i.test(suppliedHash)) {
-    throw new ApiError(401, "Telegram initData is invalid or expired.");
-  }
+  const suppliedHash = parameters.get('hash');
+  if (!suppliedHash || !/^[a-f0-9]{64}$/i.test(suppliedHash)) return null;
 
   const dataCheckString = [...parameters.entries()]
-    .filter(([key]) => key !== "hash")
-    .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+    .filter(([key]) => key !== 'hash')
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
     .map(([key, value]) => `${key}=${value}`)
-    .join("\n");
-  const secretKey = createHmac("sha256", "WebAppData").update(botToken).digest();
-  const expectedHash = createHmac("sha256", secretKey).update(dataCheckString).digest();
-  const actualHash = Buffer.from(suppliedHash, "hex");
-  if (actualHash.length !== expectedHash.length || !timingSafeEqual(actualHash, expectedHash)) {
-    throw new ApiError(401, "Telegram initData is invalid or expired.");
-  }
+    .join('\n');
+  const secretKey = createHmac('sha256', 'WebAppData').update(botToken).digest();
+  const expectedHash = createHmac('sha256', secretKey).update(dataCheckString).digest();
+  const actualHash = Buffer.from(suppliedHash, 'hex');
+  if (actualHash.length !== expectedHash.length || !timingSafeEqual(actualHash, expectedHash)) return null;
 
-  const authDate = Number(parameters.get("auth_date"));
+  const authDate = Number(parameters.get('auth_date'));
   const now = Math.floor(Date.now() / 1000);
-  if (
-    !Number.isSafeInteger(authDate)
-    || authDate > now + 60
-    || now - authDate > INIT_DATA_MAX_AGE_SECONDS
-  ) {
-    throw new ApiError(401, "Telegram initData is invalid or expired.");
-  }
+  if (!Number.isSafeInteger(authDate) || authDate > now + 60 || now - authDate > INIT_DATA_MAX_AGE_SECONDS) return null;
 
-  let telegramUser;
   try {
-    telegramUser = JSON.parse(parameters.get("user") || "null");
-  } catch {
-    throw new ApiError(401, "Telegram initData is invalid or expired.");
-  }
-  const rawId = telegramUser?.id;
-  const telegramId = typeof rawId === "number" && Number.isSafeInteger(rawId) && rawId > 0
-    ? String(rawId)
-    : typeof rawId === "string" && /^\d{1,20}$/.test(rawId)
-      ? rawId
-      : null;
-  if (!telegramId || typeof telegramUser.first_name !== "string" || !telegramUser.first_name.trim()) {
-    throw new ApiError(401, "Telegram initData is invalid or expired.");
-  }
-
-  const numericId = Number(telegramId);
-  if (!Number.isSafeInteger(numericId) || numericId <= 0) {
-    throw new ApiError(401, "Telegram initData is invalid or expired.");
-  }
-
-  return {
-    telegramId: numericId,
-    firstName: telegramUser.first_name,
-    lastName: typeof telegramUser.last_name === "string" ? telegramUser.last_name : null,
-    username: typeof telegramUser.username === "string" ? telegramUser.username : null,
-    photoUrl: typeof telegramUser.photo_url === "string" ? telegramUser.photo_url : null,
-  };
-}
-
-function getInitDataFromRequest(req) {
-  const authorization = req.headers.authorization;
-  if (typeof authorization !== "string" || !authorization.startsWith("tma ")) {
-    throw new ApiError(401, "A valid Telegram Mini App session is required.");
-  }
-  const initData = authorization.slice(4).trim();
-  if (!initData) throw new ApiError(401, "A valid Telegram Mini App session is required.");
-  return initData;
-}
-
-function mapUser(row) {
-  return {
-    telegramId: Number(row.telegram_id),
-    firstName: row.first_name,
-    lastName: row.last_name,
-    username: row.username,
-    photoUrl: row.photo_url,
-    createdAt: row.created_at,
-  };
-}
-
-function mapCampaign(row) {
-  return {
-    id: Number(row.id),
-    platform: row.platform,
-    title: row.title,
-    description: row.description,
-    link: row.link,
-    image: row.image,
-    targetCount: row.target_count,
-    price: row.price,
-    reward: row.reward,
-    status: row.status,
-    joinedCount: row.joined_count,
-    completedCount: row.completed_count,
-    createdAt: row.created_at,
-  };
-}
-
-function mapCompletion(row) {
-  return {
-    id: Number(row.id),
-    telegramId: Number(row.telegram_id),
-    campaignId: Number(row.campaign_id),
-    status: row.status,
-    proofText: row.proof_text,
-    proofUrl: row.proof_url,
-    reviewNote: row.review_note,
-    createdAt: row.created_at,
-    reviewedAt: row.reviewed_at,
-  };
-}
-
-async function getAuthenticatedUser(req) {
-  const profile = verifyTelegramInitData(getInitDataFromRequest(req));
-  const result = await getPool().query(
-    `SELECT telegram_id, first_name, last_name, username, photo_url, created_at
-       FROM users
-      WHERE telegram_id = $1
-      LIMIT 1`,
-    [profile.telegramId],
-  );
-  if (!result.rows[0]) {
-    throw new ApiError(401, "Register through Telegram before calling this endpoint.");
-  }
-  return mapUser(result.rows[0]);
-}
-
-async function requireAdmin(req) {
-  const user = await getAuthenticatedUser(req);
-  const adminIds = new Set(
-    (process.env.ADMIN_TELEGRAM_IDS || "").split(",").map((id) => id.trim()).filter(Boolean),
-  );
-  if (!adminIds.has(String(user.telegramId))) {
-    throw new ApiError(403, "Administrator access is required.");
-  }
-  return user;
-}
-
-async function getWallet(telegramId) {
-  const result = await getPool().query(
-    `SELECT viewer_balance AS balance, currency
-       FROM user_balances
-      WHERE telegram_id = $1
-      LIMIT 1`,
-    [telegramId],
-  );
-  return result.rows[0] || { balance: "0", currency: "USD" };
-}
-
-async function registerTelegramUser(req, res) {
-  const initData = requestBody(req).initData;
-  const profile = verifyTelegramInitData(initData);
-  const client = await getPool().connect();
-  try {
-    await client.query("BEGIN");
-    const result = await client.query(
-      `INSERT INTO users (telegram_id, first_name, last_name, username, photo_url)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (telegram_id) DO UPDATE SET
-         first_name = EXCLUDED.first_name,
-         last_name = EXCLUDED.last_name,
-         username = EXCLUDED.username,
-         photo_url = EXCLUDED.photo_url
-       RETURNING telegram_id, first_name, last_name, username, photo_url, created_at`,
-      [profile.telegramId, profile.firstName, profile.lastName, profile.username, profile.photoUrl],
-    );
-    await client.query(
-      `INSERT INTO user_balances (telegram_id) VALUES ($1)
-       ON CONFLICT (telegram_id) DO NOTHING`,
-      [profile.telegramId],
-    );
-    await client.query("COMMIT");
-    res.status(200).json({ user: mapUser(result.rows[0]), ...(await getWallet(profile.telegramId)) });
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
-async function getTasks(user, res) {
-  const result = await getPool().query(
-    `SELECT c.id, c.platform, c.title, c.description, c.link, c.image,
-            c.target_count, c.price, c.reward, c.status, c.joined_count,
-            c.completed_count, c.created_at, tc.status AS completion_status
-       FROM campaigns c
-       LEFT JOIN task_completions tc
-         ON tc.campaign_id = c.id AND tc.telegram_id = $1
-      WHERE c.status = 'نشط' AND c.target_count > c.completed_count
-      ORDER BY c.created_at DESC`,
-    [user.telegramId],
-  );
-  res.json(result.rows.map((row) => ({
-    ...mapCampaign(row),
-    verificationMethod: row.platform === "telegram" ? "telegram_membership" : "manual",
-    completionStatus: row.completion_status,
-  })));
-}
-
-function resolvePublicTelegramChatId(link) {
-  try {
-    const url = new URL(link);
-    const host = url.hostname.toLowerCase().replace(/^www\./, "");
-    if (url.protocol !== "https:" || (host !== "t.me" && host !== "telegram.me")) return null;
-    const [username] = url.pathname.split("/").filter(Boolean);
-    if (!username || username.startsWith("+") || username === "c") return null;
-    const normalizedUsername = decodeURIComponent(username).replace(/^@/, "");
-    return /^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(normalizedUsername)
-      ? `@${normalizedUsername}`
-      : null;
+    const user = JSON.parse(parameters.get('user') ?? 'null');
+    if (!user || !Number.isSafeInteger(user.id) || Number(user.id) <= 0) return null;
+    return {
+      id: Number(user.id),
+      first_name: typeof user.first_name === 'string' ? user.first_name.slice(0, 80) : '',
+      last_name: typeof user.last_name === 'string' ? user.last_name.slice(0, 80) : null,
+      username: typeof user.username === 'string' ? user.username.slice(0, 64) : null,
+      photo_url: typeof user.photo_url === 'string' && /^https?:\/\//i.test(user.photo_url) ? user.photo_url.slice(0, 500) : null,
+    };
   } catch {
     return null;
   }
 }
 
+function authenticate(req) {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!botToken) return null;
+  const header = req.headers['x-telegram-init-data'];
+  return verifiedTelegramUser(Array.isArray(header) ? header[0] : header, botToken);
+}
+
+async function requireUser(req) {
+  const telegramUser = authenticate(req);
+  if (!telegramUser) throw new HttpError(401, 'Unauthorized');
+  const rows = await sql.query(
+    `INSERT INTO users (id, first_name, last_name, username, photo_url)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (id) DO UPDATE SET
+       first_name = EXCLUDED.first_name,
+       last_name = EXCLUDED.last_name,
+       username = EXCLUDED.username,
+       photo_url = EXCLUDED.photo_url,
+       last_active_at = now()
+     RETURNING id::float8 AS id, status`,
+    [telegramUser.id, telegramUser.first_name, telegramUser.last_name, telegramUser.username, telegramUser.photo_url],
+  );
+  const user = rows[0];
+  if (user.status === 'محظور') throw new HttpError(403, 'Forbidden');
+  return { ...telegramUser, id: Number(user.id) };
+}
+
+function isAdmin(userId) {
+  const ids = (process.env.ADMIN_TELEGRAM_IDS ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return ids.includes(String(userId));
+}
+
+async function requireAdmin(req) {
+  const user = await requireUser(req);
+  if (!isAdmin(user.id)) throw new HttpError(403, 'Forbidden');
+  return user;
+}
+
 async function telegramCall(method, payload) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  if (!botToken) throw new ApiError(503, "Telegram membership verification is not configured.");
-  let response;
+  if (!botToken) throw new HttpError(503, 'Service unavailable');
+  const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok || !data.ok) return null;
+  return data.result;
+}
+
+function publicChannelHandle(value) {
+  if (typeof value !== 'string' || value.length > 300) return null;
   try {
-    response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
-    });
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    if (host !== 't.me' && host !== 'telegram.me' && host !== 'www.t.me') return null;
+    const segments = url.pathname.split('/').filter(Boolean);
+    if (segments.length !== 1) return null;
+    const username = decodeURIComponent(segments[0]).replace(/^@/, '');
+    return /^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(username) ? `@${username}` : null;
   } catch {
-    throw new ApiError(502, "Telegram could not verify this request right now.");
+    return null;
   }
-  const result = await response.json().catch(() => null);
-  if (!response.ok || result?.ok !== true || result.result === undefined) {
-    throw new ApiError(502, "Telegram could not verify this request right now.");
-  }
-  return result.result;
 }
 
-async function checkTelegramMembership(chatId, telegramId) {
-  const member = await telegramCall("getChatMember", { chat_id: chatId, user_id: telegramId });
-  return ["creator", "administrator", "member"].includes(member.status || "")
-    || (member.status === "restricted" && member.is_member === true);
+async function botIsChannelAdmin(link) {
+  const handle = publicChannelHandle(link);
+  if (!handle) return false;
+  const me = await telegramCall('getMe', {});
+  if (!me) return false;
+  const member = await telegramCall('getChatMember', { chat_id: handle, user_id: me.id });
+  return Boolean(member && (member.status === 'administrator' || member.status === 'creator'));
 }
 
-async function completeTask(req, res, user, campaignId) {
-  if (!/^[1-9]\d{0,15}$/.test(campaignId) || !Number.isSafeInteger(Number(campaignId))) {
-    throw new ApiError(400, "Invalid task id.");
+async function userIsChannelMember(link, userId) {
+  const handle = publicChannelHandle(link);
+  if (!handle) return false;
+  const member = await telegramCall('getChatMember', { chat_id: handle, user_id: userId });
+  if (!member) return false;
+  return ['member', 'administrator', 'creator'].includes(member.status) || (member.status === 'restricted' && member.is_member === true);
+}
+
+const CAMPAIGN_COLUMNS = `
+  c.id::text AS id,
+  c.platform,
+  c.title,
+  c.description,
+  c.creator,
+  c.link,
+  c.link AS "youtubeUrl",
+  c.thumbnail,
+  c.duration,
+  c.cpm::float8 AS cpm,
+  c.reward::float8 AS reward,
+  c.price::float8 AS price,
+  c.target_count AS "targetCount",
+  c.country,
+  c.device,
+  c.status,
+  c.views::float8 AS views,
+  c.joined_count AS "joinedCount",
+  c.completed_count AS "completedCount",
+  c.owner_id::float8 AS "ownerId",
+  c.created_at AS "createdAt"`;
+
+function viewerReward(cpm) {
+  return Number(((Number(cpm) / 1000) * VIEW_REWARD_SHARE).toFixed(6));
+}
+
+function readPositiveInteger(value, max) {
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number <= 0 || number > max) return null;
+  return number;
+}
+
+function readMoney(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < min || number > max) return null;
+  return Number(number.toFixed(6));
+}
+
+function readText(value, max) {
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  return text && text.length <= max ? text : null;
+}
+
+function readHttpUrl(value, max = 500) {
+  const text = readText(value, max);
+  if (!text) return null;
+  try {
+    const url = new URL(text);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
+  } catch {
+    return null;
   }
-  const campaignResult = await getPool().query(
-    "SELECT * FROM campaigns WHERE id = $1 LIMIT 1",
-    [Number(campaignId)],
+}
+
+function newIdentifier(prefix) {
+  const random = Math.random().toString(36).slice(2, 12).toUpperCase().padEnd(10, '0');
+  return `${prefix}-${Date.now().toString(36).slice(-6).toUpperCase()}-${random}`;
+}
+
+async function nextMemoTag(userId) {
+  const rows = await sql.query(`SELECT nextval('memo_seq')::text AS sequence`);
+  return `${userId}#${rows[0].sequence}`;
+}
+
+const PLATFORMS = ['youtube', 'telegram', 'tiktok'];
+const CAMPAIGN_STATUSES = ['نشط', 'مسودة', 'مكتمل', 'موقوف', 'بانتظار تحقق البوت'];
+
+async function listTasks(req, res, query) {
+  const user = await requireUser(req);
+  const platform = PLATFORMS.includes(query.get('platform') ?? '') ? query.get('platform') : null;
+  const rows = await sql.query(
+    `SELECT ${CAMPAIGN_COLUMNS},
+            comp.status AS "userStatus",
+            (comp.status = 'completed') AS completed
+     FROM campaigns c
+     LEFT JOIN completions comp ON comp.campaign_id = c.id AND comp.user_id = $1
+     WHERE c.status = 'نشط' AND ($2::text IS NULL OR c.platform = $2)
+     ORDER BY c.created_at DESC
+     LIMIT 200`,
+    [user.id, platform],
   );
-  const campaign = campaignResult.rows[0];
-  if (!campaign || campaign.status !== "نشط") throw new ApiError(404, "Task not found or inactive.");
+  ok(res, rows);
+}
 
-  let status = "pending";
-  let proofText = null;
-  let proofUrl = null;
-  if (campaign.platform === "telegram") {
-    const chatId = resolvePublicTelegramChatId(campaign.link);
-    if (!chatId) {
-      throw new ApiError(503, "This task does not have a verifiable public Telegram channel link.");
+async function listCampaigns(req, res) {
+  const user = await requireUser(req);
+  const rows = await sql.query(
+    `SELECT ${CAMPAIGN_COLUMNS}
+     FROM campaigns c
+     WHERE c.owner_id = $1
+     ORDER BY c.created_at DESC
+     LIMIT 200`,
+    [user.id],
+  );
+  ok(res, rows);
+}
+
+async function createCampaign(req, res) {
+  const user = await requireUser(req);
+  const body = req.body ?? {};
+  const platform = PLATFORMS.includes(body.platform) ? body.platform : null;
+  const title = readText(body.title, 160);
+  const link = platform === 'youtube' && body.link === '' ? '' : readHttpUrl(body.link);
+  if (!platform || !title || link === null) throw new HttpError(400, 'Invalid request');
+
+  if (platform === 'youtube') {
+    const duration = readPositiveInteger(body.duration, 600);
+    const cpm = readMoney(body.cpm, 0.01, 1000);
+    if (!duration || !cpm || Number(YOUTUBE_PRICING[duration]) !== cpm) throw new HttpError(400, 'Invalid request');
+    const status = body.status === 'مسودة' ? 'مسودة' : 'نشط';
+    const creator = readText(body.creator, 120) ?? ([user.first_name, user.last_name].filter(Boolean).join(' ') || null);
+    const rows = await sql.query(
+      `INSERT INTO campaigns (owner_id, platform, title, description, creator, link, thumbnail, duration, cpm, reward, country, device, status)
+       VALUES ($1, 'youtube', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       RETURNING id::text AS id`,
+      [
+        user.id, title, readText(body.description, 2000), creator, link, readHttpUrl(body.thumbnail),
+        duration, cpm, viewerReward(cpm), readText(body.country, 80), readText(body.device, 40), status,
+      ],
+    );
+    ok(res, { id: rows[0].id }, 201);
+    return;
+  }
+
+  const targetCount = readPositiveInteger(body.targetCount, 1000000);
+  const price = readMoney(body.price, 0.01, 1000000);
+  const taskReward = platform === 'telegram' ? TELEGRAM_TASK_REWARD : TIKTOK_TASK_REWARD;
+  if (!targetCount || !price || price / targetCount < taskReward) throw new HttpError(400, 'Invalid request');
+  let status = 'نشط';
+  if (platform === 'telegram') {
+    status = (await botIsChannelAdmin(link)) ? 'نشط' : 'بانتظار تحقق البوت';
+  }
+  const rows = await sql.query(
+    `INSERT INTO campaigns (owner_id, platform, title, description, link, thumbnail, target_count, price, reward, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     RETURNING id::text AS id, status`,
+    [
+      user.id, platform, title, readText(body.description, 2000), link,
+      typeof body.image === 'string' && body.image.length <= 600000 ? body.image : null,
+      targetCount, price, platform === 'telegram' ? TELEGRAM_TASK_REWARD : TIKTOK_TASK_REWARD, status,
+    ],
+  );
+  ok(res, { id: rows[0].id, status: rows[0].status }, 201);
+}
+
+async function updateCampaign(req, res, id) {
+  const user = await requireUser(req);
+  const body = req.body ?? {};
+  const status = CAMPAIGN_STATUSES.includes(body.status) ? body.status : null;
+  const title = body.title === undefined ? null : readText(body.title, 160);
+  const link = body.link === undefined ? null : readHttpUrl(body.link);
+  if (body.title !== undefined && !title) throw new HttpError(400, 'Invalid request');
+  if (body.link !== undefined && !link) throw new HttpError(400, 'Invalid request');
+  if (body.status !== undefined && !status) throw new HttpError(400, 'Invalid request');
+
+  let nextStatus = status;
+  if (status === 'نشط') {
+    const current = await sql.query(`SELECT platform, link FROM campaigns WHERE id = $1 AND owner_id = $2`, [id, user.id]);
+    if (current[0]?.platform === 'telegram' && !(await botIsChannelAdmin(link ?? current[0].link))) {
+      nextStatus = 'بانتظار تحقق البوت';
     }
-    if (!await checkTelegramMembership(chatId, user.telegramId)) {
-      throw new ApiError(403, "Join the Telegram channel before completing this task.");
-    }
-    status = "approved";
-  } else if (campaign.platform === "tiktok") {
-    const body = requestBody(req);
-    proofText = typeof body.proofText === "string" ? body.proofText.trim() : null;
-    proofUrl = typeof body.proofUrl === "string" ? body.proofUrl.trim() : null;
-    if (proofText) {
-      if (proofText.length > 4_000) throw new ApiError(400, "Proof text is too long.");
-    } else {
-      proofText = null;
-    }
-    if (proofUrl) {
-      try {
-        const url = new URL(proofUrl);
-        if (url.protocol !== "https:" || proofUrl.length > 2_048) throw new Error("invalid_url");
-      } catch {
-        throw new ApiError(400, "Proof URLs must be valid HTTPS URLs.");
-      }
-    } else {
-      proofUrl = null;
-    }
-    if (!proofText && !proofUrl) throw new ApiError(400, "Provide proofText or proofUrl for a manual task.");
+  }
+  const rows = await sql.query(
+    `UPDATE campaigns SET
+       title = COALESCE($3, title),
+       link = COALESCE($4, link),
+       status = COALESCE($5, status)
+     WHERE id = $1 AND owner_id = $2
+     RETURNING id::text AS id, status`,
+    [id, user.id, title, link, nextStatus],
+  );
+  if (!rows.length) throw new HttpError(404, 'Not found');
+  ok(res, rows[0]);
+}
+
+async function deleteCampaign(req, res, id) {
+  const user = await requireUser(req);
+  const rows = await sql.query(`DELETE FROM campaigns WHERE id = $1 AND owner_id = $2 RETURNING id::text AS id`, [id, user.id]);
+  if (!rows.length) throw new HttpError(404, 'Not found');
+  ok(res, { id: rows[0].id });
+}
+
+async function startTask(req, res, id) {
+  const user = await requireUser(req);
+  const rows = await sql.query(
+    `WITH target AS (
+       SELECT id FROM campaigns WHERE id = $1 AND status = 'نشط'
+     ), started AS (
+       INSERT INTO completions (campaign_id, user_id, status)
+       SELECT id, $2, 'started' FROM target
+       ON CONFLICT (campaign_id, user_id) DO NOTHING
+       RETURNING status
+     ), joined AS (
+       UPDATE campaigns SET joined_count = joined_count + 1
+       WHERE id = $1 AND EXISTS (SELECT 1 FROM started)
+       RETURNING id
+     )
+     SELECT COALESCE(
+       (SELECT status FROM started),
+       (SELECT status FROM completions WHERE campaign_id = $1 AND user_id = $2)
+     ) AS status`,
+    [id, user.id],
+  );
+  if (!rows[0] || !rows[0].status) throw new HttpError(404, 'Not found');
+  ok(res, { status: rows[0].status });
+}
+
+async function completeTask(req, res, id) {
+  const user = await requireUser(req);
+  const campaigns = await sql.query(
+    `SELECT platform, link, duration, cpm::float8 AS cpm, reward::float8 AS reward FROM campaigns WHERE id = $1 AND status = 'نشط'`,
+    [id],
+  );
+  const campaign = campaigns[0];
+  if (!campaign) throw new HttpError(404, 'Not found');
+
+  if (campaign.platform === 'youtube') {
+    const requiredSeconds = Number(campaign.duration) * MIN_WATCH_TOLERANCE;
+    const reward = campaign.reward ?? viewerReward(campaign.cpm);
+    const rows = await sql.query(
+      `WITH done AS (
+         UPDATE completions SET status = 'completed', completed_at = now(), reward = $3
+         WHERE campaign_id = $1 AND user_id = $2 AND status = 'started'
+           AND started_at <= now() - make_interval(secs => $4::float8)
+         RETURNING reward
+       ), credit AS (
+         UPDATE users SET earned_balance = earned_balance + $3
+         WHERE id = $2 AND EXISTS (SELECT 1 FROM done)
+         RETURNING id
+       ), bump AS (
+         UPDATE campaigns SET completed_count = completed_count + 1, views = views + 1
+         WHERE id = $1 AND EXISTS (SELECT 1 FROM done)
+         RETURNING id
+       )
+       SELECT reward::float8 AS reward FROM done`,
+      [id, user.id, reward, requiredSeconds],
+    );
+    if (!rows.length) throw new HttpError(409, 'Task not completed');
+    ok(res, { reward: rows[0].reward });
+    return;
+  }
+
+  if (campaign.platform === 'telegram') {
+    if (!(await userIsChannelMember(campaign.link, user.id))) throw new HttpError(409, 'Membership not verified');
+    const rows = await sql.query(
+      `WITH done AS (
+         INSERT INTO completions (campaign_id, user_id, status, reward, completed_at)
+         VALUES ($1, $2, 'completed', $3, now())
+         ON CONFLICT (campaign_id, user_id) DO NOTHING
+         RETURNING reward
+       ), credit AS (
+         UPDATE users SET earned_balance = earned_balance + $3
+         WHERE id = $2 AND EXISTS (SELECT 1 FROM done)
+         RETURNING id
+       ), bump AS (
+         UPDATE campaigns SET joined_count = joined_count + 1, completed_count = completed_count + 1
+         WHERE id = $1 AND EXISTS (SELECT 1 FROM done)
+         RETURNING id
+       )
+       SELECT reward::float8 AS reward FROM done`,
+      [id, user.id, campaign.reward ?? TELEGRAM_TASK_REWARD],
+    );
+    if (!rows.length) throw new HttpError(409, 'Task already completed');
+    ok(res, { reward: rows[0].reward });
+    return;
+  }
+
+  throw new HttpError(400, 'Invalid request');
+}
+
+async function submitProof(req, res, id) {
+  const user = await requireUser(req);
+  const image = typeof req.body?.image === 'string' && req.body.image.startsWith('data:image/') && req.body.image.length <= 3000000
+    ? req.body.image
+    : null;
+  if (!image) throw new HttpError(400, 'Invalid request');
+  const rows = await sql.query(
+    `WITH target AS (
+       SELECT id, reward FROM campaigns WHERE id = $1 AND status = 'نشط' AND platform = 'tiktok'
+     ), proof AS (
+       INSERT INTO completions (campaign_id, user_id, status, proof_image, reward)
+       SELECT id, $2, 'pending', $3, reward FROM target
+       ON CONFLICT (campaign_id, user_id) DO NOTHING
+       RETURNING status
+     ), bump AS (
+       UPDATE campaigns SET joined_count = joined_count + 1
+       WHERE id = $1 AND EXISTS (SELECT 1 FROM proof)
+       RETURNING id
+     )
+     SELECT status FROM proof`,
+    [id, user.id, image],
+  );
+  if (!rows.length) throw new HttpError(409, 'Proof already submitted');
+  ok(res, { status: 'قيد المراجعة' }, 201);
+}
+
+async function claimAdReward(req, res) {
+  const user = await requireUser(req);
+  const rows = await sql.query(
+    `WITH bump AS (
+       INSERT INTO ad_rewards (user_id, day, count, last_at)
+       VALUES ($1, (now() AT TIME ZONE 'UTC')::date, 1, now())
+       ON CONFLICT (user_id, day) DO UPDATE
+         SET count = ad_rewards.count + 1, last_at = now()
+         WHERE ad_rewards.count < $2
+           AND ad_rewards.last_at <= now() - make_interval(secs => $4::float8)
+       RETURNING count
+     ), credit AS (
+       UPDATE users SET earned_balance = earned_balance + $3
+       WHERE id = $1 AND EXISTS (SELECT 1 FROM bump)
+       RETURNING id
+     )
+     SELECT count FROM bump`,
+    [user.id, AD_DAILY_LIMIT, AD_REWARD, AD_MIN_INTERVAL_SECONDS],
+  );
+  if (!rows.length) throw new HttpError(429, 'Reward not available');
+  ok(res, { reward: AD_REWARD, claimedToday: Number(rows[0].count) });
+}
+
+async function listProofs(req, res) {
+  const user = await requireUser(req);
+  const rows = await sql.query(
+    `SELECT campaign_id::text AS "campaignId",
+            user_id::float8 AS "userId",
+            COALESCE(proof_image, '') AS image,
+            CASE status WHEN 'approved' THEN 'معتمد' WHEN 'rejected' THEN 'مرفوض' ELSE 'قيد المراجعة' END AS status,
+            started_at AS "submittedAt"
+     FROM completions
+     WHERE user_id = $1 AND proof_image IS NOT NULL
+     ORDER BY started_at DESC
+     LIMIT 200`,
+    [user.id],
+  );
+  ok(res, rows);
+}
+
+const HISTORY_COLUMNS = `
+  id,
+  amount::float8 AS amount,
+  method,
+  destination,
+  memo_tag AS "memoTag",
+  blockchain_tx_id AS "blockchainTxId",
+  status,
+  created_at AS "createdAt"`;
+
+async function listDeposits(req, res) {
+  const user = await requireUser(req);
+  const rows = await sql.query(`SELECT ${HISTORY_COLUMNS} FROM deposits WHERE user_id = $1 ORDER BY created_at DESC LIMIT 200`, [user.id]);
+  ok(res, rows);
+}
+
+async function listWithdrawals(req, res) {
+  const user = await requireUser(req);
+  const rows = await sql.query(`SELECT ${HISTORY_COLUMNS} FROM withdrawals WHERE user_id = $1 ORDER BY created_at DESC LIMIT 200`, [user.id]);
+  ok(res, rows);
+}
+
+async function createDeposit(req, res) {
+  const user = await requireUser(req);
+  const body = req.body ?? {};
+  const method = body.method === 'stars' || body.method === 'web3' ? body.method : null;
+  const amount = readMoney(body.amount, 1, 10000);
+  if (!method || !amount) throw new HttpError(400, 'Invalid request');
+
+  let destination;
+  let memoTag;
+  if (method === 'stars') {
+    destination = readHttpUrl(body.destination);
+    memoTag = readText(body.memoTag, 200);
+    if (!destination || !memoTag) throw new HttpError(400, 'Invalid request');
   } else {
-    throw new ApiError(503, "This campaign platform is not supported as a task.");
+    destination = process.env.DEPOSIT_WALLET_ADDRESS;
+    if (!destination) throw new HttpError(503, 'Service unavailable');
+    memoTag = await nextMemoTag(user.id);
+  }
+  const rows = await sql.query(
+    `INSERT INTO deposits (id, user_id, amount, method, destination, memo_tag)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING ${HISTORY_COLUMNS}`,
+    [newIdentifier('DEP'), user.id, amount, method, destination, memoTag],
+  );
+  ok(res, rows[0], 201);
+}
+
+async function createWithdrawal(req, res) {
+  const user = await requireUser(req);
+  const body = req.body ?? {};
+  const method = body.method === 'binance' || body.method === 'web3' ? body.method : null;
+  const amount = readMoney(body.amount, 1, 100000);
+  const destination = readText(body.destination, 200);
+  if (!method || !amount || !destination) throw new HttpError(400, 'Invalid request');
+  const memoTag = await nextMemoTag(user.id);
+  const rows = await sql.query(
+    `WITH debit AS (
+       UPDATE users SET earned_balance = earned_balance - $3
+       WHERE id = $2 AND earned_balance >= $3
+       RETURNING id
+     )
+     INSERT INTO withdrawals (id, user_id, amount, method, destination, memo_tag)
+     SELECT $1, $2, $3, $4, $5, $6 FROM debit
+     RETURNING ${HISTORY_COLUMNS}`,
+    [newIdentifier('WDR'), user.id, amount, method, destination, memoTag],
+  );
+  if (!rows.length) throw new HttpError(402, 'Insufficient balance');
+  ok(res, rows[0], 201);
+}
+
+async function getUser(req, res) {
+  const user = await requireUser(req);
+  const rows = await sql.query(
+    `SELECT id::float8 AS id, first_name AS "firstName", last_name AS "lastName", username, photo_url AS "photoUrl",
+            status, created_at AS "createdAt"
+     FROM users WHERE id = $1`,
+    [user.id],
+  );
+  ok(res, rows[0] ?? null);
+}
+
+async function getBalance(req, res) {
+  const user = await requireUser(req);
+  const rows = await sql.query(
+    `SELECT advertiser_balance::float8 AS "advertiserBalance", earned_balance::float8 AS "viewerBalance" FROM users WHERE id = $1`,
+    [user.id],
+  );
+  ok(res, rows[0] ?? { advertiserBalance: 0, viewerBalance: 0 });
+}
+
+async function adminState(req, res) {
+  await requireAdmin(req);
+  const [users, deposits, withdrawals, campaigns, proofs, suspicious] = await Promise.all([
+    sql.query(
+      `SELECT id::float8 AS id,
+              TRIM(CONCAT(first_name, ' ', COALESCE(last_name, ''))) AS name,
+              COALESCE(username, '') AS username,
+              advertiser_balance::float8 AS "advertiserBalance",
+              earned_balance::float8 AS "earnedBalance",
+              status,
+              banned_by_system AS "bannedBySystem",
+              to_char(created_at, 'YYYY-MM-DD') AS "joinedAt",
+              to_char(last_active_at, 'YYYY-MM-DD HH24:MI') AS "lastLogin",
+              to_char(last_active_at, 'YYYY-MM-DD HH24:MI') AS "lastActive",
+              COALESCE(invited_by::text, '—') AS "invitedBy"
+       FROM users ORDER BY created_at DESC LIMIT 1000`,
+    ),
+    sql.query(
+      `SELECT id, user_id::float8 AS "userId", amount::float8 AS amount,
+              CASE method WHEN 'stars' THEN 'Stars' ELSE 'USDT' END AS method,
+              memo_tag AS "memoTag", blockchain_tx_id AS "txId", destination AS wallet, credited, reason,
+              CASE status WHEN 'تم' THEN 'ناجح' WHEN 'قيد المعالجة' THEN 'قيد المعالجة' ELSE 'فاشل' END AS status,
+              to_char(created_at, 'YYYY-MM-DD HH24:MI') AS "createdAt"
+       FROM deposits ORDER BY created_at DESC LIMIT 1000`,
+    ),
+    sql.query(
+      `SELECT id, user_id::float8 AS "userId", amount::float8 AS amount,
+              CASE method WHEN 'binance' THEN 'Binance' ELSE 'Web3' END AS method,
+              destination,
+              CASE status WHEN 'تم' THEN 'معتمد' WHEN 'مرفوض' THEN 'مرفوض' ELSE 'قيد المراجعة' END AS status,
+              to_char(created_at, 'YYYY-MM-DD HH24:MI') AS "createdAt"
+       FROM withdrawals ORDER BY created_at DESC LIMIT 1000`,
+    ),
+    sql.query(
+      `SELECT 'CMP-' || id::text AS id, id::text AS "campaignId", owner_id::float8 AS "userId", title,
+              CASE platform WHEN 'youtube' THEN 'YouTube' WHEN 'tiktok' THEN 'TikTok' ELSE 'Telegram' END AS platform,
+              link AS "videoUrl", duration, price::float8 AS budget, price::float8 AS price,
+              target_count AS "targetCount", completed_count AS "completedCount", views::float8 AS views,
+              CASE status WHEN 'نشط' THEN 'نشطة' WHEN 'موقوف' THEN 'موقوفة' WHEN 'مسودة' THEN 'بانتظار المراجعة' ELSE status END AS status
+       FROM campaigns ORDER BY created_at DESC LIMIT 1000`,
+    ),
+    sql.query(
+      `SELECT 'PRF-' || comp.campaign_id::text || '-' || comp.user_id::text AS id,
+              comp.campaign_id::text AS "campaignId", comp.user_id::float8 AS "userId",
+              'TASK-' || comp.campaign_id::text AS "taskId",
+              CASE c.platform WHEN 'tiktok' THEN 'متابعة TikTok' ELSE 'اشتراك قناة' END AS "taskType",
+              COALESCE(comp.proof_image, '') AS image, comp.reward::float8 AS reward,
+              CASE comp.status WHEN 'approved' THEN 'معتمد' WHEN 'rejected' THEN 'مرفوض' ELSE 'قيد المراجعة' END AS status
+       FROM completions comp JOIN campaigns c ON c.id = comp.campaign_id
+       WHERE comp.proof_image IS NOT NULL
+       ORDER BY comp.started_at DESC LIMIT 1000`,
+    ),
+    sql.query(
+      `SELECT 'SIG-' || id::text AS id, user_id::float8 AS "userId", attempt, status,
+              to_char(created_at, 'YYYY-MM-DD HH24:MI') AS "createdAt"
+       FROM suspicious_signals ORDER BY created_at DESC LIMIT 1000`,
+    ),
+  ]);
+  ok(res, { users, deposits, withdrawals, campaigns, proofs, suspicious });
+}
+
+async function adminAction(req, res, collection, id) {
+  await requireAdmin(req);
+  const body = req.body ?? {};
+  const status = readText(body.status, 40);
+
+  if (collection === 'users') {
+    const userId = readPositiveInteger(id, Number.MAX_SAFE_INTEGER);
+    if (!userId || !['نشط', 'محظور'].includes(status)) throw new HttpError(400, 'Invalid request');
+    const rows = await sql.query(
+      `UPDATE users SET status = $2 WHERE id = $1 RETURNING id::float8 AS id`,
+      [userId, status],
+    );
+    if (!rows.length) throw new HttpError(404, 'Not found');
+    ok(res, { id: rows[0].id });
+    return;
   }
 
-  const client = await getPool().connect();
-  let completion;
-  try {
-    await client.query("BEGIN");
-    const locked = await client.query(
-      "SELECT * FROM campaigns WHERE id = $1 FOR UPDATE",
-      [Number(campaignId)],
+  if (collection === 'withdrawals') {
+    if (!['معتمد', 'مرفوض'].includes(status)) throw new HttpError(400, 'Invalid request');
+    const stored = status === 'معتمد' ? 'تم' : 'مرفوض';
+    const rows = await sql.query(
+      `WITH updated AS (
+         UPDATE withdrawals SET status = $2,
+           blockchain_tx_id = COALESCE($3, blockchain_tx_id)
+         WHERE id = $1 AND status = 'قيد المعالجة'
+         RETURNING user_id, amount
+       ), refund AS (
+         UPDATE users SET earned_balance = earned_balance + (SELECT amount FROM updated)
+         WHERE $2 = 'مرفوض' AND id = (SELECT user_id FROM updated)
+         RETURNING id
+       )
+       SELECT user_id::float8 AS "userId" FROM updated`,
+      [id, stored, readText(body.txId, 200)],
     );
-    const lockedCampaign = locked.rows[0];
-    if (!lockedCampaign || lockedCampaign.status !== "نشط") {
-      throw new ApiError(404, "Task not found or inactive.");
-    }
-    if (lockedCampaign.completed_count >= lockedCampaign.target_count) {
-      throw new ApiError(409, "This task has reached its completion limit.");
-    }
-    const existingResult = await client.query(
-      `SELECT * FROM task_completions
-        WHERE telegram_id = $1 AND campaign_id = $2
-        FOR UPDATE`,
-      [user.telegramId, Number(campaignId)],
-    );
-    const existing = existingResult.rows[0];
-    if (existing && ["pending", "approved"].includes(existing.status)) {
-      throw new ApiError(409, "This task is already submitted or completed.");
-    }
+    if (!rows.length) throw new HttpError(409, 'Request already processed');
+    ok(res, { id });
+    return;
+  }
 
-    if (existing) {
-      const updated = await client.query(
-        `UPDATE task_completions
-            SET status = $2, proof_text = $3, proof_url = $4,
-                review_note = NULL, reviewed_at = $5
-          WHERE id = $1
-          RETURNING *`,
-        [existing.id, status, proofText, proofUrl, status === "approved" ? new Date() : null],
+  if (collection === 'deposits') {
+    if (!['ناجح', 'فاشل'].includes(status)) throw new HttpError(400, 'Invalid request');
+    if (status === 'ناجح') {
+      const rows = await sql.query(
+        `WITH updated AS (
+           UPDATE deposits SET status = 'تم', credited = TRUE, blockchain_tx_id = COALESCE($2, blockchain_tx_id)
+           WHERE id = $1 AND credited = FALSE
+           RETURNING user_id, amount
+         ), credit AS (
+           UPDATE users SET advertiser_balance = advertiser_balance + (SELECT amount FROM updated)
+           WHERE id = (SELECT user_id FROM updated)
+           RETURNING id
+         )
+         SELECT user_id::float8 AS "userId" FROM updated`,
+        [id, readText(body.txId, 200)],
       );
-      completion = updated.rows[0];
+      if (!rows.length) throw new HttpError(409, 'Deposit already processed');
     } else {
-      const created = await client.query(
-        `INSERT INTO task_completions
-           (telegram_id, campaign_id, status, proof_text, proof_url, reviewed_at)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING *`,
-        [user.telegramId, Number(campaignId), status, proofText, proofUrl, status === "approved" ? new Date() : null],
+      const rows = await sql.query(
+        `WITH updated AS (
+           UPDATE deposits SET status = 'تم الإلغاء', reason = COALESCE($2, reason), credited = FALSE
+           WHERE id = $1
+           RETURNING user_id, amount, (SELECT credited FROM deposits WHERE id = $1) AS was_credited
+         ), reverse AS (
+           UPDATE users SET advertiser_balance = GREATEST(0, advertiser_balance - (SELECT amount FROM updated))
+           WHERE id = (SELECT user_id FROM updated) AND (SELECT was_credited FROM updated)
+           RETURNING id
+         )
+         SELECT user_id::float8 AS "userId" FROM updated`,
+        [id, readText(body.reason, 300)],
       );
-      completion = created.rows[0];
-      await client.query(
-        "UPDATE campaigns SET joined_count = joined_count + 1 WHERE id = $1",
-        [Number(campaignId)],
-      );
+      if (!rows.length) throw new HttpError(404, 'Not found');
     }
-
-    if (status === "approved") {
-      await client.query(
-        "UPDATE campaigns SET completed_count = completed_count + 1 WHERE id = $1",
-        [Number(campaignId)],
-      );
-      const balance = await client.query(
-        `UPDATE user_balances
-            SET viewer_balance = viewer_balance + $2, updated_at = now()
-          WHERE telegram_id = $1
-          RETURNING currency`,
-        [user.telegramId, lockedCampaign.reward],
-      );
-      if (!balance.rows[0]) throw new Error("User balance was not initialized.");
-      await client.query(
-        `INSERT INTO wallet_transactions
-           (telegram_id, task_completion_id, amount, currency, reason)
-         VALUES ($1, $2, $3, $4, 'task_reward')
-         ON CONFLICT (task_completion_id) DO NOTHING`,
-        [user.telegramId, completion.id, lockedCampaign.reward, balance.rows[0].currency],
-      );
-    }
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw error;
-  } finally {
-    client.release();
+    ok(res, { id });
+    return;
   }
 
-  res.status(201).json({ completion: mapCompletion(completion), ...(await getWallet(user.telegramId)) });
-}
-
-function validHttpsUrl(value, maxLength = 2_048) {
-  if (typeof value !== "string" || value.length > maxLength) return false;
-  try {
-    return new URL(value).protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-function multiplyAmount(amount, multiplier) {
-  const [whole, fraction = ""] = amount.split(".");
-  const scale = fraction.length;
-  const scaled = BigInt(`${whole}${fraction.padEnd(scale, "0")}`) * BigInt(multiplier);
-  if (!scale) return scaled.toString();
-  const digits = scaled.toString().padStart(scale + 1, "0");
-  return `${digits.slice(0, -scale)}.${digits.slice(-scale)}`;
-}
-
-async function createTask(req, res) {
-  const body = requestBody(req);
-  const platform = body.platform;
-  const title = typeof body.title === "string" ? body.title.trim() : "";
-  const description = typeof body.description === "string" ? body.description.trim() : "";
-  const link = body.link;
-  const image = body.image;
-  const targetCount = body.targetCount;
-  const reward = typeof body.reward === "string" ? body.reward : "";
-  if (
-    !["telegram", "tiktok"].includes(platform)
-    || title.length < 3
-    || title.length > 120
-    || description.length > 2_000
-    || !validHttpsUrl(link)
-    || (image !== undefined && !validHttpsUrl(image))
-    || !Number.isInteger(targetCount)
-    || targetCount < 1
-    || targetCount > 1_000_000
-    || !/^\d{1,8}(?:\.\d{1,4})?$/.test(reward)
-    || Number(reward) <= 0
-  ) {
-    throw new ApiError(400, "Invalid task details.");
-  }
-
-  if (platform === "telegram") {
-    const chatId = resolvePublicTelegramChatId(link);
-    if (!chatId) throw new ApiError(400, "Automatic Telegram tasks need a public t.me channel link.");
-    const bot = await telegramCall("getMe", {});
-    const membership = await telegramCall("getChatMember", { chat_id: chatId, user_id: bot.id });
-    if (membership.status !== "administrator" && membership.status !== "creator") {
-      throw new ApiError(409, "Add the Telegram bot as a channel administrator before creating this task.");
-    }
-  }
-
-  const price = multiplyAmount(reward, targetCount);
-  const result = await getPool().query(
-    `INSERT INTO campaigns
-       (platform, title, description, link, image, target_count, reward, price, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'نشط')
-     RETURNING *`,
-    [platform, title, description, link, image ?? null, targetCount, reward, price],
-  );
-  res.status(201).json(mapCampaign(result.rows[0]));
-}
-
-async function listCompletions(req, res) {
-  const url = new URL(req.url || "/api", `http://${req.headers.host || "localhost"}`);
-  const status = url.searchParams.get("status");
-  if (status && !["pending", "approved", "rejected"].includes(status)) {
-    throw new ApiError(400, "Invalid completion status filter.");
-  }
-  const values = [];
-  let filter = "";
-  if (status) {
-    values.push(status);
-    filter = "WHERE tc.status = $1";
-  }
-  const result = await getPool().query(
-    `SELECT tc.*, to_jsonb(c) AS task,
-            jsonb_build_object(
-              'telegramId', u.telegram_id,
-              'username', u.username,
-              'firstName', u.first_name,
-              'lastName', u.last_name
-            ) AS user
-       FROM task_completions tc
-       INNER JOIN campaigns c ON c.id = tc.campaign_id
-       INNER JOIN users u ON u.telegram_id = tc.telegram_id
-       ${filter}
-      ORDER BY tc.created_at ASC
-      LIMIT 100`,
-    values,
-  );
-  res.json(result.rows.map((row) => ({
-    completion: mapCompletion(row),
-    task: mapCampaign(row.task),
-    user: row.user,
-  })));
-}
-
-async function reviewCompletion(req, res, completionId) {
-  if (!/^[1-9]\d{0,15}$/.test(completionId) || !Number.isSafeInteger(Number(completionId))) {
-    throw new ApiError(400, "Invalid review request.");
-  }
-  const body = requestBody(req);
-  if (typeof body.approved !== "boolean") throw new ApiError(400, "Invalid review request.");
-  const reviewNote = typeof body.reviewNote === "string" ? body.reviewNote.trim() : "";
-  if (reviewNote.length > 1_000) throw new ApiError(400, "Invalid review request.");
-
-  const client = await getPool().connect();
-  let completion;
-  let telegramId;
-  try {
-    await client.query("BEGIN");
-    const completionResult = await client.query(
-      "SELECT * FROM task_completions WHERE id = $1 FOR UPDATE",
-      [Number(completionId)],
+  if (collection === 'proofs') {
+    if (!['معتمد', 'مرفوض'].includes(status)) throw new HttpError(400, 'Invalid request');
+    const match = /^PRF-(\d+)-(\d+)$/.exec(id);
+    if (!match) throw new HttpError(400, 'Invalid request');
+    const next = status === 'معتمد' ? 'approved' : 'rejected';
+    const rows = await sql.query(
+      `WITH updated AS (
+         UPDATE completions SET status = $3, completed_at = now()
+         WHERE campaign_id = $1 AND user_id = $2 AND status = 'pending'
+         RETURNING reward, user_id
+       ), credit AS (
+         UPDATE users SET earned_balance = earned_balance + (SELECT reward FROM updated)
+         WHERE $3 = 'approved' AND id = (SELECT user_id FROM updated)
+         RETURNING id
+       ), bump AS (
+         UPDATE campaigns SET completed_count = completed_count + 1
+         WHERE $3 = 'approved' AND id = $1 AND EXISTS (SELECT 1 FROM updated)
+         RETURNING id
+       )
+       SELECT user_id::float8 AS "userId" FROM updated`,
+      [match[1], match[2], next],
     );
-    const existing = completionResult.rows[0];
-    if (!existing) throw new ApiError(404, "Completion not found.");
-    if (existing.status !== "pending") {
-      throw new ApiError(409, "Only pending completions can be reviewed.");
-    }
-
-    let campaign;
-    if (body.approved) {
-      const campaignResult = await client.query(
-        "SELECT * FROM campaigns WHERE id = $1 FOR UPDATE",
-        [existing.campaign_id],
-      );
-      campaign = campaignResult.rows[0];
-      if (!campaign) throw new ApiError(404, "Completion not found.");
-      if (campaign.completed_count >= campaign.target_count) {
-        throw new ApiError(409, "This task has reached its completion limit.");
-      }
-    }
-
-    const newStatus = body.approved ? "approved" : "rejected";
-    const updated = await client.query(
-      `UPDATE task_completions
-          SET status = $2, review_note = $3, reviewed_at = now()
-        WHERE id = $1
-        RETURNING *`,
-      [existing.id, newStatus, reviewNote || null],
-    );
-    completion = updated.rows[0];
-    telegramId = Number(existing.telegram_id);
-
-    if (body.approved && campaign) {
-      await client.query(
-        "UPDATE campaigns SET completed_count = completed_count + 1 WHERE id = $1",
-        [campaign.id],
-      );
-      const balance = await client.query(
-        `UPDATE user_balances
-            SET viewer_balance = viewer_balance + $2, updated_at = now()
-          WHERE telegram_id = $1
-          RETURNING currency`,
-        [telegramId, campaign.reward],
-      );
-      if (!balance.rows[0]) throw new Error("User balance was not initialized.");
-      await client.query(
-        `INSERT INTO wallet_transactions
-           (telegram_id, task_completion_id, amount, currency, reason)
-         VALUES ($1, $2, $3, $4, 'task_reward')
-         ON CONFLICT (task_completion_id) DO NOTHING`,
-        [telegramId, completion.id, campaign.reward, balance.rows[0].currency],
-      );
-    }
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw error;
-  } finally {
-    client.release();
+    if (!rows.length) throw new HttpError(409, 'Proof already reviewed');
+    ok(res, { id });
+    return;
   }
 
-  res.json({ completion: mapCompletion(completion), ...(await getWallet(telegramId)) });
+  if (collection === 'campaigns') {
+    const match = /^CMP-(\d+)$/.exec(id);
+    const mapped = { 'نشطة': 'نشط', 'موقوفة': 'موقوف', 'مرفوضة': 'موقوف', 'أوقفتها الميزانية': 'موقوف' }[status];
+    if (!match || !mapped) throw new HttpError(400, 'Invalid request');
+    const rows = await sql.query(`UPDATE campaigns SET status = $2 WHERE id = $1 RETURNING id::text AS id`, [match[1], mapped]);
+    if (!rows.length) throw new HttpError(404, 'Not found');
+    ok(res, { id });
+    return;
+  }
+
+  if (collection === 'suspicious') {
+    const match = /^SIG-(\d+)$/.exec(id);
+    if (!match || !['مفتوح', 'تمت المراجعة'].includes(status)) throw new HttpError(400, 'Invalid request');
+    const rows = await sql.query(`UPDATE suspicious_signals SET status = $2 WHERE id = $1 RETURNING id`, [match[1], status]);
+    if (!rows.length) throw new HttpError(404, 'Not found');
+    ok(res, { id });
+    return;
+  }
+
+  throw new HttpError(404, 'Not found');
 }
+
+function routePath(req) {
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  const fromQuery = url.searchParams.get('path');
+  const raw = fromQuery ?? url.pathname.replace(/^\/api\/?/, '');
+  return { segments: raw.split('/').filter(Boolean), query: url.searchParams };
+}
+
+const EMPTY_GET_DATA = {
+  user: null,
+  balance: { advertiserBalance: 0, viewerBalance: 0 },
+  'admin/state': { users: [], deposits: [], withdrawals: [], campaigns: [], proofs: [], suspicious: [] },
+};
 
 async function dispatch(req, res) {
-  const path = apiPath(req).replace(/\/+$/, "") || "/";
-  const method = (req.method || "GET").toUpperCase();
+  const { segments, query } = routePath(req);
+  const method = req.method ?? 'GET';
+  const resource = segments[0];
+  const key = segments.join('/');
 
-  if (path === "/healthz" && method === "GET") {
-    return res.status(200).json({ ok: true });
+  if (!sql) {
+    if (method === 'GET') {
+      ok(res, key in EMPTY_GET_DATA ? EMPTY_GET_DATA[key] : []);
+      return;
+    }
+    fail(res, 503, 'Service unavailable');
+    return;
   }
-  if (path === "/neon-check" && method === "GET") {
-    await getPool().query("SELECT 1");
-    return res.status(200).json({ ok: true, database: "connected" });
+
+  await ensureSchema();
+
+  if (method === 'GET') {
+    if (!process.env.TELEGRAM_BOT_TOKEN || !authenticate(req)) {
+      if (resource === 'admin') {
+        fail(res, 401, 'Unauthorized');
+        return;
+      }
+      ok(res, key in EMPTY_GET_DATA ? EMPTY_GET_DATA[key] : []);
+      return;
+    }
+    if (key === 'tasks') return listTasks(req, res, query);
+    if (key === 'campaigns') return listCampaigns(req, res);
+    if (key === 'user') return getUser(req, res);
+    if (key === 'balance') return getBalance(req, res);
+    if (key === 'proofs') return listProofs(req, res);
+    if (key === 'deposits') return listDeposits(req, res);
+    if (key === 'withdrawals') return listWithdrawals(req, res);
+    if (key === 'admin/state') return adminState(req, res);
+    throw new HttpError(404, 'Not found');
   }
-  if (path === "/auth/telegram" && method === "POST") {
-    return registerTelegramUser(req, res);
+
+  if (method === 'POST') {
+    if (key === 'campaigns') return createCampaign(req, res);
+    if (key === 'deposits') return createDeposit(req, res);
+    if (key === 'withdrawals') return createWithdrawal(req, res);
+    if (key === 'ads/reward') return claimAdReward(req, res);
+    if (resource === 'tasks' && segments.length === 3) {
+      const id = readPositiveInteger(segments[1], Number.MAX_SAFE_INTEGER);
+      if (!id) throw new HttpError(400, 'Invalid request');
+      if (segments[2] === 'start') return startTask(req, res, id);
+      if (segments[2] === 'complete') return completeTask(req, res, id);
+      if (segments[2] === 'proof') return submitProof(req, res, id);
+    }
+    throw new HttpError(404, 'Not found');
   }
-  if (path === "/me" && method === "GET") {
-    const user = await getAuthenticatedUser(req);
-    return res.json({ user, ...(await getWallet(user.telegramId)) });
+
+  if (method === 'PATCH') {
+    if (resource === 'campaigns' && segments.length === 2) {
+      const id = readPositiveInteger(segments[1], Number.MAX_SAFE_INTEGER);
+      if (!id) throw new HttpError(400, 'Invalid request');
+      return updateCampaign(req, res, id);
+    }
+    if (resource === 'admin' && segments.length === 3) return adminAction(req, res, segments[1], segments[2]);
+    throw new HttpError(404, 'Not found');
   }
-  if (path === "/wallet/transactions" && method === "GET") {
-    const user = await getAuthenticatedUser(req);
-    const result = await getPool().query(
-      `SELECT id, amount, currency, reason, created_at
-         FROM wallet_transactions
-        WHERE telegram_id = $1
-        ORDER BY created_at DESC
-        LIMIT 50`,
-      [user.telegramId],
-    );
-    return res.json(result.rows.map((row) => ({
-      id: Number(row.id),
-      amount: row.amount,
-      currency: row.currency,
-      reason: row.reason,
-      createdAt: row.created_at,
-    })));
+
+  if (method === 'DELETE') {
+    if (resource === 'campaigns' && segments.length === 2) {
+      const id = readPositiveInteger(segments[1], Number.MAX_SAFE_INTEGER);
+      if (!id) throw new HttpError(400, 'Invalid request');
+      return deleteCampaign(req, res, id);
+    }
+    throw new HttpError(404, 'Not found');
   }
-  if (path === "/tasks" && method === "GET") {
-    return getTasks(await getAuthenticatedUser(req), res);
-  }
-  const completionRoute = path.match(/^\/tasks\/([1-9]\d{0,15})\/complete$/);
-  if (completionRoute && method === "POST") {
-    return completeTask(req, res, await getAuthenticatedUser(req), completionRoute[1]);
-  }
-  if (path === "/admin/tasks" && method === "POST") {
-    await requireAdmin(req);
-    return createTask(req, res);
-  }
-  if (path === "/admin/completions" && method === "GET") {
-    await requireAdmin(req);
-    return listCompletions(req, res);
-  }
-  const reviewRoute = path.match(/^\/admin\/completions\/([1-9]\d{0,15})\/review$/);
-  if (reviewRoute && method === "POST") {
-    await requireAdmin(req);
-    return reviewCompletion(req, res, reviewRoute[1]);
-  }
-  if (
-    path === "/auth/telegram"
-    || path === "/me"
-    || path === "/wallet/transactions"
-    || path === "/tasks"
-    || completionRoute
-    || path === "/admin/tasks"
-    || path === "/admin/completions"
-    || reviewRoute
-  ) {
-    res.setHeader("Allow", path === "/tasks" ? "GET" : path === "/me" || path === "/wallet/transactions" ? "GET" : "POST");
-    return res.status(405).json({ error: "Method not allowed." });
-  }
-  return res.status(404).json({ error: "API route not found." });
+
+  throw new HttpError(405, 'Method not allowed');
 }
 
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
   try {
     await dispatch(req, res);
   } catch (error) {
-    if (error instanceof ApiError) {
-      return res.status(error.status).json({ error: error.message });
+    if (error instanceof HttpError) {
+      fail(res, error.status, error.message);
+      return;
     }
-    console.error("API request failed", {
-      path: apiPath(req),
-      code: typeof error === "object" && error !== null && "code" in error ? error.code : undefined,
-    });
-    return res.status(500).json({ error: "Internal server error." });
+    console.error('API error:', error instanceof Error ? error.message : 'unknown');
+    fail(res, 500, 'Internal server error');
   }
 }
