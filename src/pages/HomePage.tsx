@@ -64,6 +64,8 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
   const [mobileMenu, setMobileMenu] = useState(false);
   const [advertiserBalance, setAdvertiserBalance] = useState(0);
   const [viewerBalance, setViewerBalance] = useState(0);
+  const [banned, setBanned] = useState(false);
+  const bannedRef = useRef(false);
   const [depositHistory, setDepositHistory] = useState<DepositRecord[]>([]);
   const [withdrawHistory, setWithdrawHistory] = useState<WithdrawRecord[]>([]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -140,10 +142,49 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       setTaskProofs(proofs.map(toTaskProof));
       setDepositHistory(deposits.map((row) => toDepositRecord(row, language)));
       setWithdrawHistory(withdrawals.map((row) => toWithdrawRecord(row, language)));
-    } catch {
+      bannedRef.current = false;
+      setBanned(false);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 403 && error.message === 'Account banned') {
+        bannedRef.current = true;
+        setBanned(true);
+        return;
+      }
       notify('warning', 'تعذر تحميل البيانات', 'تعذر الاتصال بالخادم. أعد المحاولة بعد قليل.');
     }
   }, [language, notify]);
+
+  // تحديث الرصيد دوريًا وعند العودة للتطبيق حتى لا تظهر قيمة قديمة بعد تعديل الإدارة.
+  const refreshBalance = useCallback(async () => {
+    if (!window.Telegram?.WebApp?.initData) return;
+    try {
+      const balance = await apiGet<ApiBalance>('balance');
+      setAdvertiserBalance(Number(balance?.advertiserBalance ?? 0));
+      setViewerBalance(Number(balance?.viewerBalance ?? 0));
+      if (bannedRef.current) {
+        bannedRef.current = false;
+        setBanned(false);
+        void refreshData();
+      }
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 403 && error.message === 'Account banned') {
+        bannedRef.current = true;
+        setBanned(true);
+      }
+    }
+  }, [refreshData]);
+
+  useEffect(() => {
+    const tick = () => { if (document.visibilityState === 'visible') void refreshBalance(); };
+    const timer = window.setInterval(tick, 8000);
+    document.addEventListener('visibilitychange', tick);
+    window.addEventListener('focus', tick);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+      window.removeEventListener('focus', tick);
+    };
+  }, [refreshBalance]);
 
   useEffect(() => {
     let active = true;
@@ -473,13 +514,9 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
   };
 
   const creditAdReward = async (_amount: number, title: string, message: string) => {
-    try {
-      await apiPost('ads/reward');
-      await refreshData();
-      notify('success', title, message);
-    } catch {
-      notify('warning', 'المكافأة غير متاحة', 'لم يقبل الخادم المكافأة الآن. انتظر قليلًا أو تحقق من الحد اليومي.');
-    }
+    // المكافأة سُجّلت فعلًا على الخادم من صفحة الإعلانات (ads/reward/<provider>)؛ هنا نحدّث الرصيد فقط.
+    await refreshData();
+    notify('success', title, message);
   };
 
   const openWatchInBrowser = (_video: Video) => {
@@ -504,6 +541,18 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     setScreen('add');
     onModeChange('creator');
   };
+
+  if (banned) {
+    return (
+      <main dir="rtl" className="grid min-h-dvh place-items-center bg-[#101a32] px-5 text-white">
+        <section className="w-full max-w-md rounded-3xl border border-white/10 bg-white/[.06] p-7 text-center shadow-2xl">
+          <span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-rose-400/15 text-3xl text-rose-300">⛔</span>
+          <h1 className="mt-5 text-2xl font-extrabold">تم حظر حسابك</h1>
+          <p className="mt-3 text-sm leading-6 text-blue-100/70">لا يمكنك استخدام المنصة حاليًا. تواصل مع الدعم إذا كنت تعتقد أن ذلك خطأ.</p>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <div className="min-h-[100dvh] bg-[#f7f9fc] text-[#12234b]">

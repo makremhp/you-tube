@@ -303,7 +303,8 @@ function RewardAdCard({
 }) {
   const isComplete = completed >= limit;
   const progress = Math.min(100, Math.round((completed / limit) * 100));
-  const startLabel = isArabic ? 'ابدأ التصفح' : 'Start browsing';
+  const isMonetagCard = provider === 'monetag';
+  const startLabel = isMonetagCard ? (isArabic ? 'شاهد' : 'Watch') : (isArabic ? 'ابدأ التصفح' : 'Start browsing');
   const isMonetag = provider === 'monetag';
 
   return (
@@ -313,11 +314,11 @@ function RewardAdCard({
     >
       <div className="relative z-10 flex items-center gap-3 rounded-xl px-1.5 py-1">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-lg">
-            {isMonetag ? <span className="text-lg font-black tracking-tight text-violet-700">M</span> : <img
-            src={`${import.meta.env.BASE_URL}assets/adstera-logo.jpeg`}
-            alt="Adsterra"
+            <img
+            src={`${import.meta.env.BASE_URL}assets/${isMonetag ? 'monetag-logo.jpg' : 'adstera-logo.jpeg'}`}
+            alt={isMonetag ? 'Monetag' : 'Adsterra'}
             className="h-full w-full object-cover"
-          />}
+          />
         </div>
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex flex-wrap items-center gap-2">
