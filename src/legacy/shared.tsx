@@ -477,7 +477,7 @@ function Sidebar({
           <Button
             type="button"
             data-testid="button-switch-admin"
-            onClick={() => { onModeChange('admin'); onClose?.(); }}
+            onClick={() => { onModeChange('admin'); }}
             variant="unstyled"
             size="fit"
             className={`flex w-full items-center gap-3 rounded-[13px] px-3 py-3 text-right text-sm font-semibold transition ${mode === 'admin' ? 'bg-white text-[#1557ee] shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
