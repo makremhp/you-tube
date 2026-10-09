@@ -62,7 +62,8 @@ export async function requireUser(req) {
     [telegramUser.id, telegramUser.first_name, telegramUser.last_name, telegramUser.username, telegramUser.photo_url],
   );
   const user = rows[0];
-  if (user.status === 'محظور') throw new HttpError(403, 'Forbidden');
+  // الحظر مطبّق على الخادم لكل مسارات المستخدم؛ المدير يبقى قادرًا على الوصول لأدوات الإدارة.
+  if (user.status === 'محظور' && !isAdmin(user.id)) throw new HttpError(403, 'Account banned');
   return { ...telegramUser, id: Number(user.id) };
 }
 
@@ -80,17 +81,45 @@ export async function requireAdmin(req) {
   return user;
 }
 
-export async function telegramCall(method, payload) {
+/*
+ * Low-level Telegram Bot API request. Never throws: always resolves to
+ * { ok, result } or { ok:false, errorCode, description, retryAfter } so callers
+ * can report the real failure reason. Pass { form } to send multipart data.
+ */
+export async function telegramRequest(method, payload, options = {}) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  if (!botToken) throw new HttpError(503, 'Service unavailable');
-  const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const data = await response.json();
-  if (!response.ok || !data.ok) return null;
-  return data.result;
+  if (!botToken) return { ok: false, errorCode: 503, description: 'TELEGRAM_BOT_TOKEN is not configured on the server' };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 15000);
+  try {
+    const init = options.form
+      ? { method: 'POST', body: options.form }
+      : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) };
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, { ...init, signal: controller.signal });
+    let data = null;
+    try { data = await response.json(); } catch { data = null; }
+    if (response.ok && data?.ok) return { ok: true, result: data.result };
+    return {
+      ok: false,
+      errorCode: Number(data?.error_code ?? response.status),
+      description: String(data?.description ?? `HTTP ${response.status}`),
+      retryAfter: Number(data?.parameters?.retry_after ?? 0) || 0,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      errorCode: 0,
+      description: error instanceof Error && error.name === 'AbortError' ? 'Telegram request timed out' : 'Network error while contacting Telegram',
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function telegramCall(method, payload) {
+  if (!process.env.TELEGRAM_BOT_TOKEN) throw new HttpError(503, 'Service unavailable');
+  const result = await telegramRequest(method, payload);
+  return result.ok ? result.result : null;
 }
 
 export function publicChannelHandle(value) {

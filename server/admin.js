@@ -1,7 +1,7 @@
 import { sql } from './db.js';
 import { HttpError, ok } from './errors.js';
 import { readMoney, readPositiveInteger, readText } from './validation.js';
-import { requireAdmin, telegramCall } from './auth.js';
+import { isAdmin, requireAdmin, telegramRequest } from './auth.js';
 
 async function recordAdminAction(adminId, collection, recordId, status) {
   try {
@@ -15,14 +15,10 @@ async function recordAdminAction(adminId, collection, recordId, status) {
   }
 }
 
-export async function adminState(req, res) {
-  await requireAdmin(req);
-  const [users, deposits, withdrawals, campaigns, proofs, suspicious, adminAudit, settings] = await Promise.all([
-    sql.query(
-      `SELECT id::float8 AS id,
+const ADMIN_USER_COLUMNS = `id::float8 AS id,
               TRIM(CONCAT(first_name, ' ', COALESCE(last_name, ''))) AS name,
               COALESCE(username, '') AS username,
-               COALESCE(photo_url, '') AS "photoUrl",
+              COALESCE(photo_url, '') AS "photoUrl",
               advertiser_balance::float8 AS "advertiserBalance",
               earned_balance::float8 AS "earnedBalance",
               status,
@@ -30,9 +26,12 @@ export async function adminState(req, res) {
               to_char(created_at, 'YYYY-MM-DD') AS "joinedAt",
               to_char(last_active_at, 'YYYY-MM-DD HH24:MI') AS "lastLogin",
               to_char(last_active_at, 'YYYY-MM-DD HH24:MI') AS "lastActive",
-              COALESCE(invited_by::text, '—') AS "invitedBy"
-       FROM vr_users ORDER BY created_at DESC LIMIT 1000`,
-    ),
+              COALESCE(invited_by::text, '—') AS "invitedBy"`;
+
+export async function adminState(req, res) {
+  await requireAdmin(req);
+  const [users, deposits, withdrawals, campaigns, proofs, suspicious, adminAudit, settings] = await Promise.all([
+    sql.query(`SELECT ${ADMIN_USER_COLUMNS} FROM vr_users ORDER BY created_at DESC LIMIT 1000`),
     sql.query(
       `SELECT id, user_id::float8 AS "userId", amount::float8 AS amount,
               CASE method WHEN 'stars' THEN 'Stars' ELSE 'USDT' END AS method,
@@ -88,62 +87,135 @@ export async function adminState(req, res) {
   ok(res, { users, deposits, withdrawals, campaigns, proofs, suspicious, adminAudit, maintenance: settings[0]?.maintenance === 'true' });
 }
 
+const PHOTO_CAPTION_LIMIT = 1024;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+function readNotificationImage(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string') throw new HttpError(400, 'صيغة الصورة غير صالحة');
+  const match = /^data:image\/(jpeg|jpg|png);base64,([A-Za-z0-9+/=\r\n]+)$/.exec(value.trim());
+  if (!match) throw new HttpError(400, 'الصورة يجب أن تكون بصيغة JPG أو PNG');
+  const bytes = Buffer.from(match[2], 'base64');
+  if (!bytes.length) throw new HttpError(400, 'الصورة فارغة');
+  if (bytes.length > MAX_IMAGE_BYTES) throw new HttpError(413, 'حجم الصورة أكبر من 5MB');
+  const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+  if (!isJpeg && !isPng) throw new HttpError(400, 'محتوى الملف ليس صورة صالحة');
+  return { bytes, mime: isPng ? 'image/png' : 'image/jpeg', filename: isPng ? 'notification.png' : 'notification.jpg' };
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function sendWithRetry(method, payload, options) {
+  let result = await telegramRequest(method, payload, options);
+  if (!result.ok && result.errorCode === 429 && result.retryAfter > 0 && result.retryAfter <= 5) {
+    await sleep(result.retryAfter * 1000 + 100);
+    result = await telegramRequest(method, payload, options);
+  }
+  return result;
+}
+
+/*
+ * Delivers one notification to one chat. Returns { ok } or { ok:false, reason }.
+ * With an image the photo is uploaded once; its file_id is reused for the rest of the broadcast.
+ */
+async function deliverNotification(chatId, text, replyMarkup, image, photoCache) {
+  const captionFits = text.length <= PHOTO_CAPTION_LIMIT;
+  if (image) {
+    let photoResult;
+    if (photoCache.fileId) {
+      photoResult = await sendWithRetry('sendPhoto', {
+        chat_id: chatId,
+        photo: photoCache.fileId,
+        ...(captionFits ? { caption: text, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) } : {}),
+      });
+    } else {
+      const form = new FormData();
+      form.append('chat_id', chatId);
+      form.append('photo', new Blob([image.bytes], { type: image.mime }), image.filename);
+      if (captionFits) {
+        form.append('caption', text);
+        if (replyMarkup) form.append('reply_markup', JSON.stringify(replyMarkup));
+      }
+      photoResult = await sendWithRetry('sendPhoto', null, { form, timeoutMs: 30000 });
+      if (photoResult.ok) {
+        const sizes = Array.isArray(photoResult.result?.photo) ? photoResult.result.photo : [];
+        const fileId = sizes[sizes.length - 1]?.file_id;
+        if (typeof fileId === 'string' && fileId) photoCache.fileId = fileId;
+      }
+    }
+    if (!photoResult.ok) return { ok: false, reason: photoResult.description };
+    if (captionFits) return { ok: true };
+    const follow = await sendWithRetry('sendMessage', { chat_id: chatId, text, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) });
+    return follow.ok ? { ok: true } : { ok: false, reason: follow.description };
+  }
+  const message = await sendWithRetry('sendMessage', { chat_id: chatId, text, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) });
+  return message.ok ? { ok: true } : { ok: false, reason: message.description };
+}
+
 export async function sendAdminNotification(req, res) {
   const admin = await requireAdmin(req);
+  if (!process.env.TELEGRAM_BOT_TOKEN) throw new HttpError(503, 'رمز البوت TELEGRAM_BOT_TOKEN غير مضبوط على الخادم');
   const body = req.body ?? {};
   const title = readText(body.title, 120);
   const message = readText(body.message, 3500);
-  if (!title || !message) throw new HttpError(400, 'Invalid notification');
+  if (!title || !message) throw new HttpError(400, 'أدخل عنوان الإشعار ونصه');
+  const image = readNotificationImage(body.image);
 
   let recipients;
+  let skipped = 0;
   if (body.recipientMode === 'all') {
     const rows = await sql.query(`SELECT id::text AS id FROM vr_users WHERE status <> 'محظور' ORDER BY id`);
     recipients = rows.map((row) => row.id);
+    if (!recipients.length) throw new HttpError(400, 'لا يوجد مستخدمون مسجّلون غير محظورين');
   } else if (body.recipientMode === 'ids' && Array.isArray(body.userIds)) {
     const suppliedIds = [...new Set(body.userIds.map((id) => String(id).trim()))];
-    if (suppliedIds.some((id) => !/^\d{1,20}$/.test(id))) throw new HttpError(400, 'Invalid Telegram IDs');
+    if (suppliedIds.some((id) => !/^\d{1,20}$/.test(id))) throw new HttpError(400, 'معرّفات Telegram يجب أن تكون أرقامًا فقط');
+    if (!suppliedIds.length || suppliedIds.length > 500) throw new HttpError(400, 'أدخل من 1 إلى 500 معرّف Telegram');
     const eligible = await sql.query(
       `SELECT id::text AS id FROM vr_users WHERE id = ANY($1::bigint[]) AND status <> 'محظور'`,
       [suppliedIds],
     );
     recipients = eligible.map((row) => row.id);
-    if (!recipients.length || recipients.length > 500) throw new HttpError(400, 'Provide between 1 and 500 valid Telegram IDs');
+    skipped = suppliedIds.length - recipients.length;
+    if (!recipients.length) throw new HttpError(400, 'لا يوجد بين المعرّفات المدخلة أي مستخدم مسجّل وغير محظور');
   } else {
-    throw new HttpError(400, 'Invalid recipients');
+    throw new HttpError(400, 'اختر المستلمين');
   }
 
   const buttonText = readText(body.buttonText, 40);
   const buttonUrl = typeof body.buttonUrl === 'string' ? body.buttonUrl.trim() : '';
   let replyMarkup;
-  if (Boolean(buttonText) !== Boolean(buttonUrl)) throw new HttpError(400, 'Button text and URL must be provided together');
+  if (Boolean(buttonText) !== Boolean(buttonUrl)) throw new HttpError(400, 'أدخل نص الزر ورابطه معًا أو اتركهما فارغين');
   if (buttonText && buttonUrl) {
     let parsed;
-    try { parsed = new URL(buttonUrl); } catch { throw new HttpError(400, 'Invalid button URL'); }
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new HttpError(400, 'Invalid button URL');
+    try { parsed = new URL(buttonUrl); } catch { throw new HttpError(400, 'رابط الزر غير صالح'); }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new HttpError(400, 'رابط الزر غير صالح');
     replyMarkup = { inline_keyboard: [[{ text: buttonText, url: parsed.toString() }]] };
   }
 
   let sent = 0;
   let failed = 0;
+  const reasons = new Map();
   const text = `${title}\n\n${message}`;
-  for (let offset = 0; offset < recipients.length; offset += 20) {
-    const batch = recipients.slice(offset, offset + 20);
-    const results = await Promise.all(batch.map(async (chatId) => {
-      try {
-        return await telegramCall('sendMessage', {
-          chat_id: chatId,
-          text,
-          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-        });
-      } catch {
-        return null;
-      }
-    }));
-    sent += results.filter(Boolean).length;
-    failed += results.filter((result) => !result).length;
+  const photoCache = { fileId: null };
+  let offset = 0;
+  while (offset < recipients.length) {
+    // Until the first successful upload yields a reusable file_id, send one at a time.
+    const size = image && !photoCache.fileId ? 1 : 20;
+    const batch = recipients.slice(offset, offset + size);
+    offset += batch.length;
+    const results = await Promise.all(batch.map((chatId) => deliverNotification(chatId, text, replyMarkup, image, photoCache)));
+    for (const result of results) {
+      if (result.ok) { sent += 1; continue; }
+      failed += 1;
+      reasons.set(result.reason, (reasons.get(result.reason) ?? 0) + 1);
+    }
+    if (offset < recipients.length) await sleep(60);
   }
-  await recordAdminAction(admin.id, 'notifications', 'broadcast', `sent:${sent};failed:${failed}`);
-  ok(res, { targeted: recipients.length, sent, failed });
+  const errors = [...reasons.entries()].map(([reason, count]) => ({ reason, count })).sort((x, y) => y.count - x.count).slice(0, 5);
+  await recordAdminAction(admin.id, 'notifications', 'broadcast', `sent:${sent};failed:${failed}${image ? ';image' : ''}`);
+  ok(res, { targeted: recipients.length, sent, failed, skipped, withImage: Boolean(image), errors });
 }
 
 export async function setMaintenance(req, res) {
@@ -168,37 +240,48 @@ export async function adminAction(req, res, collection, id) {
   if (collection === 'users') {
     const userId = readPositiveInteger(id, Number.MAX_SAFE_INTEGER);
     if (!userId) throw new HttpError(400, 'Invalid request');
-    const hasStatus = Object.hasOwn(body, 'status');
-    const advertiserBalance = Object.hasOwn(body, 'advertiserBalance') ? readMoney(body.advertiserBalance, 0, 100000000) : undefined;
-    const earnedBalance = Object.hasOwn(body, 'earnedBalance') ? readMoney(body.earnedBalance, 0, 100000000) : undefined;
-    const fullName = Object.hasOwn(body, 'name') ? readText(body.name, 160) : undefined;
+    const has = (key) => Object.hasOwn(body, key) && body[key] !== undefined;
+    const readBalance = (key) => {
+      if (!has(key)) return undefined;
+      const raw = body[key];
+      if ((typeof raw !== 'number' && typeof raw !== 'string') || raw === '') return null;
+      return readMoney(raw, 0, 100000000);
+    };
+    const hasStatus = has('status');
+    const advertiserBalance = readBalance('advertiserBalance');
+    const earnedBalance = readBalance('earnedBalance');
+    const fullName = has('name') ? readText(body.name, 160) : undefined;
     const [firstName, ...lastNameParts] = fullName?.split(/\s+/) ?? [];
     const lastName = fullName ? (lastNameParts.join(' ') || null) : undefined;
-    const username = Object.hasOwn(body, 'username')
+    const username = has('username')
       ? (body.username === '' ? '' : readText(body.username, 64)?.replace(/^@/, '') ?? null)
       : undefined;
     if ((hasStatus && !['نشط', 'محظور'].includes(status))
-      || (Object.hasOwn(body, 'advertiserBalance') && advertiserBalance === null)
-      || (Object.hasOwn(body, 'earnedBalance') && earnedBalance === null)
-      || (Object.hasOwn(body, 'name') && !firstName)
-      || (Object.hasOwn(body, 'username') && username === null)
+      || (has('advertiserBalance') && advertiserBalance === null)
+      || (has('earnedBalance') && earnedBalance === null)
+      || (has('name') && !firstName)
+      || (has('username') && username === null)
       || (!hasStatus && advertiserBalance === undefined && earnedBalance === undefined && firstName === undefined && username === undefined)) {
       throw new HttpError(400, 'Invalid request');
     }
+    // لا يُسمح بحظر مدير حتى لا يفقد المشرف وصوله إلى لوحة الإدارة.
+    if (hasStatus && status === 'محظور' && isAdmin(userId)) throw new HttpError(400, 'لا يمكن حظر حساب مدير');
     const rows = await sql.query(
       `UPDATE vr_users SET
-         status = COALESCE($2, status),
-         advertiser_balance = COALESCE($3, advertiser_balance),
-         earned_balance = COALESCE($4, earned_balance),
-         first_name = COALESCE($5, first_name),
-         last_name = CASE WHEN $5 IS NOT NULL THEN $6 ELSE last_name END,
-         username = COALESCE($7, username)
-       WHERE id = $1 RETURNING id::float8 AS id`,
+         status = COALESCE($2::text, status),
+         banned_by_system = CASE WHEN $2::text = 'نشط' THEN FALSE ELSE banned_by_system END,
+         advertiser_balance = COALESCE($3::numeric, advertiser_balance),
+         earned_balance = COALESCE($4::numeric, earned_balance),
+         first_name = COALESCE($5::text, first_name),
+         last_name = CASE WHEN $5::text IS NOT NULL THEN $6::text ELSE last_name END,
+         username = COALESCE($7::text, username)
+       WHERE id = $1
+       RETURNING ${ADMIN_USER_COLUMNS}`,
       [userId, hasStatus ? status : null, advertiserBalance ?? null, earnedBalance ?? null, firstName ?? null, lastName ?? null, username ?? null],
     );
     if (!rows.length) throw new HttpError(404, 'Not found');
     await recordAdminAction(admin.id, collection, id, hasStatus ? status : 'updated');
-    ok(res, { id: rows[0].id });
+    ok(res, rows[0]);
     return;
   }
 
