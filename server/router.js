@@ -1,4 +1,4 @@
-import { authenticate } from './auth.js';
+import { authenticate, isAdmin } from './auth.js';
 import { sql, ensureSchema } from './db.js';
 import { HttpError, fail, ok } from './errors.js';
 import { getYoutubeSettings } from './config.js';
@@ -15,12 +15,15 @@ import {
 import {
   adminAction,
   adminState,
+  sendAdminNotification,
+  setMaintenance,
 } from './admin.js';
 import {
   claimAdReward,
   createDeposit,
   createWithdrawal,
   getBalance,
+  getAdProgress,
   getUser,
   listDeposits,
   listProofs,
@@ -68,6 +71,20 @@ export async function dispatch(req, res) {
 
   await ensureSchema();
 
+  const authUser = authenticate(req);
+  const adminIds = (process.env.ADMIN_TELEGRAM_IDS ?? '').split(',').map((id) => id.trim());
+  const adminRequest = Boolean(authUser && adminIds.includes(String(authUser.id)));
+  const maintenanceRows = await sql.query(`SELECT value::text AS enabled FROM vr_platform_settings WHERE key = 'maintenance'`);
+  const maintenance = maintenanceRows[0]?.enabled === 'true';
+  if (method === 'GET' && key === 'maintenance') {
+    ok(res, { maintenance, isAdmin: Boolean(authUser && isAdmin(authUser.id)) });
+    return;
+  }
+  if (maintenance && !adminRequest) {
+    fail(res, 503, 'Platform is under maintenance');
+    return;
+  }
+
   if (method === 'GET') {
     if (!process.env.TELEGRAM_BOT_TOKEN || !authenticate(req)) {
       if (resource === 'admin') {
@@ -81,6 +98,8 @@ export async function dispatch(req, res) {
     if (key === 'campaigns') return listCampaigns(req, res);
     if (key === 'user') return getUser(req, res);
     if (key === 'balance') return getBalance(req, res);
+    if (key === 'ads/progress') return getAdProgress(req, res);
+    if (key === 'ads/progress/adstera' || key === 'ads/progress/monetag') return getAdProgress(req, res, segments[2]);
     if (key === 'proofs') return listProofs(req, res);
     if (key === 'deposits') return listDeposits(req, res);
     if (key === 'withdrawals') return listWithdrawals(req, res);
@@ -90,10 +109,12 @@ export async function dispatch(req, res) {
 
   if (method === 'POST') {
     if (key === 'session/entry') return checkTelegramMembershipOnEntry(req, res);
+    if (key === 'admin/notifications/send') return sendAdminNotification(req, res);
     if (key === 'campaigns') return createCampaign(req, res);
     if (key === 'deposits') return createDeposit(req, res);
     if (key === 'withdrawals') return createWithdrawal(req, res);
     if (key === 'ads/reward') return claimAdReward(req, res);
+    if (key === 'ads/reward/adstera' || key === 'ads/reward/monetag') return claimAdReward(req, res, segments[2]);
     if (resource === 'tasks' && segments.length === 3) {
       const id = readPositiveInteger(segments[1], Number.MAX_SAFE_INTEGER);
       if (!id) throw new HttpError(400, 'Invalid request');
@@ -105,6 +126,7 @@ export async function dispatch(req, res) {
   }
 
   if (method === 'PATCH') {
+    if (key === 'admin/settings/maintenance') return setMaintenance(req, res);
     if (resource === 'campaigns' && segments.length === 2) {
       const id = readPositiveInteger(segments[1], Number.MAX_SAFE_INTEGER);
       if (!id) throw new HttpError(400, 'Invalid request');

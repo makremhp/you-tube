@@ -42,9 +42,9 @@ export function getYoutubeSettings() {
 export const TELEGRAM_TASK_REWARD = Number(process.env.TELEGRAM_TASK_REWARD ?? 0.003);
 export const TELEGRAM_RETENTION_DAYS = 3;
 export const TIKTOK_TASK_REWARD = Number(process.env.TIKTOK_TASK_REWARD ?? 0.01);
-export const AD_REWARD = Number(process.env.AD_REWARD ?? 0.0005);
+export const AD_REWARD = Number(process.env.AD_REWARD ?? 0.0001);
 export const AD_DAILY_LIMIT = Number(process.env.AD_DAILY_LIMIT ?? 100);
-export const AD_MIN_INTERVAL_SECONDS = Number(process.env.AD_MIN_INTERVAL_SECONDS ?? 10);
+export const AD_MIN_INTERVAL_SECONDS = Number(process.env.AD_MIN_INTERVAL_SECONDS ?? 30);
 export const MIN_WATCH_TOLERANCE = 0.95;
 export const MAX_REQUESTED_VIEWS = 100_000_000;
 

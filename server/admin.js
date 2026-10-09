@@ -1,7 +1,7 @@
 import { sql } from './db.js';
 import { HttpError, ok } from './errors.js';
-import { requireAdmin } from './auth.js';
-import { readPositiveInteger, readText } from './validation.js';
+import { readMoney, readPositiveInteger, readText } from './validation.js';
+import { requireAdmin, telegramCall } from './auth.js';
 
 async function recordAdminAction(adminId, collection, recordId, status) {
   try {
@@ -17,11 +17,12 @@ async function recordAdminAction(adminId, collection, recordId, status) {
 
 export async function adminState(req, res) {
   await requireAdmin(req);
-  const [users, deposits, withdrawals, campaigns, proofs, suspicious, adminAudit] = await Promise.all([
+  const [users, deposits, withdrawals, campaigns, proofs, suspicious, adminAudit, settings] = await Promise.all([
     sql.query(
       `SELECT id::float8 AS id,
               TRIM(CONCAT(first_name, ' ', COALESCE(last_name, ''))) AS name,
               COALESCE(username, '') AS username,
+               COALESCE(photo_url, '') AS "photoUrl",
               advertiser_balance::float8 AS "advertiserBalance",
               earned_balance::float8 AS "earnedBalance",
               status,
@@ -82,8 +83,81 @@ export async function adminState(req, res) {
        FROM vr_admin_audit_log AS audit
        ORDER BY audit.created_at DESC LIMIT 500`,
     ),
+    sql.query(`SELECT value::text AS maintenance FROM vr_platform_settings WHERE key = 'maintenance'`),
   ]);
-  ok(res, { users, deposits, withdrawals, campaigns, proofs, suspicious, adminAudit });
+  ok(res, { users, deposits, withdrawals, campaigns, proofs, suspicious, adminAudit, maintenance: settings[0]?.maintenance === 'true' });
+}
+
+export async function sendAdminNotification(req, res) {
+  const admin = await requireAdmin(req);
+  const body = req.body ?? {};
+  const title = readText(body.title, 120);
+  const message = readText(body.message, 3500);
+  if (!title || !message) throw new HttpError(400, 'Invalid notification');
+
+  let recipients;
+  if (body.recipientMode === 'all') {
+    const rows = await sql.query(`SELECT id::text AS id FROM vr_users WHERE status <> 'محظور' ORDER BY id`);
+    recipients = rows.map((row) => row.id);
+  } else if (body.recipientMode === 'ids' && Array.isArray(body.userIds)) {
+    const suppliedIds = [...new Set(body.userIds.map((id) => String(id).trim()))];
+    if (suppliedIds.some((id) => !/^\d{1,20}$/.test(id))) throw new HttpError(400, 'Invalid Telegram IDs');
+    const eligible = await sql.query(
+      `SELECT id::text AS id FROM vr_users WHERE id = ANY($1::bigint[]) AND status <> 'محظور'`,
+      [suppliedIds],
+    );
+    recipients = eligible.map((row) => row.id);
+    if (!recipients.length || recipients.length > 500) throw new HttpError(400, 'Provide between 1 and 500 valid Telegram IDs');
+  } else {
+    throw new HttpError(400, 'Invalid recipients');
+  }
+
+  const buttonText = readText(body.buttonText, 40);
+  const buttonUrl = typeof body.buttonUrl === 'string' ? body.buttonUrl.trim() : '';
+  let replyMarkup;
+  if (Boolean(buttonText) !== Boolean(buttonUrl)) throw new HttpError(400, 'Button text and URL must be provided together');
+  if (buttonText && buttonUrl) {
+    let parsed;
+    try { parsed = new URL(buttonUrl); } catch { throw new HttpError(400, 'Invalid button URL'); }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new HttpError(400, 'Invalid button URL');
+    replyMarkup = { inline_keyboard: [[{ text: buttonText, url: parsed.toString() }]] };
+  }
+
+  let sent = 0;
+  let failed = 0;
+  const text = `${title}\n\n${message}`;
+  for (let offset = 0; offset < recipients.length; offset += 20) {
+    const batch = recipients.slice(offset, offset + 20);
+    const results = await Promise.all(batch.map(async (chatId) => {
+      try {
+        return await telegramCall('sendMessage', {
+          chat_id: chatId,
+          text,
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+        });
+      } catch {
+        return null;
+      }
+    }));
+    sent += results.filter(Boolean).length;
+    failed += results.filter((result) => !result).length;
+  }
+  await recordAdminAction(admin.id, 'notifications', 'broadcast', `sent:${sent};failed:${failed}`);
+  ok(res, { targeted: recipients.length, sent, failed });
+}
+
+export async function setMaintenance(req, res) {
+  const admin = await requireAdmin(req);
+  if (typeof req.body?.enabled !== 'boolean') throw new HttpError(400, 'Invalid maintenance setting');
+  const rows = await sql.query(
+    `INSERT INTO vr_platform_settings (key, value, updated_at)
+     VALUES ('maintenance', $1::jsonb, now())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+     RETURNING value::text AS value`,
+    [JSON.stringify(req.body.enabled)],
+  );
+  await recordAdminAction(admin.id, 'settings', 'maintenance', req.body.enabled ? 'enabled' : 'disabled');
+  ok(res, { maintenance: rows[0]?.value === 'true' });
 }
 
 export async function adminAction(req, res, collection, id) {
@@ -93,13 +167,37 @@ export async function adminAction(req, res, collection, id) {
 
   if (collection === 'users') {
     const userId = readPositiveInteger(id, Number.MAX_SAFE_INTEGER);
-    if (!userId || !['نشط', 'محظور'].includes(status)) throw new HttpError(400, 'Invalid request');
+    if (!userId) throw new HttpError(400, 'Invalid request');
+    const hasStatus = Object.hasOwn(body, 'status');
+    const advertiserBalance = Object.hasOwn(body, 'advertiserBalance') ? readMoney(body.advertiserBalance, 0, 100000000) : undefined;
+    const earnedBalance = Object.hasOwn(body, 'earnedBalance') ? readMoney(body.earnedBalance, 0, 100000000) : undefined;
+    const fullName = Object.hasOwn(body, 'name') ? readText(body.name, 160) : undefined;
+    const [firstName, ...lastNameParts] = fullName?.split(/\s+/) ?? [];
+    const lastName = fullName ? (lastNameParts.join(' ') || null) : undefined;
+    const username = Object.hasOwn(body, 'username')
+      ? (body.username === '' ? '' : readText(body.username, 64)?.replace(/^@/, '') ?? null)
+      : undefined;
+    if ((hasStatus && !['نشط', 'محظور'].includes(status))
+      || (Object.hasOwn(body, 'advertiserBalance') && advertiserBalance === null)
+      || (Object.hasOwn(body, 'earnedBalance') && earnedBalance === null)
+      || (Object.hasOwn(body, 'name') && !firstName)
+      || (Object.hasOwn(body, 'username') && username === null)
+      || (!hasStatus && advertiserBalance === undefined && earnedBalance === undefined && firstName === undefined && username === undefined)) {
+      throw new HttpError(400, 'Invalid request');
+    }
     const rows = await sql.query(
-      `UPDATE vr_users SET status = $2 WHERE id = $1 RETURNING id::float8 AS id`,
-      [userId, status],
+      `UPDATE vr_users SET
+         status = COALESCE($2, status),
+         advertiser_balance = COALESCE($3, advertiser_balance),
+         earned_balance = COALESCE($4, earned_balance),
+         first_name = COALESCE($5, first_name),
+         last_name = CASE WHEN $5 IS NOT NULL THEN $6 ELSE last_name END,
+         username = COALESCE($7, username)
+       WHERE id = $1 RETURNING id::float8 AS id`,
+      [userId, hasStatus ? status : null, advertiserBalance ?? null, earnedBalance ?? null, firstName ?? null, lastName ?? null, username ?? null],
     );
     if (!rows.length) throw new HttpError(404, 'Not found');
-    await recordAdminAction(admin.id, collection, id, status);
+    await recordAdminAction(admin.id, collection, id, hasStatus ? status : 'updated');
     ok(res, { id: rows[0].id });
     return;
   }

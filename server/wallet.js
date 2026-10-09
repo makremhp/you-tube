@@ -9,19 +9,20 @@ async function nextMemoTag(userId) {
   return `${userId}#${rows[0].sequence}`;
 }
 
-export async function claimAdReward(req, res) {
+export async function claimAdReward(req, res, provider = 'adstera') {
   const user = await requireUser(req);
+  const rewardsTable = provider === 'monetag' ? 'vr_monetag_ad_rewards' : 'vr_ad_rewards';
   const rows = await sql.query(
     `WITH bump AS (
-       INSERT INTO vr_ad_rewards (user_id, day, count, last_at)
+       INSERT INTO ${rewardsTable} (user_id, day, count, last_at)
        VALUES ($1, (now() AT TIME ZONE 'UTC')::date, 1, now())
        ON CONFLICT (user_id, day) DO UPDATE
-         SET count = vr_ad_rewards.count + 1, last_at = now()
-         WHERE vr_ad_rewards.count < $2
-           AND vr_ad_rewards.last_at <= now() - make_interval(secs => $4::float8)
+         SET count = ${rewardsTable}.count + 1, last_at = now()
+         WHERE ${rewardsTable}.count < $2
+           AND ${rewardsTable}.last_at <= now() - make_interval(secs => $4::float8)
        RETURNING count
      ), credit AS (
-       UPDATE vr_users SET earned_balance = earned_balance + $3
+        UPDATE vr_users SET earned_balance = earned_balance + $3
        WHERE id = $1 AND EXISTS (SELECT 1 FROM bump)
        RETURNING id
      )
@@ -29,7 +30,17 @@ export async function claimAdReward(req, res) {
     [user.id, AD_DAILY_LIMIT, AD_REWARD, AD_MIN_INTERVAL_SECONDS],
   );
   if (!rows.length) throw new HttpError(429, 'Reward not available');
-  ok(res, { reward: AD_REWARD, claimedToday: Number(rows[0].count) });
+  ok(res, { reward: AD_REWARD, claimedToday: Number(rows[0].count), provider });
+}
+
+export async function getAdProgress(req, res, provider = 'adstera') {
+  const user = await requireUser(req);
+  const rewardsTable = provider === 'monetag' ? 'vr_monetag_ad_rewards' : 'vr_ad_rewards';
+  const rows = await sql.query(
+    `SELECT count FROM ${rewardsTable} WHERE user_id = $1 AND day = (now() AT TIME ZONE 'UTC')::date`,
+    [user.id],
+  );
+  ok(res, { claimedToday: Number(rows[0]?.count ?? 0) });
 }
 
 export async function listProofs(req, res) {

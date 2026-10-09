@@ -114,6 +114,13 @@ export function ensureSchema() {
           last_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           PRIMARY KEY (user_id, day)
         )`,
+        `CREATE TABLE IF NOT EXISTS vr_monetag_ad_rewards (
+          user_id BIGINT NOT NULL REFERENCES vr_users(id),
+          day DATE NOT NULL,
+          count INTEGER NOT NULL DEFAULT 0,
+          last_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (user_id, day)
+        )`,
         `CREATE TABLE IF NOT EXISTS vr_suspicious_signals (
           id BIGSERIAL PRIMARY KEY,
           user_id BIGINT NOT NULL REFERENCES vr_users(id),
@@ -129,6 +136,14 @@ export function ensureSchema() {
           new_status TEXT NOT NULL,
           created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )`,
+        `CREATE TABLE IF NOT EXISTS vr_platform_settings (
+          key TEXT PRIMARY KEY,
+          value JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )`,
+        `INSERT INTO vr_platform_settings (key, value)
+         VALUES ('maintenance', 'false'::jsonb)
+         ON CONFLICT (key) DO NOTHING`,
         `CREATE INDEX IF NOT EXISTS vr_campaigns_owner_idx ON vr_campaigns (owner_id)`,
         `CREATE INDEX IF NOT EXISTS vr_campaigns_platform_status_idx ON vr_campaigns (platform, status)`,
         `CREATE INDEX IF NOT EXISTS vr_deposits_user_idx ON vr_deposits (user_id, created_at DESC)`,
