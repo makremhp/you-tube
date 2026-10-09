@@ -8,6 +8,7 @@ import NotFound from '@/pages/not-found';
 import {
   ArrowDownLeft,
   ArrowUpLeft,
+  Activity,
   BarChart3,
   Check,
   CheckCircle2,
@@ -195,7 +196,7 @@ type TransactionStatus = 'تم' | 'قيد المعالجة' | 'تم الإلغا
 type PaymentMethod = 'stars' | 'binance' | 'web3';
 type DepositMethod = 'stars' | 'web3';
 type WithdrawMethod = 'binance' | 'web3';
-type AppScreen = 'overview' | 'campaigns' | 'campaign-detail' | 'watch' | 'publish' | 'add' | 'deposit' | 'withdraw' | 'deposit-history' | 'withdraw-history' | 'telegram-tasks' | 'tiktok-tasks' | 'tiktok-task' | 'ads' | 'admin-overview' | 'admin-users' | 'admin-deposits' | 'admin-withdrawals' | 'admin-campaigns' | 'admin-proofs' | 'admin-ads' | 'admin-settings' | 'admin-notifications' | 'admin-suspicious';
+type AppScreen = 'overview' | 'campaigns' | 'campaign-detail' | 'watch' | 'publish' | 'add' | 'deposit' | 'withdraw' | 'deposit-history' | 'withdraw-history' | 'telegram-tasks' | 'tiktok-tasks' | 'tiktok-task' | 'ads' | 'admin-overview' | 'admin-users' | 'admin-deposits' | 'admin-withdrawals' | 'admin-campaigns' | 'admin-proofs' | 'admin-ads' | 'admin-settings' | 'admin-notifications' | 'admin-suspicious' | 'admin-audit';
 
 type DepositRecord = {
   id: string;
@@ -387,6 +388,7 @@ function Sidebar({
   mode,
   screen,
   telegramUser,
+  adminEnabled,
   onModeChange,
   onNavigate,
   onAdd,
@@ -396,6 +398,7 @@ function Sidebar({
   mode: 'creator' | 'viewer' | 'admin';
   screen: AppScreen;
   telegramUser: TelegramUser | null;
+  adminEnabled: boolean;
   onModeChange: (mode: 'creator' | 'viewer' | 'admin') => void;
   onNavigate: (screen: AppScreen) => void;
   onAdd: () => void;
@@ -415,6 +418,7 @@ function Sidebar({
         { icon: Settings2, label: 'الإعدادات', screen: 'admin-settings' as AppScreen },
         { icon: Share2, label: 'الإشعارات', screen: 'admin-notifications' as AppScreen },
         { icon: Timer, label: 'مستخدمون مشبوهون', screen: 'admin-suspicious' as AppScreen },
+        { icon: Activity, label: 'سجل إجراءات الإدارة', screen: 'admin-audit' as AppScreen },
       ]
     : mode === 'creator'
       ? [
@@ -469,18 +473,20 @@ function Sidebar({
           <span>اربح</span>
           {mode === 'viewer' && <span className="mr-auto h-1.5 w-1.5 rounded-full bg-[#1557ee]" />}
         </Button>
-        <Button
-          type="button"
-          data-testid="button-switch-admin"
-          onClick={() => { onModeChange('admin'); onClose?.(); }}
-          variant="unstyled"
-          size="fit"
-          className={`flex w-full items-center gap-3 rounded-[13px] px-3 py-3 text-right text-sm font-semibold transition ${mode === 'admin' ? 'bg-white text-[#1557ee] shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-        >
-          <ShieldCheck className="h-[18px] w-[18px]" />
-          <span>الإدارة</span>
-          {mode === 'admin' && <span className="mr-auto h-1.5 w-1.5 rounded-full bg-[#1557ee]" />}
-        </Button>
+        {adminEnabled && (
+          <Button
+            type="button"
+            data-testid="button-switch-admin"
+            onClick={() => { onModeChange('admin'); onClose?.(); }}
+            variant="unstyled"
+            size="fit"
+            className={`flex w-full items-center gap-3 rounded-[13px] px-3 py-3 text-right text-sm font-semibold transition ${mode === 'admin' ? 'bg-white text-[#1557ee] shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+          >
+            <ShieldCheck className="h-[18px] w-[18px]" />
+            <span>الإدارة</span>
+            {mode === 'admin' && <span className="mr-auto h-1.5 w-1.5 rounded-full bg-[#1557ee]" />}
+          </Button>
+        )}
       </div>
       <div className="mt-8">
         <div className="mb-3 px-3 text-[10px] font-bold tracking-[.16em] text-slate-400">{mode === 'creator' ? 'إدارة الإعلانات' : mode === 'admin' ? 'صفحات الإدارة' : 'مساحة الربح'}</div>
