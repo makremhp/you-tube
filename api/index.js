@@ -44,7 +44,7 @@ function ensureSchema() {
   if (!schemaReady) {
     schemaReady = (async () => {
       const statements = [
-        `CREATE TABLE IF NOT EXISTS users (
+        `CREATE TABLE IF NOT EXISTS vr_users (
           id BIGINT PRIMARY KEY,
           first_name TEXT NOT NULL DEFAULT '',
           last_name TEXT,
@@ -58,9 +58,9 @@ function ensureSchema() {
           created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           last_active_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )`,
-        `CREATE TABLE IF NOT EXISTS campaigns (
+        `CREATE TABLE IF NOT EXISTS vr_campaigns (
           id BIGSERIAL PRIMARY KEY,
-          owner_id BIGINT NOT NULL REFERENCES users(id),
+          owner_id BIGINT NOT NULL REFERENCES vr_users(id),
           platform TEXT NOT NULL,
           title TEXT NOT NULL,
           description TEXT,
@@ -80,9 +80,9 @@ function ensureSchema() {
           completed_count INTEGER NOT NULL DEFAULT 0,
           created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )`,
-        `CREATE TABLE IF NOT EXISTS completions (
-          campaign_id BIGINT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
-          user_id BIGINT NOT NULL REFERENCES users(id),
+        `CREATE TABLE IF NOT EXISTS vr_completions (
+          campaign_id BIGINT NOT NULL REFERENCES vr_campaigns(id) ON DELETE CASCADE,
+          user_id BIGINT NOT NULL REFERENCES vr_users(id),
           status TEXT NOT NULL,
           proof_image TEXT,
           reward NUMERIC(18,6),
@@ -90,10 +90,10 @@ function ensureSchema() {
           completed_at TIMESTAMPTZ,
           PRIMARY KEY (campaign_id, user_id)
         )`,
-        `CREATE SEQUENCE IF NOT EXISTS memo_seq START 1`,
-        `CREATE TABLE IF NOT EXISTS deposits (
+        `CREATE SEQUENCE IF NOT EXISTS vr_memo_seq START 1`,
+        `CREATE TABLE IF NOT EXISTS vr_deposits (
           id TEXT PRIMARY KEY,
-          user_id BIGINT NOT NULL REFERENCES users(id),
+          user_id BIGINT NOT NULL REFERENCES vr_users(id),
           amount NUMERIC(18,6) NOT NULL,
           method TEXT NOT NULL,
           destination TEXT NOT NULL,
@@ -104,9 +104,9 @@ function ensureSchema() {
           status TEXT NOT NULL DEFAULT 'قيد المعالجة',
           created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )`,
-        `CREATE TABLE IF NOT EXISTS withdrawals (
+        `CREATE TABLE IF NOT EXISTS vr_withdrawals (
           id TEXT PRIMARY KEY,
-          user_id BIGINT NOT NULL REFERENCES users(id),
+          user_id BIGINT NOT NULL REFERENCES vr_users(id),
           amount NUMERIC(18,6) NOT NULL,
           method TEXT NOT NULL,
           destination TEXT NOT NULL,
@@ -115,24 +115,24 @@ function ensureSchema() {
           status TEXT NOT NULL DEFAULT 'قيد المعالجة',
           created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )`,
-        `CREATE TABLE IF NOT EXISTS ad_rewards (
-          user_id BIGINT NOT NULL REFERENCES users(id),
+        `CREATE TABLE IF NOT EXISTS vr_ad_rewards (
+          user_id BIGINT NOT NULL REFERENCES vr_users(id),
           day DATE NOT NULL,
           count INTEGER NOT NULL DEFAULT 0,
           last_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           PRIMARY KEY (user_id, day)
         )`,
-        `CREATE TABLE IF NOT EXISTS suspicious_signals (
+        `CREATE TABLE IF NOT EXISTS vr_suspicious_signals (
           id BIGSERIAL PRIMARY KEY,
-          user_id BIGINT NOT NULL REFERENCES users(id),
+          user_id BIGINT NOT NULL REFERENCES vr_users(id),
           attempt TEXT NOT NULL,
           status TEXT NOT NULL DEFAULT 'مفتوح',
           created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )`,
-        `CREATE INDEX IF NOT EXISTS campaigns_owner_idx ON campaigns (owner_id)`,
-        `CREATE INDEX IF NOT EXISTS campaigns_platform_status_idx ON campaigns (platform, status)`,
-        `CREATE INDEX IF NOT EXISTS deposits_user_idx ON deposits (user_id, created_at DESC)`,
-        `CREATE INDEX IF NOT EXISTS withdrawals_user_idx ON withdrawals (user_id, created_at DESC)`,
+        `CREATE INDEX IF NOT EXISTS vr_campaigns_owner_idx ON vr_campaigns (owner_id)`,
+        `CREATE INDEX IF NOT EXISTS vr_campaigns_platform_status_idx ON vr_campaigns (platform, status)`,
+        `CREATE INDEX IF NOT EXISTS vr_deposits_user_idx ON vr_deposits (user_id, created_at DESC)`,
+        `CREATE INDEX IF NOT EXISTS vr_withdrawals_user_idx ON vr_withdrawals (user_id, created_at DESC)`,
       ];
       for (const statement of statements) {
         await sql.query(statement);
@@ -206,7 +206,7 @@ async function requireUser(req) {
   const telegramUser = authenticate(req);
   if (!telegramUser) throw new HttpError(401, 'Unauthorized');
   const rows = await sql.query(
-    `INSERT INTO users (id, first_name, last_name, username, photo_url)
+    `INSERT INTO vr_users (id, first_name, last_name, username, photo_url)
      VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (id) DO UPDATE SET
        first_name = EXCLUDED.first_name,
@@ -343,7 +343,7 @@ function newIdentifier(prefix) {
 }
 
 async function nextMemoTag(userId) {
-  const rows = await sql.query(`SELECT nextval('memo_seq')::text AS sequence`);
+  const rows = await sql.query(`SELECT nextval('vr_memo_seq')::text AS sequence`);
   return `${userId}#${rows[0].sequence}`;
 }
 
@@ -357,8 +357,8 @@ async function listTasks(req, res, query) {
     `SELECT ${CAMPAIGN_COLUMNS},
             comp.status AS "userStatus",
             (comp.status = 'completed') AS completed
-     FROM campaigns c
-     LEFT JOIN completions comp ON comp.campaign_id = c.id AND comp.user_id = $1
+     FROM vr_campaigns c
+     LEFT JOIN vr_completions comp ON comp.campaign_id = c.id AND comp.user_id = $1
      WHERE c.status = 'نشط' AND ($2::text IS NULL OR c.platform = $2)
      ORDER BY c.created_at DESC
      LIMIT 200`,
@@ -371,7 +371,7 @@ async function listCampaigns(req, res) {
   const user = await requireUser(req);
   const rows = await sql.query(
     `SELECT ${CAMPAIGN_COLUMNS}
-     FROM campaigns c
+     FROM vr_campaigns c
      WHERE c.owner_id = $1
      ORDER BY c.created_at DESC
      LIMIT 200`,
@@ -395,7 +395,7 @@ async function createCampaign(req, res) {
     const status = body.status === 'مسودة' ? 'مسودة' : 'نشط';
     const creator = readText(body.creator, 120) ?? ([user.first_name, user.last_name].filter(Boolean).join(' ') || null);
     const rows = await sql.query(
-      `INSERT INTO campaigns (owner_id, platform, title, description, creator, link, thumbnail, duration, cpm, reward, country, device, status)
+      `INSERT INTO vr_campaigns (owner_id, platform, title, description, creator, link, thumbnail, duration, cpm, reward, country, device, status)
        VALUES ($1, 'youtube', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING id::text AS id`,
       [
@@ -416,7 +416,7 @@ async function createCampaign(req, res) {
     status = (await botIsChannelAdmin(link)) ? 'نشط' : 'بانتظار تحقق البوت';
   }
   const rows = await sql.query(
-    `INSERT INTO campaigns (owner_id, platform, title, description, link, thumbnail, target_count, price, reward, status)
+    `INSERT INTO vr_campaigns (owner_id, platform, title, description, link, thumbnail, target_count, price, reward, status)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING id::text AS id, status`,
     [
@@ -440,13 +440,13 @@ async function updateCampaign(req, res, id) {
 
   let nextStatus = status;
   if (status === 'نشط') {
-    const current = await sql.query(`SELECT platform, link FROM campaigns WHERE id = $1 AND owner_id = $2`, [id, user.id]);
+    const current = await sql.query(`SELECT platform, link FROM vr_campaigns WHERE id = $1 AND owner_id = $2`, [id, user.id]);
     if (current[0]?.platform === 'telegram' && !(await botIsChannelAdmin(link ?? current[0].link))) {
       nextStatus = 'بانتظار تحقق البوت';
     }
   }
   const rows = await sql.query(
-    `UPDATE campaigns SET
+    `UPDATE vr_campaigns SET
        title = COALESCE($3, title),
        link = COALESCE($4, link),
        status = COALESCE($5, status)
@@ -460,7 +460,7 @@ async function updateCampaign(req, res, id) {
 
 async function deleteCampaign(req, res, id) {
   const user = await requireUser(req);
-  const rows = await sql.query(`DELETE FROM campaigns WHERE id = $1 AND owner_id = $2 RETURNING id::text AS id`, [id, user.id]);
+  const rows = await sql.query(`DELETE FROM vr_campaigns WHERE id = $1 AND owner_id = $2 RETURNING id::text AS id`, [id, user.id]);
   if (!rows.length) throw new HttpError(404, 'Not found');
   ok(res, { id: rows[0].id });
 }
@@ -469,20 +469,20 @@ async function startTask(req, res, id) {
   const user = await requireUser(req);
   const rows = await sql.query(
     `WITH target AS (
-       SELECT id FROM campaigns WHERE id = $1 AND status = 'نشط'
+       SELECT id FROM vr_campaigns WHERE id = $1 AND status = 'نشط'
      ), started AS (
-       INSERT INTO completions (campaign_id, user_id, status)
+       INSERT INTO vr_completions (campaign_id, user_id, status)
        SELECT id, $2, 'started' FROM target
        ON CONFLICT (campaign_id, user_id) DO NOTHING
        RETURNING status
      ), joined AS (
-       UPDATE campaigns SET joined_count = joined_count + 1
+       UPDATE vr_campaigns SET joined_count = joined_count + 1
        WHERE id = $1 AND EXISTS (SELECT 1 FROM started)
        RETURNING id
      )
      SELECT COALESCE(
        (SELECT status FROM started),
-       (SELECT status FROM completions WHERE campaign_id = $1 AND user_id = $2)
+       (SELECT status FROM vr_completions WHERE campaign_id = $1 AND user_id = $2)
      ) AS status`,
     [id, user.id],
   );
@@ -493,7 +493,7 @@ async function startTask(req, res, id) {
 async function completeTask(req, res, id) {
   const user = await requireUser(req);
   const campaigns = await sql.query(
-    `SELECT platform, link, duration, cpm::float8 AS cpm, reward::float8 AS reward FROM campaigns WHERE id = $1 AND status = 'نشط'`,
+    `SELECT platform, link, duration, cpm::float8 AS cpm, reward::float8 AS reward FROM vr_campaigns WHERE id = $1 AND status = 'نشط'`,
     [id],
   );
   const campaign = campaigns[0];
@@ -504,16 +504,16 @@ async function completeTask(req, res, id) {
     const reward = campaign.reward ?? viewerReward(campaign.cpm);
     const rows = await sql.query(
       `WITH done AS (
-         UPDATE completions SET status = 'completed', completed_at = now(), reward = $3
+         UPDATE vr_completions SET status = 'completed', completed_at = now(), reward = $3
          WHERE campaign_id = $1 AND user_id = $2 AND status = 'started'
            AND started_at <= now() - make_interval(secs => $4::float8)
          RETURNING reward
        ), credit AS (
-         UPDATE users SET earned_balance = earned_balance + $3
+         UPDATE vr_users SET earned_balance = earned_balance + $3
          WHERE id = $2 AND EXISTS (SELECT 1 FROM done)
          RETURNING id
        ), bump AS (
-         UPDATE campaigns SET completed_count = completed_count + 1, views = views + 1
+         UPDATE vr_campaigns SET completed_count = completed_count + 1, views = views + 1
          WHERE id = $1 AND EXISTS (SELECT 1 FROM done)
          RETURNING id
        )
@@ -529,16 +529,16 @@ async function completeTask(req, res, id) {
     if (!(await userIsChannelMember(campaign.link, user.id))) throw new HttpError(409, 'Membership not verified');
     const rows = await sql.query(
       `WITH done AS (
-         INSERT INTO completions (campaign_id, user_id, status, reward, completed_at)
+         INSERT INTO vr_completions (campaign_id, user_id, status, reward, completed_at)
          VALUES ($1, $2, 'completed', $3, now())
          ON CONFLICT (campaign_id, user_id) DO NOTHING
          RETURNING reward
        ), credit AS (
-         UPDATE users SET earned_balance = earned_balance + $3
+         UPDATE vr_users SET earned_balance = earned_balance + $3
          WHERE id = $2 AND EXISTS (SELECT 1 FROM done)
          RETURNING id
        ), bump AS (
-         UPDATE campaigns SET joined_count = joined_count + 1, completed_count = completed_count + 1
+         UPDATE vr_campaigns SET joined_count = joined_count + 1, completed_count = completed_count + 1
          WHERE id = $1 AND EXISTS (SELECT 1 FROM done)
          RETURNING id
        )
@@ -561,14 +561,14 @@ async function submitProof(req, res, id) {
   if (!image) throw new HttpError(400, 'Invalid request');
   const rows = await sql.query(
     `WITH target AS (
-       SELECT id, reward FROM campaigns WHERE id = $1 AND status = 'نشط' AND platform = 'tiktok'
+       SELECT id, reward FROM vr_campaigns WHERE id = $1 AND status = 'نشط' AND platform = 'tiktok'
      ), proof AS (
-       INSERT INTO completions (campaign_id, user_id, status, proof_image, reward)
+       INSERT INTO vr_completions (campaign_id, user_id, status, proof_image, reward)
        SELECT id, $2, 'pending', $3, reward FROM target
        ON CONFLICT (campaign_id, user_id) DO NOTHING
        RETURNING status
      ), bump AS (
-       UPDATE campaigns SET joined_count = joined_count + 1
+       UPDATE vr_campaigns SET joined_count = joined_count + 1
        WHERE id = $1 AND EXISTS (SELECT 1 FROM proof)
        RETURNING id
      )
@@ -583,15 +583,15 @@ async function claimAdReward(req, res) {
   const user = await requireUser(req);
   const rows = await sql.query(
     `WITH bump AS (
-       INSERT INTO ad_rewards (user_id, day, count, last_at)
+       INSERT INTO vr_ad_rewards (user_id, day, count, last_at)
        VALUES ($1, (now() AT TIME ZONE 'UTC')::date, 1, now())
        ON CONFLICT (user_id, day) DO UPDATE
-         SET count = ad_rewards.count + 1, last_at = now()
-         WHERE ad_rewards.count < $2
-           AND ad_rewards.last_at <= now() - make_interval(secs => $4::float8)
+         SET count = vr_ad_rewards.count + 1, last_at = now()
+         WHERE vr_ad_rewards.count < $2
+           AND vr_ad_rewards.last_at <= now() - make_interval(secs => $4::float8)
        RETURNING count
      ), credit AS (
-       UPDATE users SET earned_balance = earned_balance + $3
+       UPDATE vr_users SET earned_balance = earned_balance + $3
        WHERE id = $1 AND EXISTS (SELECT 1 FROM bump)
        RETURNING id
      )
@@ -610,7 +610,7 @@ async function listProofs(req, res) {
             COALESCE(proof_image, '') AS image,
             CASE status WHEN 'approved' THEN 'معتمد' WHEN 'rejected' THEN 'مرفوض' ELSE 'قيد المراجعة' END AS status,
             started_at AS "submittedAt"
-     FROM completions
+     FROM vr_completions
      WHERE user_id = $1 AND proof_image IS NOT NULL
      ORDER BY started_at DESC
      LIMIT 200`,
@@ -631,13 +631,13 @@ const HISTORY_COLUMNS = `
 
 async function listDeposits(req, res) {
   const user = await requireUser(req);
-  const rows = await sql.query(`SELECT ${HISTORY_COLUMNS} FROM deposits WHERE user_id = $1 ORDER BY created_at DESC LIMIT 200`, [user.id]);
+  const rows = await sql.query(`SELECT ${HISTORY_COLUMNS} FROM vr_deposits WHERE user_id = $1 ORDER BY created_at DESC LIMIT 200`, [user.id]);
   ok(res, rows);
 }
 
 async function listWithdrawals(req, res) {
   const user = await requireUser(req);
-  const rows = await sql.query(`SELECT ${HISTORY_COLUMNS} FROM withdrawals WHERE user_id = $1 ORDER BY created_at DESC LIMIT 200`, [user.id]);
+  const rows = await sql.query(`SELECT ${HISTORY_COLUMNS} FROM vr_withdrawals WHERE user_id = $1 ORDER BY created_at DESC LIMIT 200`, [user.id]);
   ok(res, rows);
 }
 
@@ -660,7 +660,7 @@ async function createDeposit(req, res) {
     memoTag = await nextMemoTag(user.id);
   }
   const rows = await sql.query(
-    `INSERT INTO deposits (id, user_id, amount, method, destination, memo_tag)
+    `INSERT INTO vr_deposits (id, user_id, amount, method, destination, memo_tag)
      VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING ${HISTORY_COLUMNS}`,
     [newIdentifier('DEP'), user.id, amount, method, destination, memoTag],
@@ -678,11 +678,11 @@ async function createWithdrawal(req, res) {
   const memoTag = await nextMemoTag(user.id);
   const rows = await sql.query(
     `WITH debit AS (
-       UPDATE users SET earned_balance = earned_balance - $3
+       UPDATE vr_users SET earned_balance = earned_balance - $3
        WHERE id = $2 AND earned_balance >= $3
        RETURNING id
      )
-     INSERT INTO withdrawals (id, user_id, amount, method, destination, memo_tag)
+     INSERT INTO vr_withdrawals (id, user_id, amount, method, destination, memo_tag)
      SELECT $1, $2, $3, $4, $5, $6 FROM debit
      RETURNING ${HISTORY_COLUMNS}`,
     [newIdentifier('WDR'), user.id, amount, method, destination, memoTag],
@@ -696,7 +696,7 @@ async function getUser(req, res) {
   const rows = await sql.query(
     `SELECT id::float8 AS id, first_name AS "firstName", last_name AS "lastName", username, photo_url AS "photoUrl",
             status, created_at AS "createdAt"
-     FROM users WHERE id = $1`,
+     FROM vr_users WHERE id = $1`,
     [user.id],
   );
   ok(res, rows[0] ?? null);
@@ -705,7 +705,7 @@ async function getUser(req, res) {
 async function getBalance(req, res) {
   const user = await requireUser(req);
   const rows = await sql.query(
-    `SELECT advertiser_balance::float8 AS "advertiserBalance", earned_balance::float8 AS "viewerBalance" FROM users WHERE id = $1`,
+    `SELECT advertiser_balance::float8 AS "advertiserBalance", earned_balance::float8 AS "viewerBalance" FROM vr_users WHERE id = $1`,
     [user.id],
   );
   ok(res, rows[0] ?? { advertiserBalance: 0, viewerBalance: 0 });
@@ -726,7 +726,7 @@ async function adminState(req, res) {
               to_char(last_active_at, 'YYYY-MM-DD HH24:MI') AS "lastLogin",
               to_char(last_active_at, 'YYYY-MM-DD HH24:MI') AS "lastActive",
               COALESCE(invited_by::text, '—') AS "invitedBy"
-       FROM users ORDER BY created_at DESC LIMIT 1000`,
+       FROM vr_users ORDER BY created_at DESC LIMIT 1000`,
     ),
     sql.query(
       `SELECT id, user_id::float8 AS "userId", amount::float8 AS amount,
@@ -734,7 +734,7 @@ async function adminState(req, res) {
               memo_tag AS "memoTag", blockchain_tx_id AS "txId", destination AS wallet, credited, reason,
               CASE status WHEN 'تم' THEN 'ناجح' WHEN 'قيد المعالجة' THEN 'قيد المعالجة' ELSE 'فاشل' END AS status,
               to_char(created_at, 'YYYY-MM-DD HH24:MI') AS "createdAt"
-       FROM deposits ORDER BY created_at DESC LIMIT 1000`,
+       FROM vr_deposits ORDER BY created_at DESC LIMIT 1000`,
     ),
     sql.query(
       `SELECT id, user_id::float8 AS "userId", amount::float8 AS amount,
@@ -742,7 +742,7 @@ async function adminState(req, res) {
               destination,
               CASE status WHEN 'تم' THEN 'معتمد' WHEN 'مرفوض' THEN 'مرفوض' ELSE 'قيد المراجعة' END AS status,
               to_char(created_at, 'YYYY-MM-DD HH24:MI') AS "createdAt"
-       FROM withdrawals ORDER BY created_at DESC LIMIT 1000`,
+       FROM vr_withdrawals ORDER BY created_at DESC LIMIT 1000`,
     ),
     sql.query(
       `SELECT 'CMP-' || id::text AS id, id::text AS "campaignId", owner_id::float8 AS "userId", title,
@@ -750,7 +750,7 @@ async function adminState(req, res) {
               link AS "videoUrl", duration, price::float8 AS budget, price::float8 AS price,
               target_count AS "targetCount", completed_count AS "completedCount", views::float8 AS views,
               CASE status WHEN 'نشط' THEN 'نشطة' WHEN 'موقوف' THEN 'موقوفة' WHEN 'مسودة' THEN 'بانتظار المراجعة' ELSE status END AS status
-       FROM campaigns ORDER BY created_at DESC LIMIT 1000`,
+       FROM vr_campaigns ORDER BY created_at DESC LIMIT 1000`,
     ),
     sql.query(
       `SELECT 'PRF-' || comp.campaign_id::text || '-' || comp.user_id::text AS id,
@@ -759,14 +759,14 @@ async function adminState(req, res) {
               CASE c.platform WHEN 'tiktok' THEN 'متابعة TikTok' ELSE 'اشتراك قناة' END AS "taskType",
               COALESCE(comp.proof_image, '') AS image, comp.reward::float8 AS reward,
               CASE comp.status WHEN 'approved' THEN 'معتمد' WHEN 'rejected' THEN 'مرفوض' ELSE 'قيد المراجعة' END AS status
-       FROM completions comp JOIN campaigns c ON c.id = comp.campaign_id
+       FROM vr_completions comp JOIN vr_campaigns c ON c.id = comp.campaign_id
        WHERE comp.proof_image IS NOT NULL
        ORDER BY comp.started_at DESC LIMIT 1000`,
     ),
     sql.query(
       `SELECT 'SIG-' || id::text AS id, user_id::float8 AS "userId", attempt, status,
               to_char(created_at, 'YYYY-MM-DD HH24:MI') AS "createdAt"
-       FROM suspicious_signals ORDER BY created_at DESC LIMIT 1000`,
+       FROM vr_suspicious_signals ORDER BY created_at DESC LIMIT 1000`,
     ),
   ]);
   ok(res, { users, deposits, withdrawals, campaigns, proofs, suspicious });
@@ -781,7 +781,7 @@ async function adminAction(req, res, collection, id) {
     const userId = readPositiveInteger(id, Number.MAX_SAFE_INTEGER);
     if (!userId || !['نشط', 'محظور'].includes(status)) throw new HttpError(400, 'Invalid request');
     const rows = await sql.query(
-      `UPDATE users SET status = $2 WHERE id = $1 RETURNING id::float8 AS id`,
+      `UPDATE vr_users SET status = $2 WHERE id = $1 RETURNING id::float8 AS id`,
       [userId, status],
     );
     if (!rows.length) throw new HttpError(404, 'Not found');
@@ -794,12 +794,12 @@ async function adminAction(req, res, collection, id) {
     const stored = status === 'معتمد' ? 'تم' : 'مرفوض';
     const rows = await sql.query(
       `WITH updated AS (
-         UPDATE withdrawals SET status = $2,
+         UPDATE vr_withdrawals SET status = $2,
            blockchain_tx_id = COALESCE($3, blockchain_tx_id)
          WHERE id = $1 AND status = 'قيد المعالجة'
          RETURNING user_id, amount
        ), refund AS (
-         UPDATE users SET earned_balance = earned_balance + (SELECT amount FROM updated)
+         UPDATE vr_users SET earned_balance = earned_balance + (SELECT amount FROM updated)
          WHERE $2 = 'مرفوض' AND id = (SELECT user_id FROM updated)
          RETURNING id
        )
@@ -816,11 +816,11 @@ async function adminAction(req, res, collection, id) {
     if (status === 'ناجح') {
       const rows = await sql.query(
         `WITH updated AS (
-           UPDATE deposits SET status = 'تم', credited = TRUE, blockchain_tx_id = COALESCE($2, blockchain_tx_id)
+           UPDATE vr_deposits SET status = 'تم', credited = TRUE, blockchain_tx_id = COALESCE($2, blockchain_tx_id)
            WHERE id = $1 AND credited = FALSE
            RETURNING user_id, amount
          ), credit AS (
-           UPDATE users SET advertiser_balance = advertiser_balance + (SELECT amount FROM updated)
+           UPDATE vr_users SET advertiser_balance = advertiser_balance + (SELECT amount FROM updated)
            WHERE id = (SELECT user_id FROM updated)
            RETURNING id
          )
@@ -831,11 +831,11 @@ async function adminAction(req, res, collection, id) {
     } else {
       const rows = await sql.query(
         `WITH updated AS (
-           UPDATE deposits SET status = 'تم الإلغاء', reason = COALESCE($2, reason), credited = FALSE
+           UPDATE vr_deposits SET status = 'تم الإلغاء', reason = COALESCE($2, reason), credited = FALSE
            WHERE id = $1
-           RETURNING user_id, amount, (SELECT credited FROM deposits WHERE id = $1) AS was_credited
+           RETURNING user_id, amount, (SELECT credited FROM vr_deposits WHERE id = $1) AS was_credited
          ), reverse AS (
-           UPDATE users SET advertiser_balance = GREATEST(0, advertiser_balance - (SELECT amount FROM updated))
+           UPDATE vr_users SET advertiser_balance = GREATEST(0, advertiser_balance - (SELECT amount FROM updated))
            WHERE id = (SELECT user_id FROM updated) AND (SELECT was_credited FROM updated)
            RETURNING id
          )
@@ -855,15 +855,15 @@ async function adminAction(req, res, collection, id) {
     const next = status === 'معتمد' ? 'approved' : 'rejected';
     const rows = await sql.query(
       `WITH updated AS (
-         UPDATE completions SET status = $3, completed_at = now()
+         UPDATE vr_completions SET status = $3, completed_at = now()
          WHERE campaign_id = $1 AND user_id = $2 AND status = 'pending'
          RETURNING reward, user_id
        ), credit AS (
-         UPDATE users SET earned_balance = earned_balance + (SELECT reward FROM updated)
+         UPDATE vr_users SET earned_balance = earned_balance + (SELECT reward FROM updated)
          WHERE $3 = 'approved' AND id = (SELECT user_id FROM updated)
          RETURNING id
        ), bump AS (
-         UPDATE campaigns SET completed_count = completed_count + 1
+         UPDATE vr_campaigns SET completed_count = completed_count + 1
          WHERE $3 = 'approved' AND id = $1 AND EXISTS (SELECT 1 FROM updated)
          RETURNING id
        )
@@ -879,7 +879,7 @@ async function adminAction(req, res, collection, id) {
     const match = /^CMP-(\d+)$/.exec(id);
     const mapped = { 'نشطة': 'نشط', 'موقوفة': 'موقوف', 'مرفوضة': 'موقوف', 'أوقفتها الميزانية': 'موقوف' }[status];
     if (!match || !mapped) throw new HttpError(400, 'Invalid request');
-    const rows = await sql.query(`UPDATE campaigns SET status = $2 WHERE id = $1 RETURNING id::text AS id`, [match[1], mapped]);
+    const rows = await sql.query(`UPDATE vr_campaigns SET status = $2 WHERE id = $1 RETURNING id::text AS id`, [match[1], mapped]);
     if (!rows.length) throw new HttpError(404, 'Not found');
     ok(res, { id });
     return;
@@ -888,7 +888,7 @@ async function adminAction(req, res, collection, id) {
   if (collection === 'suspicious') {
     const match = /^SIG-(\d+)$/.exec(id);
     if (!match || !['مفتوح', 'تمت المراجعة'].includes(status)) throw new HttpError(400, 'Invalid request');
-    const rows = await sql.query(`UPDATE suspicious_signals SET status = $2 WHERE id = $1 RETURNING id`, [match[1], status]);
+    const rows = await sql.query(`UPDATE vr_suspicious_signals SET status = $2 WHERE id = $1 RETURNING id`, [match[1], status]);
     if (!rows.length) throw new HttpError(404, 'Not found');
     ok(res, { id });
     return;
