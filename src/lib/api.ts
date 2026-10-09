@@ -30,6 +30,7 @@ export async function apiRequest<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   const response = await fetch(`${import.meta.env.BASE_URL}api/${path.replace(/^\/+/, '')}`, {
     method,
     headers,
+    cache: 'no-store',
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   let envelope: ApiEnvelope<T> | null = null;
