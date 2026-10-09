@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 
 export type AdsteraFormat = 'social' | '320x50';
+export type AdProvider = 'adstera' | 'monetag';
 
 export type AdsteraAd = {
   id: string;
   name: string;
+  provider: AdProvider;
   format: AdsteraFormat;
   code: string;
   enabled: boolean;
@@ -55,6 +57,7 @@ function makeDefaults(): AdsteraAd[] {
       return {
         id: `adstera-banner-${String(index + 1).padStart(2, '0')}`,
         name: `Banner 320 × 50 · ${String(index + 1).padStart(2, '0')}`,
+        provider: 'adstera',
         format: '320x50',
         code: `<script>window.atOptions=${JSON.stringify(options)};</script>\n<script src="${banner.src}"></script>`,
         enabled: true,
@@ -65,6 +68,7 @@ function makeDefaults(): AdsteraAd[] {
     ...socialScripts.map((src, index): AdsteraAd => ({
       id: `adstera-social-${String(index + 1).padStart(2, '0')}`,
       name: `Social · ${String(index + 1).padStart(2, '0')}`,
+      provider: 'adstera',
       format: 'social',
       code: `<script async src="${src}"></script>`,
       enabled: true,
@@ -101,6 +105,7 @@ function readLegacyCustomAds(): AdsteraAd[] {
       .map((item, index) => ({
         id: typeof item.id === 'string' ? item.id : `legacy-ad-${index + 1}`,
         name: typeof item.name === 'string' ? item.name : `Adstera code ${index + 1}`,
+        provider: 'adstera',
         format: item.format === '320x50' ? '320x50' : 'social',
         code: String(item.code),
         enabled: Boolean(item.enabled),
@@ -121,17 +126,17 @@ export function getAdsteraAds(): AdsteraAd[] {
     const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? 'null') as unknown;
     if (!Array.isArray(saved)) return [...defaults, ...readLegacyCustomAds()];
 
-    const storedById = new Map(
-      saved.filter(isAdsteraAd).map((ad) => [ad.id, ad]),
-    );
+    const normalizedSaved = saved.filter(isAdsteraAd).map((ad) => ({
+      ...ad,
+      provider: (ad as Partial<AdsteraAd>).provider === 'monetag' ? 'monetag' as const : 'adstera' as const,
+    }));
+    const storedById = new Map(normalizedSaved.map((ad) => [ad.id, ad]));
     const restoredDefaults = defaults.map((ad) => ({
       ...ad,
       ...storedById.get(ad.id),
       builtIn: true,
     }));
-    const customAds = saved.filter(
-      (value): value is AdsteraAd => isAdsteraAd(value) && !knownIds.has(value.id),
-    );
+    const customAds = normalizedSaved.filter((value) => !knownIds.has(value.id));
     return [...restoredDefaults, ...customAds];
   } catch {
     return [...defaults, ...readLegacyCustomAds()];
