@@ -179,12 +179,12 @@ export function AddPlatformCampaign({
             </div>
           ) : (
             <div className="mt-6 rounded-xl border border-blue-100 bg-[#f4f8ff] p-4 text-[10px] leading-5 text-slate-600">
-              مستخدمون حقيقيون وتفاعل طبيعي؛ يُسمح بحساب فريد لكل مستخدم وتُمنع الحسابات المكررة أو التلاعب. يُراجع إثبات المتابعة يدويًا قبل اعتماد المكافأة.
+              متابعون حقيقيون وتفاعل حقيقي؛ حساب فريد لكل مستخدم. تُراجع إثباتات المتابعة قبل احتساب المهمة، ويُمنع تكرار الحسابات أو التلاعب.
             </div>
           )}
           {isTelegram && (
             <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[10px] leading-5 text-slate-500">
-              مشتركون حقيقيون بحساب فريد لكل مستخدم. يفحص النظام بقاء العضوية خلال أول 3 أيام عند فتح التطبيق؛ رد ميزانية المعلن تلقائيًا عند المغادرة قبل 7 أيام غير متاح حاليًا.
+              مشتركون حقيقيون ومتفاعلون، بحساب فريد لكل مستخدم. يجب أن تستمر العضوية 3 أيام؛ من يغادر قبلها تُلغى مكافأته ويُزال من عدد الإنجازات، دون رد رصيد للمعلن.
             </div>
           )}
           <div className="mt-6 flex items-center justify-between rounded-2xl bg-[#f4f8ff] p-4"><div><div className="text-[11px] text-slate-500">ميزانية الحملة</div><div className="mt-1 text-2xl font-bold text-[#12234b]">${selectedPackage.price.toFixed(2)}</div></div><div className="text-left text-[10px] leading-5 text-slate-400">{selectedPackage.count.toLocaleString('ar')} {isTelegram ? 'مشترك' : 'متابع'}</div></div>
@@ -358,7 +358,7 @@ export function AddVideo({
             <div className="text-left"><div className="text-[11px] text-slate-500">إجمالي ميزانية الحملة</div><div data-testid="value-youtube-campaign-budget" className="mt-1 text-xl font-bold text-[#12234b]">${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(campaignBudget)}</div></div>
           </div>
           <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[10px] leading-5 text-slate-500">
-            تُعرض الحملة لمستخدمين مسجلين وفريدين، ويُحتسب إكمال واحد لكل حساب. يُمنع تعدد الحسابات والتلاعب بالتفاعل؛ لا يتحقق النظام حاليًا من اختلاف الأجهزة.
+            مشاهدات حقيقية من مستخدمين فريدين، مستخدم واحد لكل جهاز. يُمنع تعدد الحسابات أو التلاعب، ويُحتسب التفاعل الحقيقي فقط.
           </div>
           {submitError && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs leading-5 text-rose-700">{submitError}</p>}
           <Button type="button" data-testid="button-submit-video" disabled={!valid || isSubmitting} onClick={() => { void submit(); }} variant="primary" size="lg" className="mt-7 flex w-full items-center justify-center gap-2 text-sm font-bold disabled:bg-slate-200 disabled:text-slate-400"><Upload className="h-4 w-4" /> {isSubmitting ? 'جارٍ النشر…' : 'نشر الإعلان'}</Button>

@@ -120,16 +120,14 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
 
   const refreshData = useCallback(async () => {
     try {
-      const [balance, ownCampaigns, tasks, proofs, deposits, withdrawals, user] = await Promise.all([
+      const [balance, ownCampaigns, tasks, proofs, deposits, withdrawals] = await Promise.all([
         apiGet<ApiBalance>('balance'),
         apiGet<ApiCampaignRow[]>('campaigns'),
         apiGet<ApiCampaignRow[]>('tasks'),
         apiGet<ApiProofRecordRow[]>('proofs'),
         apiGet<ApiHistoryRecordRow[]>('deposits'),
         apiGet<ApiHistoryRecordRow[]>('withdrawals'),
-        apiGet<{ isAdmin?: boolean } | null>('user'),
       ]);
-      setAdminEnabled(Boolean(user?.isAdmin));
       setAdvertiserBalance(Number(balance?.advertiserBalance ?? 0));
       setViewerBalance(Number(balance?.viewerBalance ?? 0));
       setVideos(ownCampaigns.filter((row) => row.platform === 'youtube').map(toVideo));
@@ -143,10 +141,21 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       setDepositHistory(deposits.map((row) => toDepositRecord(row, language)));
       setWithdrawHistory(withdrawals.map((row) => toWithdrawRecord(row, language)));
     } catch {
-      setAdminEnabled(false);
       notify('warning', 'تعذر تحميل البيانات', 'تعذر الاتصال بالخادم. أعد المحاولة بعد قليل.');
     }
   }, [language, notify]);
+
+  useEffect(() => {
+    let active = true;
+    void apiGet<{ isAdmin?: boolean } | null>('user')
+      .then((user) => {
+        if (active) setAdminEnabled(Boolean(user?.isAdmin));
+      })
+      .catch(() => {
+        if (active) setAdminEnabled(false);
+      });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
