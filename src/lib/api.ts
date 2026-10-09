@@ -21,17 +21,12 @@ export class ApiError extends Error {
 
 type ApiEnvelope<T> = { success: true; data: T } | { success: false; error: string };
 
-export async function apiRequest<T>(
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
-  path: string,
-  body?: unknown,
-  idempotencyKey?: string,
-): Promise<T> {
+export async function apiRequest<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown, idempotencyKey?: string): Promise<T> {
   const headers: Record<string, string> = {};
   const initData = window.Telegram?.WebApp?.initData;
   if (initData) headers['x-telegram-init-data'] = initData;
   if (body !== undefined) headers['content-type'] = 'application/json';
-  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+  if (idempotencyKey) headers['idempotency-key'] = idempotencyKey;
   const response = await fetch(`${import.meta.env.BASE_URL}api/${path.replace(/^\/+/, '')}`, {
     method,
     headers,
@@ -76,12 +71,6 @@ export type ApiCampaignRow = {
   reward?: number | null;
   price?: number | null;
   targetCount?: number | null;
-  requestedViews?: number | null;
-  campaignBudget?: number | null;
-  viewerShare?: number | null;
-  platformShare?: number | null;
-  viewerRewardPerView?: number | null;
-  platformRevenuePerView?: number | null;
   country?: string | null;
   device?: string | null;
   status: string;

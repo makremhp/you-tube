@@ -1,9 +1,11 @@
 import {
-  createBlockchainTxId,
-  depositAddress,
+  createUniqueIdentifier,
   type DepositRecord,
   type WithdrawRecord,
 } from '@/legacy/shared';
+
+const createBlockchainTxId = () => createUniqueIdentifier('TX');
+const depositAddress = 'يُحدَّد من إعدادات الخادم';
 
 export const initialDepositHistory: DepositRecord[] = [
   {
