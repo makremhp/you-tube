@@ -1,11 +1,12 @@
-import { dispatch } from './router.js';
-import { HttpError, fail } from './errors.js';
+import { dispatch } from '../server/router.js';
+import { HttpError, fail } from '../server/errors.js';
 
 /*
  * Vercel API entry point.
  *
- * API handlers and shared server modules are split into sibling files under
- * api/ so the entry point stays small and easy to trace.
+ * Handlers and shared modules live in server/ (outside api/) because Vercel
+ * deploys every file inside api/ as a separate Serverless Function, and the
+ * Hobby plan allows at most 12 per deployment.
  */
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
