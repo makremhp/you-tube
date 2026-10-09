@@ -3,9 +3,14 @@ import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
 import { SiYoutube } from 'react-icons/si';
 import {
-  calculateViewerReward, formatDuration, formatUsd, VideoArtwork,
+  formatDuration, formatUsd, VideoArtwork,
   type Video,
 } from '@/legacy/shared';
+
+function readRewardAmount(value: string) {
+  const amount = Number(value.replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(amount) ? amount : 0;
+}
 
 export function ViewerView({
   videos,
@@ -24,7 +29,7 @@ export function ViewerView({
 }) {
   const { dir } = useLanguage();
   const activeVideos = videos.filter((video) => video.status === 'نشط' && !completedVideoIds.has(video.id));
-  const totalVideoRewards = activeVideos.reduce((total, video) => total + calculateViewerReward(video.cpm), 0);
+  const totalVideoRewards = activeVideos.reduce((total, video) => total + readRewardAmount(video.reward), 0);
   return (
     <main className={`browser-watch-shell mx-auto w-full max-w-[1370px] px-4 pb-28 pt-7 md:px-8 md:pt-10 lg:px-10 lg:pb-12 ${browserMode ? 'browser-watch-page' : ''}`} dir={dir}>
       {browserMode && (

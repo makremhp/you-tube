@@ -16,7 +16,7 @@ import {
 } from '@/legacy/shared';
 import {
   apiDelete, apiGet, apiPatch, apiPost, toDepositRecord, toPromotion, toTaskProof, toVideo, toWithdrawRecord,
-  type ApiBalance, type ApiCampaignRow, type ApiHistoryRecordRow, type ApiProofRecordRow,
+  ApiError, type ApiBalance, type ApiCampaignRow, type ApiHistoryRecordRow, type ApiProofRecordRow,
 } from '@/lib/api';
 import { AddVideo } from '@/pages/AddCampaignPage';
 import { CampaignsPage } from '@/pages/CampaignsPage';
@@ -73,6 +73,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
   const watchSessionRef = useRef<AdvertisementSession | null>(null);
   const creditedVideosRef = useRef(new Set<number>());
   const toastSequenceRef = useRef(0);
+  const auditedInitDataRef = useRef('');
 
   useEffect(() => {
     const webApp = window.Telegram?.WebApp;
@@ -144,8 +145,36 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
   }, [language, notify]);
 
   useEffect(() => {
-    void refreshData();
-  }, [refreshData, telegramUser?.id]);
+    let active = true;
+    const loadOnEntry = async () => {
+      const initData = window.Telegram?.WebApp?.initData ?? '';
+      if (initData && auditedInitDataRef.current !== initData) {
+        auditedInitDataRef.current = initData;
+        try {
+          const audit = await apiPost<{
+            checkedChannels: number;
+            unavailableChannels: number;
+            revokedTasks: number;
+            reversedAmount: number;
+          }>('session/entry');
+          if (active && audit.revokedTasks > 0) {
+            notify(
+              'warning',
+              'أُعيد فتح مهام Telegram',
+              `غادرت ${audit.revokedTasks} قناة قبل إكمال 3 أيام، فتم خصم ${formatUsd(audit.reversedAmount)} من رصيد المهام وإتاحتها للانضمام مجددًا.`,
+            );
+          } else if (active && audit.unavailableChannels > 0) {
+            notify('info', 'تعذر فحص بعض القنوات', 'لم يُخصم أي رصيد عن قناة لم يؤكد Telegram حالة عضويتها.');
+          }
+        } catch {
+          if (active) notify('warning', 'تعذر فحص عضوية Telegram', 'لم يُعدّل الرصيد أو تُفتح المهام؛ سيُعاد التحقق عند فتح التطبيق مجددًا.');
+        }
+      }
+      if (active) await refreshData();
+    };
+    void loadOnEntry();
+    return () => { active = false; };
+  }, [refreshData, telegramUser?.id, notify]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -265,7 +294,10 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     setIsPlaying(false);
   };
 
-  const addVideo = async (video: Omit<Video, 'id' | 'views' | 'status' | 'created' | 'art'>) => {
+  const addVideo = async (
+    video: Omit<Video, 'id' | 'views' | 'status' | 'created' | 'art' | 'reward'> & { requestedViews: number },
+    requestId: string,
+  ) => {
     try {
       await apiPost('campaigns', {
         platform: 'youtube',
@@ -274,11 +306,16 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
         link: video.link,
         cpm: video.cpm,
         duration: video.duration,
-      });
+        requestedViews: video.requestedViews,
+      }, requestId);
       await refreshData();
       notify('success', 'تم نشر الإعلان', 'أصبح الفيديو نشطًا ويمكن للمشاهدين اكتشافه الآن.');
-    } catch {
-      notify('warning', 'تعذر نشر الإعلان', 'لم يحفظ الخادم الإعلان. تحقق من البيانات وحاول مرة أخرى.');
+    } catch (error) {
+      const message = error instanceof ApiError
+        ? error.message
+        : 'لم يحفظ الخادم الإعلان. تحقق من الاتصال وحاول مرة أخرى.';
+      notify('warning', 'تعذر نشر الإعلان', message);
+      throw error;
     }
   };
 
@@ -462,7 +499,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
         <div className={`min-w-0 flex-1 ${browserEarningPage ? '' : 'overflow-hidden rounded-none bg-[#f7f9fc] lg:rounded-[26px] lg:border lg:border-slate-200/80 lg:bg-[#fbfcfe]'}`}>
           {!browserEarningPage && <Header mode={mode} screen={screen} telegramUser={telegramUser} viewerBalance={viewerBalance} advertiserBalance={advertiserBalance} onMenu={() => setMobileMenu(true)} onAdd={openAdvertiserCampaignForm} />}
             {mode === 'admin' ? <AdminConsole activeScreen={screen} onPageChange={(page) => setScreen(`admin-${page}` as AppScreen)} />
-             : screen === 'add' && mode === 'creator' ? <AddVideo telegramUser={telegramUser} onBack={() => setScreen('campaigns')} onPromotionSubmit={addPromotionCampaign} onSubmit={(video) => { void addVideo(video); }} />
+             : screen === 'add' && mode === 'creator' ? <AddVideo telegramUser={telegramUser} onBack={() => setScreen('campaigns')} onPromotionSubmit={addPromotionCampaign} onSubmit={(video, requestId) => addVideo(video, requestId)} />
             : screen === 'deposit' && mode === 'creator' ? <DepositPage advertiserBalance={advertiserBalance} telegramUser={telegramUser} onDepositRequested={requestDeposit} onDepositCompleted={completeDeposit} onDepositExpired={expireDeposit} />
                 : screen === 'deposit-history' && mode === 'creator' ? <DepositHistoryPage records={depositHistory} onDeposit={() => setScreen('deposit')} />
                 : screen === 'withdraw' && mode === 'viewer' ? <WithdrawPage viewerBalance={viewerBalance} telegramUser={telegramUser} onWithdraw={withdrawEarnings} />

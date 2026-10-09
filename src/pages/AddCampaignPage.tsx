@@ -7,9 +7,10 @@ import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
 import { SiTelegram, SiTiktok, SiYoutube } from 'react-icons/si';
 import { useLocalPricing } from '@/legacy/pricing';
+import { apiGet, ApiError, type YoutubeCampaignSettings } from '@/lib/api';
 import {
-  calculateViewerReward, createUniqueIdentifier, durationOptions, formatDuration,
-  formatUsd, getEmbedUrl, getUserDisplayName, PlatformSelector,
+  createUniqueIdentifier, durationOptions, formatDuration,
+  getEmbedUrl, getUserDisplayName, PlatformSelector,
   telegramPackageOptions, tiktokPackageOptions,
   type PromotionCampaign, type PromotionPlatform, type TelegramUser, type Video,
 } from '@/legacy/shared';
@@ -208,40 +209,95 @@ export function AddVideo({
   telegramUser,
 }: {
   onBack: () => void;
-  onSubmit: (video: Omit<Video, 'id' | 'views' | 'status' | 'created' | 'art'>) => void;
+  onSubmit: (
+    video: Omit<Video, 'id' | 'views' | 'status' | 'created' | 'art' | 'reward'> & { requestedViews: number },
+    requestId: string,
+  ) => Promise<void>;
   onPromotionSubmit: (campaign: PromotionCampaign) => void;
   telegramUser: TelegramUser | null;
 }) {
   const { dir, t } = useLanguage();
-  const pricing = useLocalPricing();
   const [selectedPlatform, setSelectedPlatform] = useState<'youtube' | PromotionPlatform>('youtube');
   const videoTitleMaxLength = 12;
   const [title, setTitle] = useState('');
   const [link, setLink] = useState('');
   const [duration, setDuration] = useState(20);
+  const [requestedViewsInput, setRequestedViewsInput] = useState('1000');
+  const [youtubeSettings, setYoutubeSettings] = useState<YoutubeCampaignSettings>({
+    defaultCPM: 1.5,
+    viewerShare: 30,
+    platformShare: 70,
+    minimumViews: 1000,
+    cpmOptions: { 10: 1.5, 20: 2, 40: 2.8, 80: 3.2 },
+  });
   const [submitted, setSubmitted] = useState(false);
-  const advertiserDurationOptions = durationOptions.map((option, index) => ({ ...option, seconds: pricing.youtube[index]?.value ?? option.seconds, cpm: String(pricing.youtube[index]?.price ?? Number(option.cpm)) }));
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const requestIdRef = useRef('');
+  const viewsTouchedRef = useRef(false);
   const durationIndex = Math.max(0, durationOptions.findIndex((option) => option.seconds === duration));
-  const selected = advertiserDurationOptions.find((option) => option.seconds === duration) ?? advertiserDurationOptions[durationIndex];
+  const serverDurationOptions = durationOptions.map((option) => ({
+    ...option,
+    cpm: String(youtubeSettings.cpmOptions[option.seconds] ?? Number(option.cpm)),
+  }));
+  const selected = serverDurationOptions.find((option) => option.seconds === duration) ?? serverDurationOptions[durationIndex];
   const embedUrl = getEmbedUrl(link);
   const publisherName = getUserDisplayName(telegramUser);
-  const valid = title.trim().length > 2 && link.trim().length > 5;
+  const requestedViews = Number(requestedViewsInput);
+  const validViews = Number.isSafeInteger(requestedViews) && requestedViews >= youtubeSettings.minimumViews;
+  const campaignBudget = validViews ? (Number(selected.cpm) / 1000) * requestedViews : 0;
+  const valid = title.trim().length > 2 && link.trim().length > 5 && validViews;
+
+  useEffect(() => {
+    let active = true;
+    void apiGet<YoutubeCampaignSettings>('youtube/settings').then((settings) => {
+      if (!active) return;
+      setYoutubeSettings(settings);
+      if (!viewsTouchedRef.current) setRequestedViewsInput(String(settings.minimumViews));
+      const defaultOption = Object.entries(settings.cpmOptions).find(([, cpm]) => Number(cpm) === Number(settings.defaultCPM));
+      if (defaultOption) setDuration(Number(defaultOption[0]));
+    }).catch(() => {
+      // The API uses these same defaults; retain the current preview during temporary network failures.
+    });
+    return () => { active = false; };
+  }, []);
+
+  const invalidateRequest = () => {
+    requestIdRef.current = '';
+    setSubmitError('');
+  };
+
+  const campaignRequestId = () => {
+    if (!requestIdRef.current) {
+      requestIdRef.current = window.crypto?.randomUUID?.() ?? createUniqueIdentifier('CAMPAIGN');
+    }
+    return requestIdRef.current;
+  };
 
   if (selectedPlatform !== 'youtube') {
     return <AddPlatformCampaign platform={selectedPlatform} onSelectPlatform={setSelectedPlatform} onBack={onBack} onSubmit={onPromotionSubmit} />;
   }
 
-  const submit = () => {
+  const submit = async () => {
     if (!valid) return;
-    onSubmit({
-      title: title.trim().slice(0, videoTitleMaxLength),
-      link: link.trim(),
-      duration: selected.seconds,
-      creator: publisherName,
-      cpm: Number(selected.cpm),
-      reward: formatUsd(calculateViewerReward(Number(selected.cpm))),
-    });
-    setSubmitted(true);
+    setIsSubmitting(true);
+    setSubmitError('');
+    try {
+      await onSubmit({
+        title: title.trim().slice(0, videoTitleMaxLength),
+        link: link.trim(),
+        duration: selected.seconds,
+        creator: publisherName,
+        cpm: Number(selected.cpm),
+        requestedViews,
+      }, campaignRequestId());
+      setSubmitted(true);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'تعذر نشر الحملة. حاول مرة أخرى.');
+      if (error instanceof ApiError) requestIdRef.current = '';
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (submitted) {
@@ -266,16 +322,38 @@ export function AddVideo({
       <div className="grid gap-5 xl:grid-cols-[1fr_400px]">
         <section className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)] md:p-7">
           <div className="mb-7"><h2 className="font-display text-lg font-bold text-[#12234b]">{t('تفاصيل الفيديو')}</h2><p className="mt-1 text-xs text-slate-400">{t('أخبر المشاهدين لماذا يستحق هذا الفيديو وقتهم.')}</p></div>
-          <label className="block text-xs font-bold text-slate-700">{t('عنوان الفيديو')} <span className="text-[#1557ee]">*</span><input value={title} maxLength={videoTitleMaxLength} onChange={(event) => setTitle(event.target.value.slice(0, videoTitleMaxLength))} data-testid="input-video-title" placeholder={t('مثال: كيف تبدأ مشروعك من الصفر؟')} className="mt-2 w-full rounded-xl border border-slate-200 bg-[#fbfcff] px-4 py-3 text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" /><span className="mt-1 block text-[10px] font-normal text-slate-400">{t('12 حرفًا كحد أقصى')}</span></label>
-          <label className="mt-5 block text-xs font-bold text-slate-700">{t('رابط الفيديو')} <span className="text-[#1557ee]">*</span><div className="relative mt-2"><Link2 className="absolute right-4 top-3.5 h-4 w-4 text-slate-400" /><input value={link} onChange={(event) => setLink(event.target.value)} data-testid="input-video-link" dir="ltr" placeholder="https://youtube.com/watch?v=..." className="w-full rounded-xl border border-slate-200 bg-[#fbfcff] py-3 pl-4 pr-11 text-left text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" /></div></label>
+          <label className="block text-xs font-bold text-slate-700">{t('عنوان الفيديو')} <span className="text-[#1557ee]">*</span><input value={title} maxLength={videoTitleMaxLength} onChange={(event) => { setTitle(event.target.value.slice(0, videoTitleMaxLength)); invalidateRequest(); }} data-testid="input-video-title" placeholder={t('مثال: كيف تبدأ مشروعك من الصفر؟')} className="mt-2 w-full rounded-xl border border-slate-200 bg-[#fbfcff] px-4 py-3 text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" /><span className="mt-1 block text-[10px] font-normal text-slate-400">{t('12 حرفًا كحد أقصى')}</span></label>
+          <label className="mt-5 block text-xs font-bold text-slate-700">{t('رابط الفيديو')} <span className="text-[#1557ee]">*</span><div className="relative mt-2"><Link2 className="absolute right-4 top-3.5 h-4 w-4 text-slate-400" /><input value={link} onChange={(event) => { setLink(event.target.value); invalidateRequest(); }} data-testid="input-video-link" dir="ltr" placeholder="https://youtube.com/watch?v=..." className="w-full rounded-xl border border-slate-200 bg-[#fbfcff] py-3 pl-4 pr-11 text-left text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" /></div></label>
           <div className="mt-7">
             <div className="flex items-center justify-between"><div><h3 className="text-xs font-bold text-slate-700">المدة الإلزامية للمشاهدة</h3><p className="mt-1 text-[10px] text-slate-400">اختر الوقت الذي سيكمله المشاهد قبل احتساب المكافأة.</p></div><Clock3 className="h-5 w-5 text-[#1557ee]" /></div>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {advertiserDurationOptions.map((option) => <Button type="button" key={option.seconds} data-testid={`button-duration-${option.seconds}`} onClick={() => setDuration(option.seconds)} variant="unstyled" size="fit" className={`w-full rounded-xl border p-3 transition ${dir === 'rtl' ? 'text-right' : 'text-left'} ${selected.seconds === option.seconds ? 'border-[#1557ee] bg-[#edf3ff] text-[#1557ee] shadow-[0_0_0_2px_rgba(21,87,238,.08)]' : 'border-slate-200 text-slate-500 hover:border-blue-200'}`}><div className="text-sm font-bold">{formatDuration(option.seconds)}</div><div className="mt-1 text-[10px] opacity-70">CPM ${option.cpm}</div></Button>)}
+              {serverDurationOptions.map((option) => <Button type="button" key={option.seconds} data-testid={`button-duration-${option.seconds}`} onClick={() => { setDuration(option.seconds); invalidateRequest(); }} variant="unstyled" size="fit" className={`w-full rounded-xl border p-3 transition ${dir === 'rtl' ? 'text-right' : 'text-left'} ${selected.seconds === option.seconds ? 'border-[#1557ee] bg-[#edf3ff] text-[#1557ee] shadow-[0_0_0_2px_rgba(21,87,238,.08)]' : 'border-slate-200 text-slate-500 hover:border-blue-200'}`}><div className="text-sm font-bold">{formatDuration(option.seconds)}</div><div className="mt-1 text-[10px] opacity-70">CPM ${option.cpm}</div></Button>)}
             </div>
           </div>
-          <div className="mt-7 flex items-center justify-between rounded-2xl bg-[#f4f8ff] p-4"><div><div className="text-[11px] text-slate-500">تكلفة الألف مشاهدة (CPM)</div><div className="mt-1 text-2xl font-bold text-[#12234b]">${selected.cpm}</div></div><div className="text-left text-[10px] leading-5 text-slate-400">كلما زادت المدة،<br />زادت جودة التفاعل</div></div>
-            <Button type="button" data-testid="button-submit-video" disabled={!valid} onClick={submit} variant="primary" size="lg" className="mt-7 flex w-full items-center justify-center gap-2 text-sm font-bold disabled:bg-slate-200 disabled:text-slate-400"><Upload className="h-4 w-4" /> نشر الإعلان</Button>
+          <label className="mt-6 block text-xs font-bold text-slate-700">
+            ما هو عدد المشاهدات الذي تريده؟
+            <input
+              type="number"
+              min={youtubeSettings.minimumViews}
+              max={100_000_000}
+              step={1}
+              value={requestedViewsInput}
+              onChange={(event) => {
+                viewsTouchedRef.current = true;
+                setRequestedViewsInput(event.target.value);
+                invalidateRequest();
+              }}
+              data-testid="input-requested-youtube-views"
+              className="mt-2 w-full rounded-xl border border-slate-200 bg-[#fbfcff] px-4 py-3 text-sm outline-none transition focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50"
+            />
+            <span className="mt-1 block text-[10px] font-normal text-slate-400">الحد الأدنى {youtubeSettings.minimumViews.toLocaleString('ar')} مشاهدة.</span>
+          </label>
+          <div className="mt-7 flex items-center justify-between rounded-2xl bg-[#f4f8ff] p-4">
+            <div><div className="text-[11px] text-slate-500">تكلفة الألف مشاهدة (CPM)</div><div className="mt-1 text-2xl font-bold text-[#12234b]">${selected.cpm}</div></div>
+            <div className="text-left"><div className="text-[11px] text-slate-500">إجمالي ميزانية الحملة</div><div data-testid="value-youtube-campaign-budget" className="mt-1 text-xl font-bold text-[#12234b]">${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(campaignBudget)}</div></div>
+          </div>
+          {submitError && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs leading-5 text-rose-700">{submitError}</p>}
+          <Button type="button" data-testid="button-submit-video" disabled={!valid || isSubmitting} onClick={() => { void submit(); }} variant="primary" size="lg" className="mt-7 flex w-full items-center justify-center gap-2 text-sm font-bold disabled:bg-slate-200 disabled:text-slate-400"><Upload className="h-4 w-4" /> {isSubmitting ? 'جارٍ النشر…' : 'نشر الإعلان'}</Button>
         </section>
         <section className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)] md:p-6">
           <div className="flex items-center justify-between"><div><h2 className="font-display text-lg font-bold text-[#12234b]">المعاينة المباشرة</h2><p className="mt-1 text-xs text-slate-400">هكذا سيظهر الفيديو للمشاهدين.</p></div><span className="flex items-center gap-1 rounded-full bg-[#eafbf8] px-2.5 py-1 text-[10px] font-bold text-[#159b89]"><span className="h-1.5 w-1.5 rounded-full bg-current" /> مباشر</span></div>
