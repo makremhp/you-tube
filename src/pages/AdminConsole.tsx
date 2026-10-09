@@ -134,13 +134,13 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
    setData(d => ({...d, [key]: (d[key] as any[]).map(x => x.id===id ? {...x,...patch}:x)}));
    return true;
   }
-  if (key !== 'users') setData(d => ({...d, [key]: (d[key] as any[]).map(x => x.id===id ? {...x,...patch}:x)}));
+  setData(d => ({...d, [key]: (d[key] as any[]).map(x => x.id===id ? {...x,...patch}:x)}));
   try {
    const saved = await apiPatch<Record<string, any> | null>(`admin/${key}/${id}`, patch);
    if (key === 'users' && saved && typeof saved === 'object' && typeof saved.id === 'number') {
     setData(d => ({...d, users: d.users.map(u => u.id === saved.id ? { ...u, ...(saved as Partial<User>), avatar: String(saved.name ?? u.name ?? '').trim().slice(0, 2) || '—' } : u)}));
    }
-   await loadRemote(true);
+   void loadRemote(true);
    return true;
   } catch (error) {
    announce(error instanceof ApiError && error.message && error.message !== 'Request failed' ? `تعذر حفظ الإجراء: ${error.message}` : 'تعذر حفظ الإجراء على الخادم');

@@ -471,13 +471,13 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
 
   const withdrawEarnings = async (record: WithdrawRecord) => {
     try {
-      const saved = await apiPost<ApiHistoryRecordRow>('withdrawals', {
+      await apiPost<ApiHistoryRecordRow>('withdrawals', {
         amount: record.amount,
         method: record.method,
         destination: record.destination,
       });
       await refreshData();
-      notify('success', 'تم إرسال طلب السحب', `أضيف الطلب ${saved.id} إلى سجل السحب بحالة قيد المعالجة.`);
+      notify('success', 'تم إرسال طلب السحب', '');
     } catch {
       notify('warning', 'تعذر إرسال طلب السحب', 'لم يقبل الخادم الطلب. تحقق من الرصيد والوجهة وحاول مرة أخرى.');
     }
