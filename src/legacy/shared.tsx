@@ -554,7 +554,7 @@ function ToastViewport({ toasts, onDismiss }: { toasts: ToastMessage[]; onDismis
           </span>
           <div className="min-w-0 flex-1">
             <div className="text-xs font-bold text-white">{t(toast.title)}</div>
-            <div className="mt-1 text-[11px] leading-5 text-blue-100/75">{t(toast.message)}</div>
+            {toast.message && <div className="mt-1 text-[11px] leading-5 text-blue-100/75">{t(toast.message)}</div>}
           </div>
            <Button type="button" data-testid={`button-dismiss-toast-${toast.id}`} onClick={() => onDismiss(toast.id)} variant="ghost" size="icon" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-blue-100/60 transition hover:bg-white/10 hover:text-white" aria-label={t('إغلاق التنبيه')}>
             <X className="h-3.5 w-3.5" />
@@ -908,7 +908,7 @@ function TransactionIdentifiers({ record }: { record: DepositRecord | WithdrawRe
     <div className="mt-4 grid gap-2 rounded-xl border border-slate-100 bg-[#fbfcff] p-3 sm:grid-cols-3">
       <CopyableIdentifier label="المعرّف الداخلي" value={record.id} />
       <CopyableIdentifier label="TXID الشبكة" value={record.blockchainTxId ?? 'سيظهر بعد التأكيد'} tone="text-[#1557ee]" />
-      <CopyableIdentifier label="Memo / Tag" value={record.memoTag} tone="text-[#159b89]" />
+      {record.memoTag && <CopyableIdentifier label="Memo / Tag" value={record.memoTag} tone="text-[#159b89]" />}
     </div>
   );
 }
@@ -1001,7 +1001,7 @@ function CompactHistoryRow({
     maximumFractionDigits: isDeposit ? 2 : 4,
   }).format(record.amount);
   const iconTone = isDeposit ? 'bg-[#edf3ff] text-[#1557ee]' : 'bg-[#eafbf8] text-[#159b89]';
-  const detailColumns = 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-5';
+  const detailColumns = isDeposit ? 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-5' : 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-4';
 
   return (
     <article data-testid={`row-${kind}-${record.id}`} className="rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-[0_4px_14px_rgba(18,32,77,.035)] transition hover:border-blue-200 hover:shadow-[var(--shadow-soft)] sm:p-4">
@@ -1030,7 +1030,7 @@ function CompactHistoryRow({
           <div className="truncate text-[9px] font-semibold text-slate-400">{t(record.method === 'binance' ? 'الوجهة · Binance ID' : 'الوجهة')}</div>
           <code dir="ltr" className="mt-1 block truncate text-[10px] font-bold text-slate-600" title={record.destination}>{record.destination}</code>
         </div>
-        <CompactCopyableIdentifier label="Memo / Tag" value={record.memoTag} tone="text-[#159b89]" />
+        {isDeposit && <CompactCopyableIdentifier label="Memo / Tag" value={record.memoTag} tone="text-[#159b89]" />}
         <CompactCopyableIdentifier label="رقم العملية" value={record.id} tone="text-[#1557ee]" />
         <CompactCopyableIdentifier label="TXID الشبكة" value={record.blockchainTxId ?? 'بعد التأكيد'} tone="text-[#253961]" />
       </div>
