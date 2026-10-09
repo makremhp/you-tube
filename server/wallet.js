@@ -1,6 +1,6 @@
 import { sql } from './db.js';
 import { HttpError, ok } from './errors.js';
-import { requireUser } from './auth.js';
+import { isAdmin, requireUser } from './auth.js';
 import { AD_DAILY_LIMIT, AD_MIN_INTERVAL_SECONDS, AD_REWARD } from './config.js';
 import { newIdentifier, readHttpUrl, readMoney, readPositiveInteger, readText } from './validation.js';
 
@@ -129,7 +129,7 @@ export async function getUser(req, res) {
      FROM vr_users WHERE id = $1`,
     [user.id],
   );
-  ok(res, rows[0] ?? null);
+  ok(res, rows[0] ? { ...rows[0], isAdmin: isAdmin(user.id) } : null);
 }
 
 export async function getBalance(req, res) {

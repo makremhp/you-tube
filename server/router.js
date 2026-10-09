@@ -54,6 +54,10 @@ export async function dispatch(req, res) {
   }
 
   if (!sql) {
+    if (method === 'GET' && key === 'admin/state') {
+      fail(res, 503, 'Service unavailable');
+      return;
+    }
     if (method === 'GET') {
       ok(res, key in EMPTY_GET_DATA ? EMPTY_GET_DATA[key] : []);
       return;

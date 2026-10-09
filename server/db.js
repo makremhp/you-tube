@@ -121,10 +121,19 @@ export function ensureSchema() {
           status TEXT NOT NULL DEFAULT 'مفتوح',
           created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )`,
+        `CREATE TABLE IF NOT EXISTS vr_admin_audit_log (
+          id BIGSERIAL PRIMARY KEY,
+          admin_id BIGINT NOT NULL REFERENCES vr_users(id),
+          collection TEXT NOT NULL,
+          record_id TEXT NOT NULL,
+          new_status TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )`,
         `CREATE INDEX IF NOT EXISTS vr_campaigns_owner_idx ON vr_campaigns (owner_id)`,
         `CREATE INDEX IF NOT EXISTS vr_campaigns_platform_status_idx ON vr_campaigns (platform, status)`,
         `CREATE INDEX IF NOT EXISTS vr_deposits_user_idx ON vr_deposits (user_id, created_at DESC)`,
         `CREATE INDEX IF NOT EXISTS vr_withdrawals_user_idx ON vr_withdrawals (user_id, created_at DESC)`,
+        `CREATE INDEX IF NOT EXISTS vr_admin_audit_log_created_idx ON vr_admin_audit_log (created_at DESC)`,
       ];
       for (const statement of statements) {
         await sql.query(statement);

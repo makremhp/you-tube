@@ -3,9 +3,21 @@ import { HttpError, ok } from './errors.js';
 import { requireAdmin } from './auth.js';
 import { readPositiveInteger, readText } from './validation.js';
 
+async function recordAdminAction(adminId, collection, recordId, status) {
+  try {
+    await sql.query(
+      `INSERT INTO vr_admin_audit_log (admin_id, collection, record_id, new_status)
+       VALUES ($1, $2, $3, $4)`,
+      [adminId, collection, String(recordId), status],
+    );
+  } catch (error) {
+    console.error('Admin audit log write failed:', error instanceof Error ? error.message : 'unknown');
+  }
+}
+
 export async function adminState(req, res) {
   await requireAdmin(req);
-  const [users, deposits, withdrawals, campaigns, proofs, suspicious] = await Promise.all([
+  const [users, deposits, withdrawals, campaigns, proofs, suspicious, adminAudit] = await Promise.all([
     sql.query(
       `SELECT id::float8 AS id,
               TRIM(CONCAT(first_name, ' ', COALESCE(last_name, ''))) AS name,
@@ -63,12 +75,19 @@ export async function adminState(req, res) {
               to_char(created_at, 'YYYY-MM-DD HH24:MI') AS "createdAt"
        FROM vr_suspicious_signals ORDER BY created_at DESC LIMIT 1000`,
     ),
+    sql.query(
+      `SELECT audit.id::text AS id, audit.admin_id::float8 AS "adminId",
+              audit.collection, audit.record_id AS "recordId", audit.new_status AS "newStatus",
+              to_char(audit.created_at, 'YYYY-MM-DD HH24:MI') AS "createdAt"
+       FROM vr_admin_audit_log AS audit
+       ORDER BY audit.created_at DESC LIMIT 500`,
+    ),
   ]);
-  ok(res, { users, deposits, withdrawals, campaigns, proofs, suspicious });
+  ok(res, { users, deposits, withdrawals, campaigns, proofs, suspicious, adminAudit });
 }
 
 export async function adminAction(req, res, collection, id) {
-  await requireAdmin(req);
+  const admin = await requireAdmin(req);
   const body = req.body ?? {};
   const status = readText(body.status, 40);
 
@@ -80,6 +99,7 @@ export async function adminAction(req, res, collection, id) {
       [userId, status],
     );
     if (!rows.length) throw new HttpError(404, 'Not found');
+    await recordAdminAction(admin.id, collection, id, status);
     ok(res, { id: rows[0].id });
     return;
   }
@@ -102,6 +122,7 @@ export async function adminAction(req, res, collection, id) {
       [id, stored, readText(body.txId, 200)],
     );
     if (!rows.length) throw new HttpError(409, 'Request already processed');
+    await recordAdminAction(admin.id, collection, id, status);
     ok(res, { id });
     return;
   }
@@ -139,6 +160,7 @@ export async function adminAction(req, res, collection, id) {
       );
       if (!rows.length) throw new HttpError(404, 'Not found');
     }
+    await recordAdminAction(admin.id, collection, id, status);
     ok(res, { id });
     return;
   }
@@ -166,6 +188,7 @@ export async function adminAction(req, res, collection, id) {
       [match[1], match[2], next],
     );
     if (!rows.length) throw new HttpError(409, 'Proof already reviewed');
+    await recordAdminAction(admin.id, collection, id, status);
     ok(res, { id });
     return;
   }
@@ -176,6 +199,7 @@ export async function adminAction(req, res, collection, id) {
     if (!match || !mapped) throw new HttpError(400, 'Invalid request');
     const rows = await sql.query(`UPDATE vr_campaigns SET status = $2 WHERE id = $1 RETURNING id::text AS id`, [match[1], mapped]);
     if (!rows.length) throw new HttpError(404, 'Not found');
+    await recordAdminAction(admin.id, collection, id, status);
     ok(res, { id });
     return;
   }
@@ -185,6 +209,7 @@ export async function adminAction(req, res, collection, id) {
     if (!match || !['مفتوح', 'تمت المراجعة'].includes(status)) throw new HttpError(400, 'Invalid request');
     const rows = await sql.query(`UPDATE vr_suspicious_signals SET status = $2 WHERE id = $1 RETURNING id`, [match[1], status]);
     if (!rows.length) throw new HttpError(404, 'Not found');
+    await recordAdminAction(admin.id, collection, id, status);
     ok(res, { id });
     return;
   }
