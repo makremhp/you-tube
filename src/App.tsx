@@ -11,6 +11,7 @@ import {
   type TelegramUser,
 } from '@/legacy/shared';
 import { Router as WouterRouter } from 'wouter';
+import { apiGet } from '@/lib/api';
 
 const queryClient = new QueryClient();
 const LANDING_SEEN_KEY = 'vidreward-landing-seen';
@@ -50,6 +51,7 @@ function ProductExperience() {
     }
   });
   const [showLanding, setShowLanding] = useState(isLandingRoute);
+  const [maintenanceActive, setMaintenanceActive] = useState(false);
 
   useEffect(() => {
     const syncTelegramUser = () => {
@@ -59,6 +61,18 @@ function ProductExperience() {
     syncTelegramUser();
     window.addEventListener('hashchange', syncTelegramUser);
     return () => window.removeEventListener('hashchange', syncTelegramUser);
+  }, []);
+
+  useEffect(() => {
+    let live = true;
+    const checkMaintenance = () => {
+      apiGet<{ maintenance: boolean; isAdmin: boolean }>('maintenance')
+        .then(result => { if (live) setMaintenanceActive(result.maintenance && !result.isAdmin); })
+        .catch(() => undefined);
+    };
+    checkMaintenance();
+    const timer = window.setInterval(checkMaintenance, 30_000);
+    return () => { live = false; window.clearInterval(timer); };
   }, []);
 
   const rememberMode = (mode: 'creator' | 'viewer') => {
@@ -89,7 +103,15 @@ function ProductExperience() {
 
   return (
     <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-      {showLanding ? (
+      {maintenanceActive ? (
+        <main dir={language === 'ar' ? 'rtl' : 'ltr'} className="grid min-h-dvh place-items-center bg-[#101a32] px-5 text-white">
+          <section className="w-full max-w-md rounded-3xl border border-white/10 bg-white/[.06] p-7 text-center shadow-2xl">
+            <span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-amber-300/15 text-amber-300"><span className="text-3xl">⚙</span></span>
+            <h1 className="mt-5 text-2xl font-extrabold">{language === 'ar' ? 'المنصة تحت الصيانة' : 'We’ll be back shortly'}</h1>
+            <p className="mt-3 text-sm leading-6 text-blue-100/70">{language === 'ar' ? 'نعمل على تحسين الخدمة. حاول مرة أخرى بعد قليل.' : 'We are making improvements. Please check back soon.'}</p>
+          </section>
+        </main>
+      ) : showLanding ? (
         <LandingIntro
           language={language}
           onLanguageChange={setLanguage}
