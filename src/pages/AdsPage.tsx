@@ -6,18 +6,21 @@ import {
   Zap,
 } from 'lucide-react';
 import { useLanguage } from '@/i18n';
+import { apiPost, apiGet } from '@/lib/api';
 import {
   buildAdsteraDocument,
   useAdsteraAds,
+  type AdProvider,
   type AdsteraAd,
 } from '@/lib/adsteraAds';
 
 type DailyProgress = {
   day: string;
   adstera: number;
+  monetag: number;
 };
 
-const ADSTERRA_REWARD = 0.0005;
+const ADSTERRA_REWARD = 0.0001;
 const ADSTERRA_DAILY_LIMIT = 100;
 const ADSTERRA_COUNTDOWN_SECONDS = 30;
 
@@ -27,7 +30,7 @@ function getLocalDayKey() {
 }
 
 function emptyProgress(day = getLocalDayKey()): DailyProgress {
-  return { day, adstera: 0 };
+  return { day, adstera: 0, monetag: 0 };
 }
 
 function loadDailyProgress(storageKey: string): DailyProgress {
@@ -37,6 +40,7 @@ function loadDailyProgress(storageKey: string): DailyProgress {
       return {
         day: saved.day,
         adstera: Math.min(ADSTERRA_DAILY_LIMIT, Math.max(0, Number(saved.adstera) || 0)),
+        monetag: Math.min(ADSTERRA_DAILY_LIMIT, Math.max(0, Number(saved.monetag) || 0)),
       };
     }
   } catch {
@@ -52,7 +56,7 @@ function formatReward(amount: number) {
 
 function appendAdsteraBanner(root: HTMLElement, ad: AdsteraAd) {
   const frame = document.createElement('iframe');
-  frame.title = `Adsterra ${ad.name}`;
+  frame.title = `${ad.provider === 'monetag' ? 'Monetag' : 'Adsterra'} ${ad.name}`;
   frame.width = '320';
   frame.height = ad.format === '320x50' ? '50' : '80';
   frame.loading = 'eager';
@@ -156,12 +160,18 @@ function AdsterraSocialScripts({
 
 function AdsterraExperience({
   isArabic,
+  provider,
   onClaim,
+  claiming,
+  claimError,
   banners,
   socialAds,
 }: {
   isArabic: boolean;
+  provider: AdProvider;
   onClaim: () => void;
+  claiming: boolean;
+  claimError: string;
   banners: AdsteraAd[];
   socialAds: AdsteraAd[];
 }) {
@@ -181,18 +191,19 @@ function AdsterraExperience({
     return () => window.clearInterval(refreshTimer);
   }, [active]);
 
+  const networkName = provider === 'monetag' ? 'Monetag' : 'Adsterra';
   const copy = isArabic
     ? {
-        eyebrow: 'تصفح Adsterra',
+        eyebrow: `تصفح ${networkName}`,
         title: 'أكمل وقت التصفح واحصل على مكافأتك.',
-        description: 'ابقَ في هذه الصفحة حتى انتهاء العداد للحصول على 0.0005 USDT.',
+        description: 'ابقَ في هذه الصفحة حتى انتهاء العداد للحصول على 0.0001 USDT.',
         congratulations: 'تهانينا، لقد أكملت عملية التصفح',
         claim: 'استلام المكافأة',
       }
     : {
-        eyebrow: 'ADSTERRA BROWSING',
+        eyebrow: `${networkName.toUpperCase()} BROWSING`,
         title: 'Finish browsing to claim your reward.',
-        description: 'Stay on this page until the countdown ends to receive 0.0005 USDT.',
+        description: 'Stay on this page until the countdown ends to receive 0.0001 USDT.',
         congratulations: 'You completed the browsing session',
         claim: 'Claim reward',
       };
@@ -249,14 +260,16 @@ function AdsterraExperience({
             </div>
             <h2 className="mt-5 text-lg font-bold">{copy.congratulations}</h2>
             <p className="mt-2 font-mono text-sm text-[#f6c453]">+{formatReward(ADSTERRA_REWARD)}</p>
+            {claimError && <p role="alert" className="mt-3 text-xs text-rose-200">{claimError}</p>}
             <button
               type="button"
               data-testid="button-claim-adstera"
               onClick={onClaim}
-              className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#f6c453] text-sm font-bold text-[#17213a] transition hover:bg-[#ffdc7e]"
+              disabled={claiming}
+              className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#f6c453] text-sm font-bold text-[#17213a] transition hover:bg-[#ffdc7e] disabled:cursor-wait disabled:opacity-60"
             >
               <Gift size={17} />
-              {copy.claim}
+              {claiming ? (isArabic ? 'جارٍ تسجيل المكافأة…' : 'Recording reward…') : copy.claim}
             </button>
           </section>
         </div>
@@ -268,6 +281,7 @@ function AdsterraExperience({
 function RewardAdCard({
   title,
   description,
+  provider,
   label,
   reward,
   completed,
@@ -278,6 +292,7 @@ function RewardAdCard({
 }: {
   title: string;
   description: string;
+  provider: AdProvider;
   label: string;
   reward: number;
   completed: number;
@@ -289,25 +304,26 @@ function RewardAdCard({
   const isComplete = completed >= limit;
   const progress = Math.min(100, Math.round((completed / limit) * 100));
   const startLabel = isArabic ? 'ابدأ التصفح' : 'Start browsing';
+  const isMonetag = provider === 'monetag';
 
   return (
     <section
       data-testid="card-task-adstera"
-      className={`relative isolate overflow-hidden rounded-2xl border border-red-400/40 bg-[radial-gradient(circle_at_94%_0%,rgba(248,90,90,.22),transparent_8rem),linear-gradient(135deg,#64221f_0%,#361a20_58%,#1d131e_100%)] p-3 text-white shadow-xl shadow-red-950/20 transition duration-200 hover:-translate-y-0.5 ${blocked ? 'opacity-60' : ''}`}
+      className={`relative isolate overflow-hidden rounded-2xl border p-3 text-white shadow-xl transition duration-200 hover:-translate-y-0.5 ${isMonetag?'border-violet-300/35 bg-[radial-gradient(circle_at_94%_0%,rgba(167,139,250,.27),transparent_8rem),linear-gradient(135deg,#31215f_0%,#241943_58%,#17152c_100%)] shadow-violet-950/20':'border-red-400/40 bg-[radial-gradient(circle_at_94%_0%,rgba(248,90,90,.22),transparent_8rem),linear-gradient(135deg,#64221f_0%,#361a20_58%,#1d131e_100%)] shadow-red-950/20'} ${blocked ? 'opacity-60' : ''}`}
     >
       <div className="relative z-10 flex items-center gap-3 rounded-xl px-1.5 py-1">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-lg">
-          <img
+            {isMonetag ? <span className="text-lg font-black tracking-tight text-violet-700">M</span> : <img
             src={`${import.meta.env.BASE_URL}assets/adstera-logo.jpeg`}
             alt="Adsterra"
             className="h-full w-full object-cover"
-          />
+          />}
         </div>
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex flex-wrap items-center gap-2">
-            <span className="text-[9px] font-bold uppercase tracking-[.13em] text-[#f6c453]">{label}</span>
+            <span className={`text-[9px] font-bold uppercase tracking-[.13em] ${isMonetag?'text-violet-200':'text-[#f6c453]'}`}>{label}</span>
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-bold text-blue-100/75">
-              Adsterra
+              {isMonetag?'Monetag':'Adsterra'}
             </span>
           </div>
           <h2 className="truncate text-sm font-bold">{title}</h2>
@@ -329,7 +345,7 @@ function RewardAdCard({
           </span>
         </div>
         <div className="h-1.5 overflow-hidden rounded-full bg-white/15">
-          <div className="h-full rounded-full bg-[#f6c453] transition-[width] duration-500" style={{ width: `${Math.max(progress, progress > 0 ? 4 : 2)}%` }} />
+            <div className={`h-full transition-[width] duration-500 ${isMonetag?'bg-violet-300':'bg-[#f6c453]'}`} style={{ width: `${Math.max(progress, progress > 0 ? 4 : 2)}%` }} />
         </div>
       </div>
 
@@ -346,7 +362,7 @@ function RewardAdCard({
             disabled={blocked}
             data-testid="button-start-task-adstera"
             onClick={onStart}
-            className="flex min-h-9 items-center gap-2 rounded-lg bg-[#f6c453] px-3 text-[11px] font-bold text-[#17213a] transition hover:bg-[#ffdc7e] active:scale-[.98] disabled:cursor-not-allowed"
+            className={`flex min-h-9 items-center gap-2 rounded-lg px-3 text-[11px] font-bold transition active:scale-[.98] disabled:cursor-not-allowed ${isMonetag?'bg-violet-300 text-[#201544] hover:bg-violet-200':'bg-[#f6c453] text-[#17213a] hover:bg-[#ffdc7e]'}`}
           >
             <Zap size={14} />
             {startLabel}
@@ -369,7 +385,23 @@ export function AdsPage({
   const storageKey = `vidreward.ads.daily.v1-${userId ?? 'guest'}`;
   const [today, setToday] = useState(getLocalDayKey);
   const [progress, setProgress] = useState(() => loadDailyProgress(storageKey));
-  const [adsteraOpen, setAdsteraOpen] = useState(false);
+  const [activeProvider, setActiveProvider] = useState<AdProvider | null>(null);
+  const [claiming, setClaiming] = useState(false);
+  const [claimError, setClaimError] = useState('');
+
+  useEffect(() => {
+    if (!userId) return;
+    Promise.all([
+      apiGet<{ claimedToday: number }>('ads/progress/adstera'),
+      apiGet<{ claimedToday: number }>('ads/progress/monetag'),
+    ])
+      .then(([adstera, monetag]) => setProgress({
+        day: getLocalDayKey(),
+        adstera: Math.min(ADSTERRA_DAILY_LIMIT, adstera.claimedToday),
+        monetag: Math.min(ADSTERRA_DAILY_LIMIT, monetag.claimedToday),
+      }))
+      .catch(() => undefined);
+  }, [userId]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setToday(getLocalDayKey()), 30_000);
@@ -393,58 +425,59 @@ export function AdsPage({
   }, [progress, storageKey]);
 
   const daily = progress.day === today ? progress : emptyProgress(today);
-  const activeBannerAds = ads.filter((ad) => ad.enabled && ad.format === '320x50');
-  const activeSocialAds = ads.filter((ad) => ad.enabled && ad.format === 'social');
-  const hasActiveAds = activeBannerAds.length > 0 || activeSocialAds.length > 0;
+  const adsFor = (provider: AdProvider) => ads.filter((ad) => ad.enabled && ad.provider === provider);
+  const activeBannerAds = activeProvider ? adsFor(activeProvider).filter((ad) => ad.format === '320x50') : [];
+  const activeSocialAds = activeProvider ? adsFor(activeProvider).filter((ad) => ad.format === 'social') : [];
+  const hasActiveExperienceAds = activeBannerAds.length > 0 || activeSocialAds.length > 0;
 
   useEffect(() => {
-    if (!hasActiveAds) setAdsteraOpen(false);
-  }, [hasActiveAds]);
+    if (activeProvider && !hasActiveExperienceAds) setActiveProvider(null);
+  }, [activeProvider, hasActiveExperienceAds]);
 
   const copy = isArabic
     ? {
-        eyebrow: 'إعلانات Adsterra',
+        eyebrow: 'إعلانات Adsterra و Monetag',
         title: 'شاهد الإعلان واحصل على مكافأتك.',
-        description: 'تصفح البنرات الإعلانية واحصل على مكافأتك بعد إكمال الوقت.',
-        adsteraTitle: 'تصفح إعلانات Adsterra',
-        adsteraDescription: hasActiveAds
-          ? 'تصفح صفحة Adsterra لمدة 30 ثانية واحصل على مكافأة 0.0005 USDT.'
-          : 'لا توجد أكواد Adsterra مفعّلة حاليًا.',
-        adsteraLabel: hasActiveAds ? 'تصفح لمدة 30 ثانية' : 'لا توجد إعلانات متاحة',
+        description: 'أكمل جلسة الإعلان لتحصل على مكافأة تُضاف إلى رصيدك بعد تسجيلها على الخادم.',
         rewardAdded: 'تمت إضافة المكافأة',
         rewardMessage: (reward: string) => `أُضيفت ${reward} إلى رصيدك.`,
       }
     : {
-        eyebrow: 'ADSTERRA ADS',
+        eyebrow: 'ADSTERRA & MONETAG ADS',
         title: 'Watch the ad and earn your reward.',
-        description: 'Browse the banner ads and earn your reward after completing the countdown.',
-        adsteraTitle: 'Browse Adsterra',
-        adsteraDescription: hasActiveAds
-          ? 'Browse the Adsterra page for 30 seconds and receive 0.0005 USDT.'
-          : 'No Adsterra codes are active right now.',
-        adsteraLabel: hasActiveAds ? '30-second browse' : 'No ads available',
+        description: 'Complete an ad session to earn a reward after it is recorded by the server.',
         rewardAdded: 'Reward added',
         rewardMessage: (reward: string) => `${reward} was added to your balance.`,
       };
 
-  const completeAd = () => {
-    if (!hasActiveAds) {
-      setAdsteraOpen(false);
+  const completeAd = async (provider: AdProvider | null) => {
+    if (!provider || !hasActiveExperienceAds) {
+      setActiveProvider(null);
       return;
     }
-    const current = progress.day === getLocalDayKey() ? progress : emptyProgress();
-    if (current.adstera >= ADSTERRA_DAILY_LIMIT) return;
-
-    setProgress({
-      ...current,
-      adstera: current.adstera + 1,
-    });
-    onReward(ADSTERRA_REWARD, copy.rewardAdded, copy.rewardMessage(formatReward(ADSTERRA_REWARD)));
+    if (claiming) return;
+    setClaiming(true);
+    setClaimError('');
+    try {
+      const result = await apiPost<{ reward: number; claimedToday: number }>(`ads/reward/${provider}`, {});
+      setProgress(current => ({
+        ...(current.day === getLocalDayKey() ? current : emptyProgress()),
+        [provider]: Math.min(ADSTERRA_DAILY_LIMIT, result.claimedToday),
+      }));
+      onReward(result.reward, copy.rewardAdded, copy.rewardMessage(formatReward(result.reward)));
+      setActiveProvider(null);
+    } catch {
+      setClaimError(isArabic ? 'تعذر تسجيل المكافأة. تحقق من اتصالك ثم حاول مجددًا.' : 'Reward could not be recorded. Check your connection and retry.');
+    } finally {
+      setClaiming(false);
+    }
   };
 
-  const startAdstera = () => {
-    if (!hasActiveAds || daily.adstera >= ADSTERRA_DAILY_LIMIT || adsteraOpen) return;
-    setAdsteraOpen(true);
+  const startProvider = (provider: AdProvider) => {
+    const count = daily[provider];
+    if (!adsFor(provider).length || count >= ADSTERRA_DAILY_LIMIT || activeProvider) return;
+    setClaimError('');
+    setActiveProvider(provider);
   };
 
   return (
@@ -459,28 +492,37 @@ export function AdsPage({
       </section>
 
       <div className="mt-4 space-y-3">
-        <RewardAdCard
-          title={copy.adsteraTitle}
-          description={copy.adsteraDescription}
-          label={copy.adsteraLabel}
-          reward={ADSTERRA_REWARD}
-          completed={daily.adstera}
-          limit={ADSTERRA_DAILY_LIMIT}
-          blocked={adsteraOpen || !hasActiveAds}
-          isArabic={isArabic}
-          onStart={startAdstera}
-        />
+        {(['adstera','monetag'] as const).map(provider => {
+          const available = adsFor(provider).length > 0;
+          const name = provider === 'monetag' ? 'Monetag' : 'Adsterra';
+          const completed = daily[provider];
+          return <RewardAdCard
+            key={provider}
+            provider={provider}
+            title={isArabic ? `شاهد إعلانات ${name}` : `Watch ${name} ads`}
+            description={available
+              ? (isArabic ? `شاهد الإعلان لمدة 30 ثانية واربح 0.0001 USDT لكل إعلان.` : 'Watch for 30 seconds and earn 0.0001 USDT per ad.')
+              : (isArabic ? `لا توجد شيفرات ${name} مفعّلة حاليًا.` : `No ${name} ad codes are enabled yet.`)}
+            label={available ? (isArabic ? 'شاهد واربح' : 'WATCH & EARN') : (isArabic ? 'غير مهيأ' : 'NOT CONFIGURED')}
+            reward={ADSTERRA_REWARD}
+            completed={completed}
+            limit={ADSTERRA_DAILY_LIMIT}
+            blocked={activeProvider !== null || !available}
+            isArabic={isArabic}
+            onStart={() => startProvider(provider)}
+          />;
+        })}
       </div>
 
-      {adsteraOpen && (
+      {activeProvider && (
         <AdsterraExperience
           isArabic={isArabic}
+          provider={activeProvider}
           banners={activeBannerAds}
           socialAds={activeSocialAds}
-          onClaim={() => {
-            completeAd();
-            setAdsteraOpen(false);
-          }}
+          onClaim={() => { void completeAd(activeProvider); }}
+          claiming={claiming}
+          claimError={claimError}
         />
       )}
     </main>
