@@ -196,7 +196,7 @@ type TransactionStatus = 'تم' | 'قيد المعالجة' | 'تم الإلغا
 type PaymentMethod = 'stars' | 'binance' | 'web3';
 type DepositMethod = 'stars' | 'web3';
 type WithdrawMethod = 'binance' | 'web3';
-type AppScreen = 'overview' | 'campaigns' | 'campaign-detail' | 'watch' | 'publish' | 'add' | 'deposit' | 'withdraw' | 'deposit-history' | 'withdraw-history' | 'telegram-tasks' | 'tiktok-tasks' | 'tiktok-task' | 'ads' | 'admin-overview' | 'admin-users' | 'admin-deposits' | 'admin-withdrawals' | 'admin-campaigns' | 'admin-proofs' | 'admin-ads' | 'admin-settings' | 'admin-notifications' | 'admin-suspicious' | 'admin-audit';
+type AppScreen = 'overview' | 'campaigns' | 'campaign-detail' | 'watch' | 'publish' | 'add' | 'deposit' | 'withdraw' | 'deposit-history' | 'withdraw-history' | 'telegram-tasks' | 'tiktok-tasks' | 'tiktok-task' | 'ads' | 'admin-overview' | 'admin-users' | 'admin-banned' | 'admin-deposits' | 'admin-withdrawals' | 'admin-campaigns' | 'admin-proofs' | 'admin-ads' | 'admin-settings' | 'admin-maintenance' | 'admin-notifications' | 'admin-suspicious' | 'admin-audit';
 
 type DepositRecord = {
   id: string;
@@ -410,12 +410,14 @@ function Sidebar({
     ? [
         { icon: BarChart3, label: 'نظرة عامة', screen: 'admin-overview' as AppScreen },
         { icon: Users, label: 'مستخدمو Telegram', screen: 'admin-users' as AppScreen },
+        { icon: ShieldCheck, label: 'المستخدمون المحظورون', screen: 'admin-banned' as AppScreen },
         { icon: DollarSign, label: 'الإيداعات', screen: 'admin-deposits' as AppScreen },
         { icon: WalletCards, label: 'السحوبات', screen: 'admin-withdrawals' as AppScreen },
         { icon: Megaphone, label: 'الحملات', screen: 'admin-campaigns' as AppScreen },
         { icon: CheckCircle2, label: 'إثباتات المهام', screen: 'admin-proofs' as AppScreen },
         { icon: FileText, label: 'مخزون Adstera', screen: 'admin-ads' as AppScreen },
         { icon: Settings2, label: 'الإعدادات', screen: 'admin-settings' as AppScreen },
+        { icon: Activity, label: 'الصيانة', screen: 'admin-maintenance' as AppScreen },
         { icon: Share2, label: 'الإشعارات', screen: 'admin-notifications' as AppScreen },
         { icon: Timer, label: 'مستخدمون مشبوهون', screen: 'admin-suspicious' as AppScreen },
         { icon: Activity, label: 'سجل إجراءات الإدارة', screen: 'admin-audit' as AppScreen },
