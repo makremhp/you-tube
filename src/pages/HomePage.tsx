@@ -43,6 +43,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
   const { t, language } = useLanguage();
   const [browserEarningPage] = useState(() => new URLSearchParams(window.location.search).get('view') === 'earn');
   const [mode, setMode] = useState<'creator' | 'viewer' | 'admin'>(() => browserEarningPage ? 'viewer' : initialMode);
+  const [adminEnabled, setAdminEnabled] = useState(false);
   const [screen, setScreen] = useState<AppScreen>(() => browserEarningPage
     ? 'watch'
     : initialScreen ?? (initialMode === 'viewer' ? 'watch' : 'overview'));
@@ -119,14 +120,16 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
 
   const refreshData = useCallback(async () => {
     try {
-      const [balance, ownCampaigns, tasks, proofs, deposits, withdrawals] = await Promise.all([
+      const [balance, ownCampaigns, tasks, proofs, deposits, withdrawals, user] = await Promise.all([
         apiGet<ApiBalance>('balance'),
         apiGet<ApiCampaignRow[]>('campaigns'),
         apiGet<ApiCampaignRow[]>('tasks'),
         apiGet<ApiProofRecordRow[]>('proofs'),
         apiGet<ApiHistoryRecordRow[]>('deposits'),
         apiGet<ApiHistoryRecordRow[]>('withdrawals'),
+        apiGet<{ isAdmin?: boolean } | null>('user'),
       ]);
+      setAdminEnabled(Boolean(user?.isAdmin));
       setAdvertiserBalance(Number(balance?.advertiserBalance ?? 0));
       setViewerBalance(Number(balance?.viewerBalance ?? 0));
       setVideos(ownCampaigns.filter((row) => row.platform === 'youtube').map(toVideo));
@@ -140,6 +143,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       setDepositHistory(deposits.map((row) => toDepositRecord(row, language)));
       setWithdrawHistory(withdrawals.map((row) => toWithdrawRecord(row, language)));
     } catch {
+      setAdminEnabled(false);
       notify('warning', 'تعذر تحميل البيانات', 'تعذر الاتصال بالخادم. أعد المحاولة بعد قليل.');
     }
   }, [language, notify]);
@@ -480,6 +484,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
   };
 
   const changeMode = (nextMode: 'creator' | 'viewer' | 'admin') => {
+    if (nextMode === 'admin' && !adminEnabled) return;
     setMode(nextMode);
     setScreen(nextMode === 'creator' ? 'overview' : nextMode === 'admin' ? 'admin-overview' : 'watch');
     if (nextMode !== 'admin') onModeChange(nextMode);
@@ -494,7 +499,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
   return (
     <div className="min-h-[100dvh] bg-[#f7f9fc] text-[#12234b]">
       <div className={`flex min-h-[100dvh] ${browserEarningPage ? '' : 'lg:gap-5 lg:p-5'}`}>
-        {!browserEarningPage && <Sidebar mode={mode} screen={screen} telegramUser={telegramUser} onModeChange={changeMode} onNavigate={setScreen} onAdd={openAdvertiserCampaignForm} open={mobileMenu} onClose={() => setMobileMenu(false)} />}
+        {!browserEarningPage && <Sidebar mode={mode} screen={screen} telegramUser={telegramUser} adminEnabled={adminEnabled} onModeChange={changeMode} onNavigate={setScreen} onAdd={openAdvertiserCampaignForm} open={mobileMenu} onClose={() => setMobileMenu(false)} />}
         {!browserEarningPage && mobileMenu && <Button type="button" aria-label="إغلاق خلفية القائمة" data-testid="button-close-menu-overlay" onClick={() => setMobileMenu(false)} variant="unstyled" size="fit" className="fixed inset-0 z-40 bg-[#061333]/30 backdrop-blur-sm lg:hidden" />}
         <div className={`min-w-0 flex-1 ${browserEarningPage ? '' : 'overflow-hidden rounded-none bg-[#f7f9fc] lg:rounded-[26px] lg:border lg:border-slate-200/80 lg:bg-[#fbfcfe]'}`}>
           {!browserEarningPage && <Header mode={mode} screen={screen} telegramUser={telegramUser} viewerBalance={viewerBalance} advertiserBalance={advertiserBalance} onMenu={() => setMobileMenu(true)} onAdd={openAdvertiserCampaignForm} />}

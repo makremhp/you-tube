@@ -6,11 +6,11 @@ import { buildAdsteraDocument, deleteAdsteraAd, useAdsteraAds, type AdsteraAd, t
 
 type User = { id: number; name: string; username: string; avatar: string; advertiserBalance: number; earnedBalance: number; status: 'نشط' | 'محظور'; bannedBySystem?: boolean; joinedAt: string; lastLogin: string; lastActive: string; invitedBy: string };
 type Row = { id: string; userId?: number; amount?: number; createdAt?: string; status?: string; [key: string]: any };
-type State = { users: User[]; deposits: Row[]; withdrawals: Row[]; campaigns: Row[]; proofs: Row[]; ads: Row[]; suspicious: Row[]; settings: Record<string, any>; reports: Row[] };
+type State = { users: User[]; deposits: Row[]; withdrawals: Row[]; campaigns: Row[]; proofs: Row[]; ads: Row[]; suspicious: Row[]; adminAudit: Row[]; settings: Record<string, any>; reports: Row[] };
 const SETTINGS_KEY = 'vidreward.admin.settings.v1';
 const defaultSettings: Record<string, any> = { binanceWithdrawMin: 1, web3WithdrawMin: 2, starsDepositMin: 1, web3DepositMin: 5, userShare: 20, platformShare: 10, durationMin: 10, durationMax: 80, cpmMin: 1.5, cpmMax: 4, telegramCpm: 2.2, tiktokCpm: 2.8, taskReward: 0.02, telegramTaskReward: 0.003, tiktokTaskReward: 0.01, web3Address: '', maintenance: false };
-const emptyState: State = { users: [], deposits: [], withdrawals: [], campaigns: [], proofs: [], ads: [], suspicious: [], settings: defaultSettings, reports: [] };
-const labels: Record<string, string> = { overview:'نظرة عامة', users:'مستخدمو Telegram', deposits:'الإيداعات', 'deposit-detail':'تفاصيل المعاملة', withdrawals:'السحوبات', campaigns:'الحملات', proofs:'إثباتات المهام', ads:'مخزون Adstera', settings:'الإعدادات', notifications:'الإشعارات', suspicious:'مستخدمون مشبوهون' };
+const emptyState: State = { users: [], deposits: [], withdrawals: [], campaigns: [], proofs: [], ads: [], suspicious: [], adminAudit: [], settings: defaultSettings, reports: [] };
+const labels: Record<string, string> = { overview:'نظرة عامة', users:'مستخدمو Telegram', deposits:'الإيداعات', 'deposit-detail':'تفاصيل المعاملة', withdrawals:'السحوبات', campaigns:'الحملات', proofs:'إثباتات المهام', ads:'مخزون Adstera', settings:'الإعدادات', notifications:'الإشعارات', suspicious:'مستخدمون مشبوهون', audit:'سجل إجراءات الإدارة' };
 const cx = (...classes: Array<string | undefined>) => classes.filter(Boolean).join(' ');
 const cell = 'px-4 py-1.5 text-right align-middle';
 const btn = 'inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition hover:-translate-y-px disabled:opacity-40';
@@ -105,7 +105,7 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
  };
  const loadRemote = async () => {
   try {
-   const remote = await apiGet<Pick<State, 'users' | 'deposits' | 'withdrawals' | 'campaigns' | 'proofs' | 'suspicious'>>('admin/state');
+   const remote = await apiGet<Pick<State, 'users' | 'deposits' | 'withdrawals' | 'campaigns' | 'proofs' | 'suspicious' | 'adminAudit'>>('admin/state');
    setData(d => ({
     ...d,
     users: (remote.users ?? []).map(user => ({ ...user, avatar: String(user.name ?? '').trim().slice(0, 2) || '—' })),
@@ -114,9 +114,10 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
     campaigns: remote.campaigns ?? [],
     proofs: remote.proofs ?? [],
     suspicious: remote.suspicious ?? [],
+    adminAudit: remote.adminAudit ?? [],
    }));
   } catch {
-   setData(d => ({ ...d, users: [], deposits: [], withdrawals: [], campaigns: [], proofs: [], suspicious: [] }));
+   setData(d => ({ ...d, users: [], deposits: [], withdrawals: [], campaigns: [], proofs: [], suspicious: [], adminAudit: [] }));
   }
  };
  useEffect(() => { void loadRemote(); }, []);
@@ -311,6 +312,7 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
    }
    if(page==='settings') return <SettingsPanel values={data.settings} pricing={pricing} onSave={v=>{setData(d=>({...d,settings:v}));announce('تم حفظ الإعدادات')}} onPricingSave={nextPricing=>{saveLocalPricing(nextPricing);announce('تم تحديث الأسعار')}}/>;
    if(page==='notifications') return <NotificationPanel reports={data.reports} onSend={r=>{setData(d=>({...d,reports:[{...r,id:`NTF-${Date.now()}`,createdAt:new Date().toLocaleString('ar'),status:'مسودة'},...d.reports]}));announce('تم حفظ التقرير')}}/>;
+   if(page==='audit') return <div className="space-y-4">{panel(<p className="text-xs leading-5 text-slate-500">آخر 500 تغيير حالة نفّذه مشرف محفوظة على الخادم، مع المسؤول والقسم والسجل والحالة الجديدة.</p>)}{table(['الوقت','المسؤول','القسم','معرّف السجل','الحالة الجديدة'],data.adminAudit.filter(r=>!query||[r.adminId,r.collection,r.recordId,r.newStatus].some(value=>String(value??'').toLowerCase().includes(query.toLowerCase()))).map(r=><tr key={r.id} className="border-b border-slate-50"><td className={cell}>{r.createdAt}</td><td className={cell}>{userBy(Number(r.adminId))?.name || r.adminId}</td><td className={cell}>{({users:'المستخدمون',deposits:'الإيداعات',withdrawals:'السحوبات',campaigns:'الحملات',proofs:'الإثباتات',suspicious:'الإشارات المشبوهة'} as Record<string,string>)[String(r.collection)] || r.collection}</td><td className={cell}>{r.recordId}</td><td className={cell}><Badge>{r.newStatus}</Badge></td></tr>))}</div>;
   return <div className="space-y-4">{panel(<div className="flex gap-3">{search}{statusSelect(['مفتوح','تمت المراجعة'])}</div>)}{table(['الإشارة','المستخدم','نوع الإشارة','الوقت','الحالة','الإجراء'],rowData('suspicious').map(r=><tr key={r.id} className="border-b border-slate-50"><td className={cell}>{r.id}</td><td className={cell}>{userBy(r.userId)?.name} · {r.userId}</td><td className={cell}>{r.attempt}</td><td className={cell}>{r.createdAt}</td><td className={cell}><Badge>{r.status}</Badge></td><td className={cell}>{action('حظر المستخدم',()=>confirm('حظر هذا المستخدم؟',()=>{updateRows('users',r.userId as number,{status:'محظور'});updateRows('suspicious',r.id,{status:'تمت المراجعة'});setDialog(null)}),true)}</td></tr>))}</div>;
  };
 
