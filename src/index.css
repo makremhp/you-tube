@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Lemonada:wght@400;500;600;700&display=swap&text=0123456789%D9%A0%D9%A1%D9%A2%D9%A3%D9%A4%D9%A5%D9%A6%D9%A7%D9%A8%D9%A9ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz%20.%2C%3A%3B%2B-%2F%25%24%28%29%5B%5D%21%3F%40%23%26%2A%3D_%27%22%7C%C2%B7%E2%80%A2%E2%80%A6%E2%80%93%E2%80%94%3C%3E~');
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Readex+Pro:wght@400;500;600;700&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
@@ -58,9 +59,9 @@
   --accent-foreground: 224 38% 14%;
   --destructive: 2 72% 54%;
   --destructive-foreground: 0 0% 100%;
-  --app-font-sans: 'IBM Plex Sans Arabic', sans-serif;
-  --app-font-serif: 'Readex Pro', sans-serif;
-  --app-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --app-font-sans: 'Lemonada', 'IBM Plex Sans Arabic', sans-serif;
+  --app-font-serif: 'Lemonada', 'Readex Pro', sans-serif;
+  --app-font-mono: 'Lemonada', ui-monospace, SFMono-Regular, Menlo, monospace;
   --radius: 1rem;
   --elevate-1: rgba(20, 44, 95, .04);
   --elevate-2: rgba(20, 44, 95, .08);
