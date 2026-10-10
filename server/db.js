@@ -121,6 +121,32 @@ export function ensureSchema() {
           last_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           PRIMARY KEY (user_id, day)
         )`,
+        `CREATE TABLE IF NOT EXISTS vr_monetag_ad_sessions (
+          id TEXT PRIMARY KEY,
+          user_id BIGINT NOT NULL REFERENCES vr_users(id),
+          day DATE NOT NULL,
+          first_valued_at TIMESTAMPTZ,
+          second_valued_at TIMESTAMPTZ,
+          first_completed_at TIMESTAMPTZ,
+          second_completed_at TIMESTAMPTZ,
+          rewarded_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '1 hour')
+        )`,
+        `CREATE INDEX IF NOT EXISTS vr_monetag_ad_sessions_user_idx
+          ON vr_monetag_ad_sessions (user_id, created_at DESC)`,
+        `CREATE TABLE IF NOT EXISTS vr_monetag_reward_claims (
+          session_id TEXT PRIMARY KEY REFERENCES vr_monetag_ad_sessions(id),
+          user_id BIGINT NOT NULL REFERENCES vr_users(id),
+          day DATE NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )`,
+        `CREATE TABLE IF NOT EXISTS vr_monetag_reward_credits (
+          session_id TEXT PRIMARY KEY REFERENCES vr_monetag_ad_sessions(id),
+          user_id BIGINT NOT NULL REFERENCES vr_users(id),
+          day DATE NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )`,
         `CREATE TABLE IF NOT EXISTS vr_suspicious_signals (
           id BIGSERIAL PRIMARY KEY,
           user_id BIGINT NOT NULL REFERENCES vr_users(id),

@@ -1,7 +1,7 @@
 import { authenticate, isAdmin } from './auth.js';
 import { sql, ensureSchema } from './db.js';
 import { HttpError, fail, ok } from './errors.js';
-import { getYoutubeSettings } from './config.js';
+import { DEFAULT_WITHDRAWAL_SETTINGS, getYoutubeSettings } from './config.js';
 import {
   completeTask,
   createCampaign,
@@ -17,6 +17,7 @@ import {
   adminState,
   sendAdminNotification,
   setMaintenance,
+  setWithdrawalSettings,
 } from './admin.js';
 import {
   claimAdReward,
@@ -28,9 +29,16 @@ import {
   listDeposits,
   listProofs,
   listWithdrawals,
+  getPublicWithdrawalSettings,
 } from './wallet.js';
+import {
+  completeMonetagStep,
+  createMonetagSession,
+  getMonetagSession,
+  handleMonetagPostback,
+} from './monetag.js';
 import { checkTelegramMembershipOnEntry } from './membership.js';
-import { readPositiveInteger } from './validation.js';
+import { readPositiveInteger, readText } from './validation.js';
 
 function routePath(req) {
   const url = new URL(req.url ?? '/', 'http://localhost');
@@ -43,6 +51,7 @@ const EMPTY_GET_DATA = {
   user: null,
   balance: { advertiserBalance: 0, viewerBalance: 0 },
   'admin/state': { users: [], deposits: [], withdrawals: [], campaigns: [], proofs: [], suspicious: [] },
+  'withdrawal/settings': DEFAULT_WITHDRAWAL_SETTINGS,
 };
 
 export async function dispatch(req, res) {
@@ -57,6 +66,10 @@ export async function dispatch(req, res) {
   }
 
   if (!sql) {
+    if (method === 'GET' && key === 'monetag/postback') {
+      fail(res, 503, 'Service unavailable');
+      return;
+    }
     if (method === 'GET' && key === 'admin/state') {
       fail(res, 503, 'Service unavailable');
       return;
@@ -71,6 +84,11 @@ export async function dispatch(req, res) {
 
   await ensureSchema();
 
+  if (method === 'GET' && key === 'monetag/postback') {
+    await handleMonetagPostback(req, res, query);
+    return;
+  }
+
   const authUser = authenticate(req);
   const adminIds = (process.env.ADMIN_TELEGRAM_IDS ?? '').split(',').map((id) => id.trim());
   const adminRequest = Boolean(authUser && adminIds.includes(String(authUser.id)));
@@ -80,6 +98,7 @@ export async function dispatch(req, res) {
     ok(res, { maintenance, isAdmin: Boolean(authUser && isAdmin(authUser.id)) });
     return;
   }
+  if (method === 'GET' && key === 'withdrawal/settings') return getPublicWithdrawalSettings(req, res);
   if (maintenance && !adminRequest) {
     fail(res, 503, 'Platform is under maintenance');
     return;
@@ -100,6 +119,9 @@ export async function dispatch(req, res) {
     if (key === 'balance') return getBalance(req, res);
     if (key === 'ads/progress') return getAdProgress(req, res);
     if (key === 'ads/progress/adstera' || key === 'ads/progress/monetag') return getAdProgress(req, res, segments[2]);
+    if (resource === 'ads' && segments[1] === 'monetag' && segments[2] === 'session' && segments.length === 4) {
+      return getMonetagSession(req, res, readText(segments[3], 64));
+    }
     if (key === 'proofs') return listProofs(req, res);
     if (key === 'deposits') return listDeposits(req, res);
     if (key === 'withdrawals') return listWithdrawals(req, res);
@@ -114,7 +136,11 @@ export async function dispatch(req, res) {
     if (key === 'deposits') return createDeposit(req, res);
     if (key === 'withdrawals') return createWithdrawal(req, res);
     if (key === 'ads/reward') return claimAdReward(req, res);
-    if (key === 'ads/reward/adstera' || key === 'ads/reward/monetag') return claimAdReward(req, res, segments[2]);
+    if (key === 'ads/reward/adstera') return claimAdReward(req, res, 'adstera');
+    if (key === 'ads/monetag/session') return createMonetagSession(req, res);
+    if (resource === 'ads' && segments[1] === 'monetag' && segments[2] === 'session' && segments[4] === 'complete' && segments.length === 5) {
+      return completeMonetagStep(req, res, readText(segments[3], 64));
+    }
     if (resource === 'tasks' && segments.length === 3) {
       const id = readPositiveInteger(segments[1], Number.MAX_SAFE_INTEGER);
       if (!id) throw new HttpError(400, 'Invalid request');
@@ -127,6 +153,7 @@ export async function dispatch(req, res) {
 
   if (method === 'PATCH') {
     if (key === 'admin/settings/maintenance') return setMaintenance(req, res);
+    if (key === 'admin/settings/withdrawal') return setWithdrawalSettings(req, res);
     if (resource === 'campaigns' && segments.length === 2) {
       const id = readPositiveInteger(segments[1], Number.MAX_SAFE_INTEGER);
       if (!id) throw new HttpError(400, 'Invalid request');

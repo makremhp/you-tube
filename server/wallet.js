@@ -1,7 +1,10 @@
 import { sql } from './db.js';
 import { HttpError, ok } from './errors.js';
 import { isAdmin, requireUser } from './auth.js';
-import { AD_DAILY_LIMIT, AD_MIN_INTERVAL_SECONDS, AD_REWARD } from './config.js';
+import {
+  AD_DAILY_LIMIT, AD_MIN_INTERVAL_SECONDS, AD_REWARD,
+  DEFAULT_WITHDRAWAL_SETTINGS, MONETAG_AD_DAILY_LIMIT, MONETAG_AD_REWARD, normalizeWithdrawalSettings,
+} from './config.js';
 import { newIdentifier, readHttpUrl, readMoney, readPositiveInteger, readText } from './validation.js';
 
 async function nextMemoTag(userId) {
@@ -40,7 +43,16 @@ export async function getAdProgress(req, res, provider = 'adstera') {
     `SELECT count FROM ${rewardsTable} WHERE user_id = $1 AND day = (now() AT TIME ZONE 'UTC')::date`,
     [user.id],
   );
-  ok(res, { claimedToday: Number(rows[0]?.count ?? 0) });
+  ok(res, {
+    claimedToday: Number(rows[0]?.count ?? 0),
+    dailyLimit: provider === 'monetag' ? MONETAG_AD_DAILY_LIMIT : AD_DAILY_LIMIT,
+    reward: provider === 'monetag' ? MONETAG_AD_REWARD : AD_REWARD,
+  });
+}
+
+export async function getWithdrawalSettings() {
+  const rows = await sql.query(`SELECT value::text AS settings FROM vr_platform_settings WHERE key = 'withdrawal'`);
+  return normalizeWithdrawalSettings(rows[0]?.settings ?? DEFAULT_WITHDRAWAL_SETTINGS);
 }
 
 export async function listProofs(req, res) {
@@ -82,6 +94,10 @@ export async function listWithdrawals(req, res) {
   ok(res, rows);
 }
 
+export async function getPublicWithdrawalSettings(_req, res) {
+  ok(res, await getWithdrawalSettings());
+}
+
 export async function createDeposit(req, res) {
   const user = await requireUser(req);
   const body = req.body ?? {};
@@ -113,9 +129,13 @@ export async function createWithdrawal(req, res) {
   const user = await requireUser(req);
   const body = req.body ?? {};
   const method = body.method === 'binance' || body.method === 'web3' ? body.method : null;
-  const amount = readMoney(body.amount, 1, 100000);
+  if (!method) throw new HttpError(400, 'Invalid withdrawal method');
+  const settings = await getWithdrawalSettings();
+  const minimum = settings[method === 'binance' ? 'binanceWithdrawMin' : 'web3WithdrawMin'];
+  const amount = readMoney(body.amount, minimum, 100000);
   const destination = readText(body.destination, 200);
-  if (!method || !amount || !destination) throw new HttpError(400, 'Invalid request');
+  if (!amount) throw new HttpError(400, `Minimum withdrawal is ${minimum} USDT`);
+  if (!destination) throw new HttpError(400, 'Invalid request');
   const memoTag = await nextMemoTag(user.id);
   const rows = await sql.query(
     `WITH debit AS (

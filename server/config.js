@@ -44,9 +44,36 @@ export const TELEGRAM_RETENTION_DAYS = 3;
 export const TIKTOK_TASK_REWARD = Number(process.env.TIKTOK_TASK_REWARD ?? 0.01);
 export const AD_REWARD = Number(process.env.AD_REWARD ?? 0.0001);
 export const AD_DAILY_LIMIT = Number(process.env.AD_DAILY_LIMIT ?? 100);
+export const MONETAG_AD_REWARD = 0.0001;
+export const MONETAG_AD_DAILY_LIMIT = 500;
 export const AD_MIN_INTERVAL_SECONDS = Number(process.env.AD_MIN_INTERVAL_SECONDS ?? 30);
+export const DEFAULT_WITHDRAWAL_SETTINGS = Object.freeze({
+  binanceWithdrawMin: 1,
+  web3WithdrawMin: 1,
+});
 export const MIN_WATCH_TOLERANCE = 0.95;
 export const MAX_REQUESTED_VIEWS = 100_000_000;
+
+export function normalizeWithdrawalSettings(value) {
+  let parsed = value;
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      parsed = null;
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ...DEFAULT_WITHDRAWAL_SETTINGS };
+
+  const normalized = { ...DEFAULT_WITHDRAWAL_SETTINGS };
+  for (const key of Object.keys(normalized)) {
+    const amount = Number(parsed[key]);
+    if (Number.isFinite(amount) && amount > 0 && amount <= 100000) {
+      normalized[key] = Number(amount.toFixed(6));
+    }
+  }
+  return normalized;
+}
 
 export function roundMoney(value, places = 6) {
   return Number(Number(value).toFixed(places));

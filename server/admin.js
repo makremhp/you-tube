@@ -2,6 +2,8 @@ import { sql } from './db.js';
 import { HttpError, ok } from './errors.js';
 import { readMoney, readPositiveInteger, readText } from './validation.js';
 import { isAdmin, requireAdmin, telegramRequest } from './auth.js';
+import { normalizeWithdrawalSettings } from './config.js';
+import { getWithdrawalSettings } from './wallet.js';
 
 async function recordAdminAction(adminId, collection, recordId, status) {
   try {
@@ -84,7 +86,11 @@ export async function adminState(req, res) {
     ),
     sql.query(`SELECT value::text AS maintenance FROM vr_platform_settings WHERE key = 'maintenance'`),
   ]);
-  ok(res, { users, deposits, withdrawals, campaigns, proofs, suspicious, adminAudit, maintenance: settings[0]?.maintenance === 'true' });
+  ok(res, {
+    users, deposits, withdrawals, campaigns, proofs, suspicious, adminAudit,
+    maintenance: settings[0]?.maintenance === 'true',
+    withdrawalSettings: await getWithdrawalSettings(),
+  });
 }
 
 const PHOTO_CAPTION_LIMIT = 1024;
@@ -230,6 +236,26 @@ export async function setMaintenance(req, res) {
   );
   await recordAdminAction(admin.id, 'settings', 'maintenance', req.body.enabled ? 'enabled' : 'disabled');
   ok(res, { maintenance: rows[0]?.value === 'true' });
+}
+
+export async function setWithdrawalSettings(req, res) {
+  const admin = await requireAdmin(req);
+  const body = req.body ?? {};
+  const binanceWithdrawMin = readMoney(body.binanceWithdrawMin, 0.000001, 100000);
+  const web3WithdrawMin = readMoney(body.web3WithdrawMin, 0.000001, 100000);
+  if (binanceWithdrawMin === null || web3WithdrawMin === null) {
+    throw new HttpError(400, 'Withdrawal minimums must be positive amounts no greater than 100000 USDT');
+  }
+
+  const withdrawalSettings = normalizeWithdrawalSettings({ binanceWithdrawMin, web3WithdrawMin });
+  await sql.query(
+    `INSERT INTO vr_platform_settings (key, value, updated_at)
+     VALUES ('withdrawal', $1::jsonb, now())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    [JSON.stringify(withdrawalSettings)],
+  );
+  await recordAdminAction(admin.id, 'settings', 'withdrawal-minimums', JSON.stringify(withdrawalSettings));
+  ok(res, withdrawalSettings);
 }
 
 export async function adminAction(req, res, collection, id) {
