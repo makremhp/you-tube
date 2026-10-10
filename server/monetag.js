@@ -65,7 +65,7 @@ async function settlePair(sessionId, step, action, userId = null, requireActive 
        WHERE users.id = bump.user_id
          AND users.id = claim.user_id
          AND bump.day = claim.day
-       RETURNING users.id, claim.session_id, claim.day
+       RETURNING users.id AS user_id, claim.session_id, claim.day
      ), credit_ledger AS (
        INSERT INTO vr_monetag_reward_credits (session_id, user_id, day)
        SELECT session_id, user_id, day FROM credited
