@@ -142,6 +142,8 @@ type Video = {
   created: string;
   art: string;
   link: string;
+  requestedViews?: number;
+  budget?: number;
 };
 
 type PromotionPlatform = 'telegram' | 'tiktok';
