@@ -20,9 +20,22 @@ type DailyProgress = {
   monetag: number;
 };
 
-const ADSTERRA_REWARD = 0.0001;
-const ADSTERRA_DAILY_LIMIT = 100;
 const ADSTERRA_COUNTDOWN_SECONDS = 30;
+
+// القيم الفعلية (الحد اليومي والمكافأة) تأتي من الخادم وتُحدَّث من لوحة الإدارة؛ هذه قيم احتياطية لحين وصول الردّ.
+type AdConfig = {
+  adsteraLimit: number;
+  adsteraReward: number;
+  monetagLimit: number;
+  monetagReward: number;
+};
+
+const FALLBACK_AD_CONFIG: AdConfig = {
+  adsteraLimit: 100,
+  adsteraReward: 0.0001,
+  monetagLimit: 500,
+  monetagReward: 0.0001,
+};
 
 function getLocalDayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -38,8 +51,8 @@ function loadDailyProgress(storageKey: string): DailyProgress {
     if (saved?.day === getLocalDayKey()) {
       return {
         day: saved.day,
-        adstera: Math.min(ADSTERRA_DAILY_LIMIT, Math.max(0, Number(saved.adstera) || 0)),
-        monetag: Math.min(500, Math.max(0, Number(saved.monetag) || 0)),
+        adstera: Math.max(0, Number(saved.adstera) || 0),
+        monetag: Math.max(0, Number(saved.monetag) || 0),
       };
     }
   } catch {
@@ -49,8 +62,10 @@ function loadDailyProgress(storageKey: string): DailyProgress {
 }
 
 function formatReward(amount: number) {
-  const precision = amount < 0.001 ? 4 : 3;
-  return `${amount.toFixed(precision)} USDT`;
+  const value = Number(Number(amount).toFixed(6));
+  const actualDecimals = (String(value).split('.')[1] ?? '').length;
+  const precision = Math.min(6, Math.max(value < 0.001 ? 4 : 3, actualDecimals));
+  return `${value.toFixed(precision)} USDT`;
 }
 
 function appendAdsteraBanner(root: HTMLElement, ad: AdsteraAd) {
@@ -160,6 +175,7 @@ function AdsterraSocialScripts({
 function AdsterraExperience({
   isArabic,
   provider,
+  reward,
   onClaim,
   claiming,
   claimError,
@@ -168,6 +184,7 @@ function AdsterraExperience({
 }: {
   isArabic: boolean;
   provider: AdProvider;
+  reward: number;
   onClaim: () => void;
   claiming: boolean;
   claimError: string;
@@ -195,14 +212,14 @@ function AdsterraExperience({
     ? {
         eyebrow: `تصفح ${networkName}`,
         title: 'أكمل وقت التصفح واحصل على مكافأتك.',
-        description: 'ابقَ في هذه الصفحة حتى انتهاء العداد للحصول على 0.0001 USDT.',
+        description: `ابقَ في هذه الصفحة حتى انتهاء العداد للحصول على ${formatReward(reward)}.`,
         congratulations: 'تهانينا، لقد أكملت عملية التصفح',
         claim: 'استلام المكافأة',
       }
     : {
         eyebrow: `${networkName.toUpperCase()} BROWSING`,
         title: 'Finish browsing to claim your reward.',
-        description: 'Stay on this page until the countdown ends to receive 0.0001 USDT.',
+        description: `Stay on this page until the countdown ends to receive ${formatReward(reward)}.`,
         congratulations: 'You completed the browsing session',
         claim: 'Claim reward',
       };
@@ -258,7 +275,7 @@ function AdsterraExperience({
               <BadgeCheck size={28} />
             </div>
             <h2 className="mt-5 text-lg font-bold">{copy.congratulations}</h2>
-            <p className="mt-2 font-mono text-sm text-[#f6c453]">+{formatReward(ADSTERRA_REWARD)}</p>
+            <p className="mt-2 font-mono text-sm text-[#f6c453]">+{formatReward(reward)}</p>
             {claimError && <p role="alert" className="mt-3 text-xs text-rose-200">{claimError}</p>}
             <button
               type="button"
@@ -301,7 +318,7 @@ function RewardAdCard({
   onStart: () => void;
 }) {
   const isComplete = completed >= limit;
-  const progress = Math.min(100, Math.round((completed / limit) * 100));
+  const progress = limit > 0 ? Math.min(100, Math.round((completed / limit) * 100)) : 100;
   const isMonetagCard = provider === 'monetag';
   const startLabel = isMonetagCard ? (isArabic ? 'شاهد' : 'Watch') : (isArabic ? 'ابدأ التصفح' : 'Start browsing');
   const isMonetag = provider === 'monetag';
@@ -396,187 +413,48 @@ type MonetagSdkResult = {
 
 type MonetagShowAd = (options: { ymid: string; requestVar: string }) => Promise<MonetagSdkResult>;
 
-function MonetagExperience({
-  isArabic,
-  onReward,
-  onDismiss,
-  onProgress,
-}: {
-  isArabic: boolean;
-  onReward: (amount: number, title: string, message: string) => void | Promise<void>;
-  onDismiss: () => void;
-  onProgress: (count: number) => void;
-}) {
-  const [session, setSession] = useState<MonetagSession | null>(null);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'showing-first' | 'showing-second' | 'confirming' | 'pending' | 'error' | 'limit'>('loading');
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
-  const showError = isArabic
-    ? 'تعذر تشغيل الإعلان. تأكد من فتح التطبيق داخل Telegram وحاول مجددًا.'
-    : 'Could not start the ad. Make sure the app is open in Telegram and try again.';
-
-  const createSession = async () => {
-    setBusy(true);
-    setMessage('');
-    setStatus('loading');
-    try {
-      const created = await apiPost<MonetagSession>('ads/monetag/session', {});
-      setSession(created);
-      setStatus('ready');
-    } catch (error) {
-      if (error instanceof Error && /limit/i.test(error.message)) {
-        setStatus('limit');
-        setMessage(isArabic ? 'وصلت إلى الحد اليومي البالغ 500 مكافأة.' : 'You have reached the daily limit of 500 rewards.');
-      } else {
-        setStatus('error');
-        setMessage(showError);
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  useEffect(() => { void createSession(); }, []);
-
-  const pollForReward = async (sessionId: string) => {
-    setStatus('confirming');
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      const current = await apiGet<MonetagSessionStatus>(`ads/monetag/session/${encodeURIComponent(sessionId)}`);
-      onProgress(current.claimedToday);
-      if (current.rewarded) {
-        await onReward(
-          current.reward,
-          isArabic ? 'تمت إضافة المكافأة' : 'Reward added',
-          isArabic ? `أُضيفت ${formatReward(current.reward)} إلى رصيدك بعد تأكيد الإعلانين.` : `${formatReward(current.reward)} was added after both ads were confirmed.`,
-        );
-        onDismiss();
-        return;
-      }
-      if (current.settled && current.claimedToday >= current.dailyLimit) {
-        setStatus('limit');
-        setMessage(isArabic ? 'اكتمل الإعلانان، لكن الحد اليومي استُخدم قبل تسجيل المكافأة.' : 'Both ads completed, but the daily limit was reached before the reward was recorded.');
-        return;
-      }
-      await new Promise((resolve) => window.setTimeout(resolve, 1500));
-    }
-    setStatus('pending');
-    setMessage(isArabic
-      ? 'تم إرسال إكمال الإعلانين. ننتظر تأكيد Monetag؛ يمكنك التحقق مجددًا بعد قليل.'
-      : 'Both ad completions were submitted. Waiting for Monetag confirmation; check again shortly.');
-  };
-
-  const startPair = async () => {
-    if (!session || busy) return;
-    const showAd = (window as unknown as { show_11993293?: MonetagShowAd }).show_11993293;
-    if (typeof showAd !== 'function') {
-      setStatus('error');
-      setMessage(isArabic ? 'لم يتم تحميل إعلان Monetag بعد. أعد فتح النافذة بعد قليل.' : 'The Monetag SDK has not loaded yet. Reopen this panel in a moment.');
-      return;
-    }
-    setBusy(true);
-    setMessage('');
-    try {
-      setStatus('showing-first');
-      const firstYmid = `${session.id}_1`;
-      const first = await showAd({ ymid: firstYmid, requestVar: `vidreward_${session.id}_1` });
-      if (first?.reward_event_type !== 'valued') throw new Error('First ad was not valued');
-      await apiPost(`ads/monetag/session/${encodeURIComponent(session.id)}/complete`, { step: 1 });
-
-      setStatus('showing-second');
-      const secondYmid = `${session.id}_2`;
-      const second = await showAd({ ymid: secondYmid, requestVar: `vidreward_${session.id}_2` });
-      if (second?.reward_event_type !== 'valued') throw new Error('Second ad was not valued');
-      await apiPost(`ads/monetag/session/${encodeURIComponent(session.id)}/complete`, { step: 2 });
-      await pollForReward(session.id);
-    } catch {
-      setStatus('error');
-      setMessage(isArabic
-        ? 'لم يكتمل الإعلانان معًا، لذلك لم تُمنح المكافأة. ابدأ زوجًا جديدًا للمحاولة مرة أخرى.'
-        : 'Both ads were not completed, so no reward was issued. Start a new pair to try again.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const checkStatus = async () => {
-    if (!session || busy) return;
-    setBusy(true);
-    try {
-      await pollForReward(session.id);
-    } catch {
-      setStatus('pending');
-      setMessage(isArabic ? 'تعذر التحقق الآن. حاول مجددًا بعد قليل.' : 'Could not check the status. Try again shortly.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const copy = {
-    title: isArabic ? 'أكمل الإعلانين لتحصل على مكافأة' : 'Complete both ads to earn a reward',
-    instructions: isArabic
-      ? 'سيظهر الإعلان الأول، ثم يبدأ الثاني تلقائيًا بعد اكتماله. تُضاف المكافأة فقط بعد تأكيد Monetag للإعلانين.'
-      : 'The first ad will appear, then the second starts automatically. The reward is issued only after Monetag confirms both ads.',
-    start: isArabic ? 'ابدأ الإعلانين' : 'Start both ads',
-    preparing: isArabic ? 'جارٍ تجهيز جلسة الإعلان…' : 'Preparing your ad session…',
-    first: isArabic ? 'جارٍ عرض الإعلان الأول…' : 'Showing the first ad…',
-    second: isArabic ? 'اكتمل الأول، جارٍ عرض الإعلان الثاني…' : 'First ad complete; showing the second…',
-    confirming: isArabic ? 'جارٍ انتظار تأكيد Monetag…' : 'Waiting for Monetag confirmation…',
-    retry: isArabic ? 'ابدأ زوج إعلانات جديدًا' : 'Start a new ad pair',
-    check: isArabic ? 'تحقق من المكافأة' : 'Check reward status',
-    close: isArabic ? 'إغلاق' : 'Close',
-  };
-
-  return (
-    <div className="fixed inset-0 z-[80] grid min-h-dvh place-items-center overflow-y-auto bg-[#11172c]/95 p-4 text-white backdrop-blur-sm" dir={isArabic ? 'rtl' : 'ltr'}>
-      <section className="w-full max-w-md rounded-[1.75rem] border border-violet-200/15 bg-[#1b1b35] p-6 text-center shadow-2xl sm:p-8">
-        <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-violet-300/15 text-violet-200"><Zap size={25} /></div>
-        <h2 className="mt-5 text-xl font-extrabold">{copy.title}</h2>
-        <p className="mt-3 text-sm leading-6 text-blue-100/70">{copy.instructions}</p>
-        <p className="mt-4 font-mono text-sm font-bold text-violet-200">+{formatReward(session?.reward ?? 0.0001)}</p>
-        <div aria-live="polite" className="mt-5 min-h-6 text-xs font-semibold text-blue-100/80">
-          {status === 'loading' && copy.preparing}
-          {status === 'showing-first' && copy.first}
-          {status === 'showing-second' && copy.second}
-          {status === 'confirming' && copy.confirming}
-          {message && <span role={status === 'error' || status === 'limit' ? 'alert' : 'status'}>{message}</span>}
-        </div>
-        {(status === 'ready' || status === 'error') && (
-          <button type="button" onClick={status === 'error' ? () => void createSession() : () => void startPair()} disabled={busy} className="mt-5 min-h-12 w-full rounded-xl bg-violet-300 px-4 text-sm font-extrabold text-[#201544] transition hover:bg-violet-200 disabled:opacity-50">{status === 'error' ? copy.retry : copy.start}</button>
-        )}
-        {status === 'pending' && <button type="button" onClick={() => void checkStatus()} disabled={busy} className="mt-5 min-h-12 w-full rounded-xl bg-violet-300 px-4 text-sm font-extrabold text-[#201544] disabled:opacity-50">{busy ? copy.confirming : copy.check}</button>}
-        <button type="button" onClick={onDismiss} disabled={busy} className="mt-3 min-h-10 px-4 text-xs font-bold text-blue-100/60 hover:text-white disabled:opacity-40">{copy.close}</button>
-      </section>
-    </div>
-  );
-}
+type MonetagFlow = 'idle' | 'loading' | 'first' | 'second' | 'confirming' | 'pending' | 'error' | 'limit';
 
 export function AdsPage({
   userId,
   onReward,
 }: {
   userId: number | null;
-  onReward: (amount: number, title: string, message: string) => void;
+  onReward: (amount: number, title: string, message: string) => void | Promise<void>;
 }) {
   const { dir, isArabic } = useLanguage();
   const { ads } = useAdsteraAds();
   const storageKey = `vidreward.ads.daily.v1-${userId ?? 'guest'}`;
   const [today, setToday] = useState(getLocalDayKey);
   const [progress, setProgress] = useState(() => loadDailyProgress(storageKey));
+  const [config, setConfig] = useState<AdConfig>(FALLBACK_AD_CONFIG);
   const [activeProvider, setActiveProvider] = useState<AdProvider | null>(null);
   const [claiming, setClaiming] = useState(false);
   const [claimError, setClaimError] = useState('');
+  const [monetagFlow, setMonetagFlow] = useState<MonetagFlow>('idle');
+  const [monetagMessage, setMonetagMessage] = useState('');
+  const monetagSessionRef = useRef<string | null>(null);
+  const monetagBusy = monetagFlow === 'loading' || monetagFlow === 'first' || monetagFlow === 'second' || monetagFlow === 'confirming';
 
   useEffect(() => {
     if (!userId) return;
     Promise.all([
-      apiGet<{ claimedToday: number }>('ads/progress/adstera'),
-      apiGet<{ claimedToday: number }>('ads/progress/monetag'),
+      apiGet<{ claimedToday: number; dailyLimit: number; reward: number }>('ads/progress/adstera'),
+      apiGet<{ claimedToday: number; dailyLimit: number; reward: number }>('ads/progress/monetag'),
     ])
-      .then(([adstera, monetag]) => setProgress({
-        day: getLocalDayKey(),
-        adstera: Math.min(ADSTERRA_DAILY_LIMIT, adstera.claimedToday),
-        monetag: Math.min(500, monetag.claimedToday),
-      }))
+      .then(([adstera, monetag]) => {
+        setConfig({
+          adsteraLimit: Number(adstera.dailyLimit),
+          adsteraReward: Number(adstera.reward),
+          monetagLimit: Number(monetag.dailyLimit),
+          monetagReward: Number(monetag.reward),
+        });
+        setProgress({
+          day: getLocalDayKey(),
+          adstera: adstera.claimedToday,
+          monetag: monetag.claimedToday,
+        });
+      })
       .catch(() => undefined);
   }, [userId, today]);
 
@@ -606,6 +484,8 @@ export function AdsPage({
   const activeBannerAds = activeProvider ? adsFor(activeProvider).filter((ad) => ad.format === '320x50') : [];
   const activeSocialAds = activeProvider ? adsFor(activeProvider).filter((ad) => ad.format === 'social') : [];
   const hasActiveExperienceAds = activeBannerAds.length > 0 || activeSocialAds.length > 0;
+  const limitFor = (provider: AdProvider) => (provider === 'monetag' ? config.monetagLimit : config.adsteraLimit);
+  const rewardFor = (provider: AdProvider) => (provider === 'monetag' ? config.monetagReward : config.adsteraReward);
 
   useEffect(() => {
     if (activeProvider === 'adstera' && !hasActiveExperienceAds) setActiveProvider(null);
@@ -639,7 +519,7 @@ export function AdsPage({
       const result = await apiPost<{ reward: number; claimedToday: number }>('ads/reward/adstera', {});
       setProgress(current => ({
         ...(current.day === getLocalDayKey() ? current : emptyProgress()),
-        [provider]: Math.min(ADSTERRA_DAILY_LIMIT, result.claimedToday),
+        [provider]: result.claimedToday,
       }));
       onReward(result.reward, copy.rewardAdded, copy.rewardMessage(formatReward(result.reward)));
       setActiveProvider(null);
@@ -650,13 +530,126 @@ export function AdsPage({
     }
   };
 
+  // Monetag: بعد الضغط على «شاهد» يبدأ الإعلان الأول فورًا، وعند انتهائه يبدأ الثاني تلقائيًا، ثم تُمنح المكافأة — بدون أي نافذة أو زر إضافي.
+  const pollMonetagReward = async (sessionId: string) => {
+    setMonetagFlow('confirming');
+    setMonetagMessage('');
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const current = await apiGet<MonetagSessionStatus>(`ads/monetag/session/${encodeURIComponent(sessionId)}`);
+      setProgress(value => ({
+        ...(value.day === getLocalDayKey() ? value : emptyProgress()),
+        monetag: current.claimedToday,
+      }));
+      if (current.rewarded) {
+        monetagSessionRef.current = null;
+        setMonetagFlow('idle');
+        setMonetagMessage('');
+        await onReward(
+          current.reward,
+          copy.rewardAdded,
+          copy.rewardMessage(formatReward(current.reward)),
+        );
+        return;
+      }
+      if (current.settled && current.claimedToday >= current.dailyLimit) {
+        monetagSessionRef.current = null;
+        setMonetagFlow('limit');
+        setMonetagMessage(isArabic ? 'اكتمل الإعلانان، لكن الحد اليومي استُخدم قبل تسجيل المكافأة.' : 'Both ads completed, but the daily limit was reached before the reward was recorded.');
+        return;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 1500));
+    }
+    setMonetagFlow('pending');
+    setMonetagMessage(isArabic
+      ? 'تم إرسال إكمال الإعلانين. ننتظر تأكيد Monetag؛ يمكنك التحقق مجددًا بعد قليل.'
+      : 'Both ad completions were submitted. Waiting for Monetag confirmation; check again shortly.');
+  };
+
+  const runMonetagPair = async () => {
+    if (monetagBusy) return;
+    setMonetagMessage('');
+    setMonetagFlow('loading');
+    const failure = isArabic
+      ? 'لم يكتمل الإعلانان معًا، لذلك لم تُمنح المكافأة. اضغط «شاهد» للمحاولة مرة أخرى.'
+      : 'Both ads were not completed, so no reward was issued. Press Watch to try again.';
+    try {
+      const showAd = (window as unknown as { show_11993293?: MonetagShowAd }).show_11993293;
+      if (typeof showAd !== 'function') {
+        setMonetagFlow('error');
+        setMonetagMessage(isArabic ? 'لم يتم تحميل إعلان Monetag بعد. حاول مجددًا بعد قليل.' : 'The Monetag SDK has not loaded yet. Try again in a moment.');
+        return;
+      }
+
+      let session: MonetagSession;
+      try {
+        session = await apiPost<MonetagSession>('ads/monetag/session', {});
+      } catch (error) {
+        if (error instanceof Error && /limit/i.test(error.message)) {
+          setMonetagFlow('limit');
+          setMonetagMessage(isArabic ? `وصلت إلى الحد اليومي (${config.monetagLimit}).` : `You have reached the daily limit (${config.monetagLimit}).`);
+        } else {
+          setMonetagFlow('error');
+          setMonetagMessage(isArabic
+            ? 'تعذر تشغيل الإعلان. تأكد من فتح التطبيق داخل Telegram وحاول مجددًا.'
+            : 'Could not start the ad. Make sure the app is open in Telegram and try again.');
+        }
+        return;
+      }
+      monetagSessionRef.current = session.id;
+      setConfig(current => ({ ...current, monetagLimit: Number(session.dailyLimit), monetagReward: Number(session.reward) }));
+      const reportStep = (step: 1 | 2) => apiPost(`ads/monetag/session/${encodeURIComponent(session.id)}/complete`, { step });
+
+      // الإعلان الأول
+      setMonetagFlow('first');
+      const first = await showAd({ ymid: `${session.id}_1`, requestVar: `vidreward_${session.id}_1` });
+      if (first?.reward_event_type !== 'valued') throw new Error('First ad was not valued');
+      // نُبلغ الخادم بإكمال الأول في الخلفية ونبدأ الثاني فورًا بدون انتظار.
+      const firstReport = reportStep(1).then(() => true, () => false);
+
+      // الإعلان الثاني يبدأ تلقائيًا
+      setMonetagFlow('second');
+      const second = await showAd({ ymid: `${session.id}_2`, requestVar: `vidreward_${session.id}_2` });
+      if (second?.reward_event_type !== 'valued') throw new Error('Second ad was not valued');
+      if (!(await firstReport)) await reportStep(1);
+      await reportStep(2);
+      await pollMonetagReward(session.id);
+    } catch {
+      setMonetagFlow('error');
+      setMonetagMessage(failure);
+    }
+  };
+
+  const checkMonetagStatus = async () => {
+    const sessionId = monetagSessionRef.current;
+    if (!sessionId || monetagBusy) return;
+    try {
+      await pollMonetagReward(sessionId);
+    } catch {
+      setMonetagFlow('pending');
+      setMonetagMessage(isArabic ? 'تعذر التحقق الآن. حاول مجددًا بعد قليل.' : 'Could not check the status. Try again shortly.');
+    }
+  };
+
   const startProvider = (provider: AdProvider) => {
     const count = daily[provider];
-    const limit = provider === 'monetag' ? 500 : ADSTERRA_DAILY_LIMIT;
-    if ((provider === 'adstera' && !adsFor(provider).length) || count >= limit || activeProvider) return;
+    if ((provider === 'adstera' && !adsFor(provider).length) || count >= limitFor(provider) || activeProvider || monetagBusy) return;
+    if (provider === 'monetag') {
+      void runMonetagPair();
+      return;
+    }
     setClaimError('');
     setActiveProvider(provider);
   };
+
+  const monetagStatusText = monetagFlow === 'loading'
+    ? (isArabic ? 'جارٍ تجهيز الإعلان…' : 'Preparing the ad…')
+    : monetagFlow === 'first'
+      ? (isArabic ? 'جارٍ عرض الإعلان الأول…' : 'Showing the first ad…')
+      : monetagFlow === 'second'
+        ? (isArabic ? 'جارٍ عرض الإعلان الثاني…' : 'Showing the second ad…')
+        : monetagFlow === 'confirming'
+          ? (isArabic ? 'جارٍ انتظار تأكيد Monetag…' : 'Waiting for Monetag confirmation…')
+          : monetagMessage;
 
   return (
     <main data-testid="page-ads" aria-label={isArabic ? 'الإعلانات' : 'Ads'} dir={dir} className="mx-auto min-h-[calc(100dvh-7rem)] w-full max-w-[980px] px-4 pb-28 pt-7 text-[#12234b] md:px-8 md:pt-10">
@@ -674,47 +667,54 @@ export function AdsPage({
           const available = provider === 'monetag' || adsFor(provider).length > 0;
           const name = provider === 'monetag' ? 'Monetag' : 'Adsterra';
           const completed = daily[provider];
-          const limit = provider === 'monetag' ? 500 : ADSTERRA_DAILY_LIMIT;
+          const limit = limitFor(provider);
+          const reward = rewardFor(provider);
           return <RewardAdCard
             key={provider}
             provider={provider}
             title={isArabic ? `شاهد إعلانات ${name}` : `Watch ${name} ads`}
             description={available
               ? (provider === 'monetag'
-                ? (isArabic ? 'شاهد إعلانين متتاليين لإكمال زوج واحد وربح 0.0001 USDT.' : 'Watch two consecutive ads to complete one pair and earn 0.0001 USDT.')
-                : (isArabic ? `شاهد الإعلان لمدة 30 ثانية واربح 0.0001 USDT لكل إعلان.` : 'Watch for 30 seconds and earn 0.0001 USDT per ad.'))
+                ? (isArabic ? `شاهد إعلانين متتاليين لإكمال زوج واحد وربح ${formatReward(reward)}.` : `Watch two consecutive ads to complete one pair and earn ${formatReward(reward)}.`)
+                : (isArabic ? `شاهد الإعلان لمدة 30 ثانية واربح ${formatReward(reward)} لكل إعلان.` : `Watch for 30 seconds and earn ${formatReward(reward)} per ad.`))
               : (isArabic ? `لا توجد شيفرات ${name} مفعّلة حاليًا.` : `No ${name} ad codes are enabled yet.`)}
             label={available ? (isArabic ? 'شاهد واربح' : 'WATCH & EARN') : (isArabic ? 'غير مهيأ' : 'NOT CONFIGURED')}
-            reward={ADSTERRA_REWARD}
+            reward={reward}
             completed={completed}
             limit={limit}
-            blocked={activeProvider !== null || !available}
+            blocked={activeProvider !== null || monetagBusy || !available}
             isArabic={isArabic}
             onStart={() => startProvider(provider)}
           />;
         })}
       </div>
 
+      {monetagStatusText && (
+        <div
+          role={monetagFlow === 'error' || monetagFlow === 'limit' ? 'alert' : 'status'}
+          aria-live="polite"
+          data-testid="status-monetag-flow"
+          className={`mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-xs font-semibold ${monetagFlow === 'error' || monetagFlow === 'limit' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-violet-200 bg-violet-50 text-violet-800'}`}
+        >
+          <span>{monetagStatusText}</span>
+          {monetagFlow === 'pending' && (
+            <button type="button" onClick={() => void checkMonetagStatus()} className="rounded-lg bg-violet-600 px-3 py-1.5 text-[11px] font-bold text-white">
+              {isArabic ? 'تحقق من المكافأة' : 'Check reward status'}
+            </button>
+          )}
+        </div>
+      )}
+
       {activeProvider === 'adstera' && (
         <AdsterraExperience
           isArabic={isArabic}
           provider={activeProvider}
+          reward={config.adsteraReward}
           banners={activeBannerAds}
           socialAds={activeSocialAds}
           onClaim={() => { void completeAd(activeProvider); }}
           claiming={claiming}
           claimError={claimError}
-        />
-      )}
-      {activeProvider === 'monetag' && (
-        <MonetagExperience
-          isArabic={isArabic}
-          onReward={onReward}
-          onDismiss={() => setActiveProvider(null)}
-          onProgress={(count) => setProgress(current => ({
-            ...(current.day === getLocalDayKey() ? current : emptyProgress()),
-            monetag: Math.min(500, count),
-          }))}
         />
       )}
     </main>

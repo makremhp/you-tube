@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
 import type { PromotionCampaign, PromotionPlatform, TaskProof } from '@/legacy/shared';
 import { SiTelegram, SiTiktok } from 'react-icons/si';
+import { formatTaskReward, useTaskRewards } from '@/lib/useTaskRewards';
 
 type TaskVerification = {
   state: 'idle' | 'checking' | 'member' | 'not-member' | 'error';
@@ -33,6 +34,7 @@ export function PlatformTasksPage({
   telegramUserId: number | null;
 }) {
   const { dir, t } = useLanguage();
+  const rewards = useTaskRewards();
   const isTelegram = platform === 'telegram';
   const BrandIcon = isTelegram ? SiTelegram : SiTiktok;
   const brandColor = isTelegram ? '#229ED9' : '#111111';
@@ -148,7 +150,7 @@ export function PlatformTasksPage({
                       {t(verificationState.message ?? (returnedIds[task.id] && !telegramUserId ? 'افتح التطبيق من Telegram للتحقق الآلي من العضوية.' : `${task.targetCount.toLocaleString()} ${t('مشترك')} · ${task.link}`))}
                     </p>
                   </div>
-                  <span className="shrink-0 rounded-full bg-[#eafbf8] px-2 py-1 text-[9px] font-bold text-[#159b89]">{isTelegram ? '$0.003' : '$0.01'}</span>
+                  <span className="shrink-0 rounded-full bg-[#eafbf8] px-2 py-1 text-[9px] font-bold text-[#159b89]">{formatTaskReward(isTelegram ? rewards.telegramTaskReward : rewards.tiktokTaskReward)}</span>
                   <Button
                     type="button"
                     data-testid={`button-join-${task.id}`}
@@ -189,7 +191,7 @@ export function PlatformTasksPage({
                     </div>
                   )}
                 </div>
-                <span className="shrink-0 rounded-full bg-[#eafbf8] px-2 py-1 text-[9px] font-bold text-[#159b89]">$0.01</span>
+                <span className="shrink-0 rounded-full bg-[#eafbf8] px-2 py-1 text-[9px] font-bold text-[#159b89]">{formatTaskReward(rewards.tiktokTaskReward)}</span>
                 <Button
                   type="button"
                   data-testid={`button-start-${task.id}`}

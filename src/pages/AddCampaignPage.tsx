@@ -4,6 +4,7 @@ import {
   PlaySquare, Upload,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { formatTaskReward, useTaskRewards } from '@/lib/useTaskRewards';
 import { useLanguage } from '@/i18n';
 import { SiTelegram, SiTiktok, SiYoutube } from 'react-icons/si';
 import { useLocalPricing } from '@/legacy/pricing';
@@ -27,6 +28,7 @@ export function AddPlatformCampaign({
   onSubmit: (campaign: PromotionCampaign) => void;
 }) {
   const { dir } = useLanguage();
+  const rewards = useTaskRewards();
   const pricing = useLocalPricing();
   const [title, setTitle] = useState('');
   const [link, setLink] = useState('');
@@ -198,7 +200,7 @@ export function AddPlatformCampaign({
             <div className="p-4">
               <div className="flex items-start justify-between gap-3"><h3 className="text-sm font-bold text-slate-800">{title || (isTelegram ? 'عنوان القناة' : 'عنوان الحملة')}</h3><span className="shrink-0 rounded-full bg-[#eaf8fd] px-2 py-1 text-[9px] font-bold text-[#168fb8]">{isTelegram ? 'Telegram' : 'TikTok'}</span></div>
               <p className="mt-2 truncate text-[10px] text-slate-400" dir="ltr">{link || (isTelegram ? 't.me/yourchannel' : 'tiktok.com/@username')}</p>
-              <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-[10px]"><span className="font-bold text-[#159b89]">{isTelegram ? '$0.003' : '$0.01'}</span><span className="text-slate-400">{selectedPackage.count.toLocaleString('ar')} {isTelegram ? 'مشترك' : 'متابع'}</span></div>
+              <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-[10px]"><span className="font-bold text-[#159b89]">{formatTaskReward(isTelegram ? rewards.telegramTaskReward : rewards.tiktokTaskReward)}</span><span className="text-slate-400">{selectedPackage.count.toLocaleString('ar')} {isTelegram ? 'مشترك' : 'متابع'}</span></div>
             </div>
           </div>
         </section>

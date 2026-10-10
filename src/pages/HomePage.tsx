@@ -586,14 +586,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
           </div>
           <span className="mt-5 inline-flex rounded-full border border-rose-300/20 bg-rose-400/10 px-3 py-1 text-[11px] font-bold tracking-wide text-rose-200">{language === 'ar' ? 'حالة الحساب' : 'ACCOUNT STATUS'}</span>
           <h1 className="mt-4 text-2xl font-extrabold">{language === 'ar' ? 'تم حظر حسابك' : 'Your account is blocked'}</h1>
-          <p className="mx-auto mt-3 max-w-sm text-sm leading-7 text-blue-100/70">{language === 'ar' ? 'لا يمكنك استخدام المنصة حاليًا. تواصل مع الدعم إذا كنت تعتقد أن هذا الإجراء تم بالخطأ.' : 'You can’t use the platform right now. Contact support if you believe this action was made in error.'}</p>
-          <div className="mx-auto mt-6 flex max-w-sm items-center gap-4 rounded-2xl border border-white/10 bg-white/[.04] p-3 text-start">
-            <img src={`${import.meta.env.BASE_URL}assets/telegram-support-qr.png`} alt={language === 'ar' ? 'رمز Telegram للتواصل مع الدعم' : 'Telegram support QR code'} className="h-20 w-20 shrink-0 rounded-xl bg-black object-contain p-1" />
-            <div>
-              <h2 className="text-sm font-bold">{language === 'ar' ? 'تواصل مع الدعم' : 'Contact support'}</h2>
-              <p className="mt-1 text-xs leading-5 text-blue-100/65">{language === 'ar' ? 'امسح رمز Telegram لفتح قناة التواصل.' : 'Scan the Telegram code to open the support contact.'}</p>
-            </div>
-          </div>
+          <p className="mx-auto mt-3 max-w-sm text-sm leading-7 text-blue-100/70">{language === 'ar' ? 'لا يمكنك استخدام المنصة حاليًا.' : 'You can’t use the platform right now.'}</p>
         </section>
       </main>
     );

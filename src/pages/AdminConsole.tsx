@@ -1,17 +1,18 @@
 import { Children, cloneElement, isValidElement, useEffect, useRef, useState, type ReactElement } from 'react';
 import { Activity, CircleDollarSign, Copy, Eye, Megaphone, Search, ShieldCheck, Trash2, Users, Wallet, X, Plus, Code2, RefreshCw, Pencil, Check, Monitor, Layers, ImagePlus } from 'lucide-react';
 import { saveLocalPricing, useLocalPricing, type LocalPricing, type PricingPlatform } from '@/legacy/pricing';
-import { ApiError, apiGet, apiPatch, apiPost } from '@/lib/api';
+import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api';
 import { buildAdsteraDocument, deleteAdsteraAd, useAdsteraAds, type AdProvider, type AdsteraAd, type AdsteraFormat } from '@/lib/adsteraAds';
 
 type User = { id: number; name: string; username: string; avatar: string; photoUrl?: string; advertiserBalance: number; earnedBalance: number; status: 'نشط' | 'محظور'; bannedBySystem?: boolean; joinedAt: string; lastLogin: string; lastActive: string; invitedBy: string };
 type Row = { id: string; userId?: number; amount?: number; createdAt?: string; status?: string; [key: string]: any };
 type State = { users: User[]; deposits: Row[]; withdrawals: Row[]; campaigns: Row[]; proofs: Row[]; ads: Row[]; suspicious: Row[]; adminAudit: Row[]; settings: Record<string, any>; reports: Row[] };
+type AdStats = { day: string; monetag: { viewedToday: number; viewedTotal: number; pairsToday: number; pairsTotal: number; usersToday: number }; browsing: { tasksToday: number; tasksTotal: number; usersToday: number; usersTotal: number }; daily: Array<{ day: string; monetagAds: number; monetagPairs: number; browseTasks: number }> };
 type NotifyResult = { targeted: number; sent: number; failed: number; skipped?: number; withImage?: boolean; errors?: Array<{ reason: string; count: number }> };
 const SETTINGS_KEY = 'vidreward.admin.settings.v1';
-const defaultSettings: Record<string, any> = { binanceWithdrawMin: 1, web3WithdrawMin: 1, starsDepositMin: 1, web3DepositMin: 5, userShare: 20, platformShare: 10, durationMin: 10, durationMax: 80, cpmMin: 1.5, cpmMax: 4, telegramCpm: 2.2, tiktokCpm: 2.8, taskReward: 0.02, telegramTaskReward: 0.003, tiktokTaskReward: 0.01, web3Address: '', maintenance: false };
+const defaultSettings: Record<string, any> = { binanceWithdrawMin: 1, web3WithdrawMin: 1, starsDepositMin: 1, web3DepositMin: 5, userShare: 20, platformShare: 10, durationMin: 10, durationMax: 80, cpmMin: 1.5, cpmMax: 4, telegramCpm: 2.2, tiktokCpm: 2.8, taskReward: 0.02, telegramTaskReward: 0.003, tiktokTaskReward: 0.01, monetagDailyLimit: 500, monetagReward: 0.0001, adsteraDailyLimit: 100, adsteraReward: 0.0001, web3Address: '', maintenance: false };
 const emptyState: State = { users: [], deposits: [], withdrawals: [], campaigns: [], proofs: [], ads: [], suspicious: [], adminAudit: [], settings: defaultSettings, reports: [] };
-const labels: Record<string, string> = { overview:'نظرة عامة', users:'مستخدمو Telegram', banned:'المستخدمون المحظورون', deposits:'الإيداعات', 'deposit-detail':'تفاصيل المعاملة', withdrawals:'السحوبات', campaigns:'الحملات', proofs:'إثباتات المهام', ads:'مخزون Adstera', settings:'الإعدادات', maintenance:'الصيانة', notifications:'الإشعارات', suspicious:'مستخدمون مشبوهون', audit:'سجل إجراءات الإدارة' };
+const labels: Record<string, string> = { overview:'نظرة عامة', users:'مستخدمو Telegram', banned:'المستخدمون المحظورون', deposits:'الإيداعات', 'deposit-detail':'تفاصيل المعاملة', withdrawals:'السحوبات', campaigns:'الحملات', proofs:'إثباتات المهام', ads:'مخزون Adstera', 'ad-stats':'إحصائيات الإعلانات', settings:'الإعدادات', maintenance:'الصيانة', notifications:'الإشعارات', suspicious:'مستخدمون مشبوهون', audit:'سجل إجراءات الإدارة' };
 const cx = (...classes: Array<string | undefined>) => classes.filter(Boolean).join(' ');
 const cell = 'px-4 py-1.5 text-right align-middle';
 const btn = 'inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition hover:-translate-y-px disabled:opacity-40';
@@ -54,7 +55,7 @@ function platformEarnings(data: State) {
   );
   const approvedProofs = linkedProofs.filter(proof => proof.status === 'معتمد' || proof.status === 'approved').length;
   const completions = Math.min(target, linkedProofs.length > 0 ? approvedProofs : recordedCompletions);
-  const userReward = platform === 'tiktok' ? 0.01 : 0.003;
+  const userReward = Number(platform === 'tiktok' ? data.settings.tiktokTaskReward : data.settings.telegramTaskReward) || 0;
   const marginPerTask = budget / target - userReward;
   taskNet[platform] += marginPerTask * completions;
  });
@@ -87,6 +88,15 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
  const [pendingSuccessMessage, setPendingSuccessMessage] = useState('تم تطبيق الإجراء');
  const [filter, setFilter] = useState('الكل');
  const [toast, setToast] = useState('');
+ const [adStats, setAdStats] = useState<AdStats | null>(null);
+ const [adStatsError, setAdStatsError] = useState(false);
+ const loadAdStats = async () => { try { setAdStats(await apiGet<AdStats>('admin/ad-stats')); setAdStatsError(false); } catch { setAdStatsError(true); } };
+ useEffect(() => {
+  if (page !== 'ad-stats') return;
+  void loadAdStats();
+  const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void loadAdStats(); }, 30_000);
+  return () => window.clearInterval(timer);
+ }, [page]);
  useEffect(() => {
   const nextPage = activeScreen.startsWith('admin-') ? activeScreen.slice(6) : 'overview';
   if (nextPage in labels) {
@@ -106,11 +116,11 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
  };
  const loadRemote = async (silent = false) => {
   try {
-    const remote = await apiGet<Pick<State, 'users' | 'deposits' | 'withdrawals' | 'campaigns' | 'proofs' | 'suspicious' | 'adminAudit'> & { maintenance?: boolean; withdrawalSettings?: Pick<State['settings'], 'binanceWithdrawMin' | 'web3WithdrawMin'> }>('admin/state');
+    const remote = await apiGet<Pick<State, 'users' | 'deposits' | 'withdrawals' | 'campaigns' | 'proofs' | 'suspicious' | 'adminAudit'> & { maintenance?: boolean; withdrawalSettings?: Pick<State['settings'], 'binanceWithdrawMin' | 'web3WithdrawMin'>; adSettings?: Record<string, number>; taskRewardSettings?: Record<string, number> }>('admin/state');
    setData(d => ({
     ...d,
      users: (remote.users ?? []).map(user => ({ ...user, avatar: String(user.name ?? '').trim().slice(0, 2) || '—' })),
-     settings: { ...d.settings, ...remote.withdrawalSettings, maintenance: Boolean(remote.maintenance) },
+     settings: { ...d.settings, ...remote.withdrawalSettings, ...remote.adSettings, ...remote.taskRewardSettings, maintenance: Boolean(remote.maintenance) },
     deposits: remote.deposits ?? [],
     withdrawals: remote.withdrawals ?? [],
     campaigns: remote.campaigns ?? [],
@@ -167,6 +177,17 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
   if (!Object.keys(payload).length) { announce('لا توجد تغييرات للحفظ'); return false; }
   return updateRows('users', id, payload);
  };
+ const deleteUser = async (id:number): Promise<boolean> => {
+  try {
+   await apiDelete(`admin/users/${id}`);
+   setData(d=>({...d,users:d.users.filter(u=>u.id!==id)}));
+   void loadRemote(true);
+   return true;
+  } catch (error) {
+   announce(error instanceof ApiError && error.message && error.message!=='Request failed' ? error.message : 'تعذر حذف المستخدم');
+   return false;
+  }
+ };
  const userBy = (id:number|undefined) => data.users.find(u=>u.id===id);
  const announce = (s:string) => { setToast(s); window.setTimeout(()=>setToast(''),2300); };
  const title = labels[page] || 'نظرة عامة';
@@ -199,7 +220,7 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
     ['مستخدمون حظرهم النظام',data.users.filter(x=>x.bannedBySystem).length,ShieldCheck]
      ].map(([l,v,I]:any)=><div key={l} className="flex min-h-[74px] items-center justify-between gap-2 border-b border-slate-100 py-2.5"><div className="min-w-0"><div className="text-[10px] font-bold leading-4 text-slate-500">{l}</div><div className="mt-0.5 flex flex-wrap items-baseline gap-x-2"><span className="text-xl font-extrabold text-[#12234b]">{v}</span></div></div><I className="h-4 w-4 shrink-0 text-[#1557ee]"/></div>)}</div>
     {panel(<div className="grid gap-3 sm:grid-cols-3" data-testid="platform-net-breakdown">
-      {[['YouTube',net.youtube,'70% من ميزانية حملات الفيديو'],['TikTok',net.tiktok,'بعد مكافأة 0.01$ لكل مهمة مكتملة'],['Telegram',net.telegram,'بعد مكافأة 0.003$ لكل مهمة مكتملة']].map(([platform,amount,description])=><div key={String(platform)} className="rounded-xl bg-[#f7f9fc] p-3"><div className="text-xs font-extrabold">{platform}</div><div className="mt-1 font-mono text-lg font-bold text-[#1557ee]">${Number(amount).toFixed(3)}</div><p className="mt-1 text-[10px] leading-4 text-slate-500">{description}</p></div>)}
+      {[['YouTube',net.youtube,'70% من ميزانية حملات الفيديو'],['TikTok',net.tiktok,`بعد مكافأة ${Number(data.settings.tiktokTaskReward)}$ لكل مهمة مكتملة`],['Telegram',net.telegram,`بعد مكافأة ${Number(data.settings.telegramTaskReward)}$ لكل مهمة مكتملة`]].map(([platform,amount,description])=><div key={String(platform)} className="rounded-xl bg-[#f7f9fc] p-3"><div className="text-xs font-extrabold">{platform}</div><div className="mt-1 font-mono text-lg font-bold text-[#1557ee]">${Number(amount).toFixed(3)}</div><p className="mt-1 text-[10px] leading-4 text-slate-500">{description}</p></div>)}
     </div>)}
     {panel(<><div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#edf3ff] text-[#1557ee]"><ShieldCheck size={20}/></span><div><h2 className="font-extrabold">مركز العمليات</h2><p className="mt-1 text-sm leading-6 text-slate-500">تابع الطلبات والإثباتات وإشارات المخاطر من مساحة واحدة.</p></div></div><div className="mt-5 grid gap-3 md:grid-cols-2">{[['طلبات السحب',data.withdrawals.filter(x=>x.status==='قيد المراجعة').length,'withdrawals'],['إثباتات المهام',data.proofs.filter(x=>x.status==='قيد المراجعة').length,'proofs'],['إشارات المخاطر',data.suspicious.filter(x=>x.status==='مفتوح').length,'suspicious'],['تقارير الإرسال',data.reports.length,'notifications']].map(([a,b,c])=><button key={c} onClick={()=>navigateToPage(String(c))} className="flex items-center justify-between rounded-xl bg-[#f7f9fc] p-4 text-right"><span className="text-sm font-bold">{a}</span><span className="font-mono text-lg font-bold text-[#1557ee]">{b}</span></button>)}</div></>)}
   </div>;
@@ -360,20 +381,46 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
             </tr>))}
       </div>;
    }
+   if(page==='ad-stats') {
+    const nf=(n:number)=>Number(n??0).toLocaleString('en-US');
+    const cards:[string,number,string][]=adStats?[
+      ['إعلانات Monetag المشاهدة اليوم',adStats.monetag.viewedToday,'إعلانات أكّد Monetag مشاهدتها (UTC)'],
+      ['أزواج Monetag المكتملة اليوم',adStats.monetag.pairsToday,`${nf(adStats.monetag.usersToday)} مستخدم`],
+      ['إجمالي إعلانات Monetag المشاهدة',adStats.monetag.viewedTotal,`${nf(adStats.monetag.pairsTotal)} زوج مكتمل`],
+      ['مهام التصفح اليوم (كل المستخدمين)',adStats.browsing.tasksToday,`${nf(adStats.browsing.usersToday)} مستخدم`],
+      ['إجمالي مهام التصفح (كل المستخدمين)',adStats.browsing.tasksTotal,`${nf(adStats.browsing.usersTotal)} مستخدم نفّذ مهمة`],
+    ]:[];
+    return <div className="space-y-4">{panel(<div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs leading-5 text-slate-500">اليوم بتوقيت UTC{adStats?` (${adStats.day})`:''}. يتحدّث تلقائيًا كل 30 ثانية.</p><button className={soft} onClick={()=>void loadAdStats()}><RefreshCw size={14}/>تحديث</button></div>)}
+     {adStatsError&&panel(<p className="text-sm font-bold text-rose-600">تعذر تحميل الإحصائيات من الخادم.</p>)}
+     {!adStats&&!adStatsError&&panel(<p className="text-sm text-slate-500">جارٍ التحميل…</p>)}
+     {adStats&&<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-testid="ad-stats-cards">{cards.map(([label,value,note])=><div key={label} className="rounded-2xl bg-white p-4"><div className="text-[11px] font-bold text-slate-500">{label}</div><div className="mt-1 font-mono text-3xl font-extrabold text-[#1557ee]">{nf(value)}</div><div className="mt-1 text-[10px] text-slate-400">{note}</div></div>)}</div>}
+     {adStats&&table(['اليوم','إعلانات Monetag','أزواج Monetag','مهام التصفح'],adStats.daily.map(r=><tr key={r.day} className="border-b border-slate-50"><td className={`${cell} font-mono`}>{r.day}</td><td className={`${cell} font-mono`}>{nf(r.monetagAds)}</td><td className={`${cell} font-mono`}>{nf(r.monetagPairs)}</td><td className={`${cell} font-mono`}>{nf(r.browseTasks)}</td></tr>))}</div>;
+   }
     if(page==='settings') return <SettingsPanel values={data.settings} pricing={pricing} onSave={async v=>{
       try {
         const withdrawalSettings = await apiPatch<Pick<State['settings'], 'binanceWithdrawMin' | 'web3WithdrawMin'>>('admin/settings/withdrawal', {
           binanceWithdrawMin: Number(v.binanceWithdrawMin),
           web3WithdrawMin: Number(v.web3WithdrawMin),
         });
+        const taskRewardSettings = await apiPatch<Record<string, number>>('admin/settings/rewards', {
+          telegramTaskReward: Number(v.telegramTaskReward),
+          tiktokTaskReward: Number(v.tiktokTaskReward),
+        });
+        const adSettings = await apiPatch<Record<string, number>>('admin/settings/ads', {
+          monetagDailyLimit: Number(v.monetagDailyLimit),
+          monetagReward: Number(v.monetagReward),
+          adsteraDailyLimit: Number(v.adsteraDailyLimit),
+          adsteraReward: Number(v.adsteraReward),
+        });
+        Object.assign(v, taskRewardSettings, adSettings);
         if(Boolean(v.maintenance)!==Boolean(data.settings.maintenance)){
           await apiPatch('admin/settings/maintenance',{enabled:Boolean(v.maintenance)});
         }
         setData(d=>({...d,settings:{...d.settings,...v,...withdrawalSettings}}));
         await loadRemote(true);
-        announce('تم حفظ الحد الأدنى للسحب على الخادم');
-      } catch {
-        announce('تعذر حفظ الإعدادات على الخادم');
+        announce('تم حفظ الإعدادات على الخادم');
+      } catch (error) {
+        announce(error instanceof ApiError && error.message && error.message!=='Request failed' ? error.message : 'تعذر حفظ الإعدادات على الخادم');
         await loadRemote(true);
       }
     }} onPricingSave={nextPricing=>{saveLocalPricing(nextPricing);announce('تم تحديث الأسعار')}}/>;
@@ -388,7 +435,7 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
     <div className="mt-5">{content()}</div>
   </div>
   {toast&&<div role="status" className="fixed bottom-20 right-4 z-[110] rounded-xl bg-[#12234b] px-4 py-3 text-sm font-bold text-white shadow-xl">{toast}</div>}
-  {dialog&&<Dialog dialog={dialog} data={data} userBy={userBy} onClose={()=>setDialog(null)} onConfirmAction={async()=>{const run=pendingAction;const successMessage=pendingSuccessMessage;setPendingAction(null);setDialog(null);try{const result=await run?.();if(result!==false)announce(successMessage)}catch{announce('تعذر تنفيذ الإجراء')}}} onConfirm={async(id,patch,kind)=>{let saved=true;if(kind==='user-edit'||kind==='user'){saved=await saveUserPatch(id as number,patch)}else if(kind==='reject-proof'){saved=await updateRows('proofs',id as string,patch)}else if(kind==='campaign'){saved=await updateRows('campaigns',id as string,patch)}if(saved){setDialog(null);announce('تم حفظ التغيير')}return saved}} onDelete={async id=>updateRows('users',id,{status:'محظور'})} onAction={cb=>{confirm('تأكيد الإجراء؟',cb)}}/>}
+  {dialog&&<Dialog dialog={dialog} data={data} userBy={userBy} onClose={()=>setDialog(null)} onConfirmAction={async()=>{const run=pendingAction;const successMessage=pendingSuccessMessage;setPendingAction(null);setDialog(null);try{const result=await run?.();if(result!==false)announce(successMessage)}catch{announce('تعذر تنفيذ الإجراء')}}} onConfirm={async(id,patch,kind)=>{let saved=true;if(kind==='user-edit'||kind==='user'){saved=await saveUserPatch(id as number,patch)}else if(kind==='reject-proof'){saved=await updateRows('proofs',id as string,patch)}else if(kind==='campaign'){saved=await updateRows('campaigns',id as string,patch)}if(saved){setDialog(null);announce('تم حفظ التغيير')}return saved}} onDelete={deleteUser} onAction={(cb,message,successMessage)=>{confirm(message??'تأكيد الإجراء؟',cb,successMessage)}}/>}
  </main>;
 }
 
@@ -399,10 +446,10 @@ function SettingsPanel({values,onSave,pricing,onPricingSave}:{values:Record<stri
  const [tierDraft,setTierDraft]=useState({value:'',price:''});
  const [pricingDraft,setPricingDraft]=useState(pricing); useEffect(()=>setPricingDraft(pricing),[pricing]);
  const pricingOptions:[PricingPlatform,string][]=[['youtube','YouTube'],['tiktok','TikTok'],['telegram','Telegram']];
- const fields:[string,string][]=[['binanceWithdrawMin','الحد الأدنى للسحب عبر Binance (USDT)'],['web3WithdrawMin','الحد الأدنى للسحب عبر Web3 (USDT)'],['starsDepositMin','الحد الأدنى للإيداع عبر Stars'],['web3DepositMin','الحد الأدنى للإيداع عبر Web3 (USDT)'],['userShare','حصة المستخدم من الإيراد (%)'],['platformShare','حصة المنصة (%)'],['durationMin','أقصر مدة فيديو (ثانية)'],['durationMax','أطول مدة فيديو (ثانية)'],['cpmMin','أقل CPM'],['cpmMax','أعلى CPM'],['telegramCpm','CPM إعلانات Telegram'],['tiktokCpm','CPM إعلانات TikTok'],['telegramTaskReward','مكافأة مهمة Telegram الثابتة (USDT)'],['tiktokTaskReward','مكافأة مهمة TikTok الثابتة (USDT)'],['web3Address','عنوان Web3']];
+ const fields:[string,string][]=[['binanceWithdrawMin','الحد الأدنى للسحب عبر Binance (USDT)'],['web3WithdrawMin','الحد الأدنى للسحب عبر Web3 (USDT)'],['starsDepositMin','الحد الأدنى للإيداع عبر Stars'],['web3DepositMin','الحد الأدنى للإيداع عبر Web3 (USDT)'],['userShare','حصة المستخدم من الإيراد (%)'],['platformShare','حصة المنصة (%)'],['durationMin','أقصر مدة فيديو (ثانية)'],['durationMax','أطول مدة فيديو (ثانية)'],['cpmMin','أقل CPM'],['cpmMax','أعلى CPM'],['telegramCpm','CPM إعلانات Telegram'],['tiktokCpm','CPM إعلانات TikTok'],['telegramTaskReward','مكافأة مهمة Telegram (USDT) · من الخادم'],['tiktokTaskReward','مكافأة مهمة TikTok (USDT) · من الخادم'],['web3Address','عنوان Web3']];
  const openTier=(platform:PricingPlatform,index:number)=>{const tier=pricingDraft[platform][index];setTierDraft({value:String(tier.value),price:String(tier.price)});setEditing({platform,index});};
  const saveTier=()=>{if(!editing)return;const value=Number(tierDraft.value),price=Number(tierDraft.price);if(!Number.isFinite(value)||value<=0||!Number.isFinite(price)||price<0)return;const next={...pricingDraft,[editing.platform]:pricingDraft[editing.platform].map((tier,index)=>index===editing.index?{value,price}:tier)};setPricingDraft(next);onPricingSave(next);setEditing(null);};
-  return <div className="space-y-4"><section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5"><h2 className="mb-4 font-extrabold">ضوابط المنصة</h2><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{fields.map(([key,label])=><Field key={key} label={label} type={key==='web3Address'?'text':'number'} min={key.endsWith('WithdrawMin')?'0.000001':undefined} step="any" value={v[key]} onChange={e=>setV({...v,[key]:key==='web3Address'?e.target.value:Number(e.target.value)})}/>)}</div><label className="mt-4 flex min-h-11 items-center gap-3 rounded-xl bg-[#fff9eb] p-3 text-sm font-bold"><input type="checkbox" checked={v.maintenance} onChange={e=>setV({...v,maintenance:e.target.checked})}/> وضع الصيانة</label><button disabled={saving} className={`${primary} mt-4 min-h-11`} onClick={async()=>{setSaving(true);try{await onSave(v)}finally{setSaving(false)}}}>{saving?'جارٍ الحفظ…':'حفظ الإعدادات'}</button></section>
+  return <div className="space-y-4"><section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5"><h2 className="mb-4 font-extrabold">ضوابط المنصة</h2><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{fields.map(([key,label])=><Field key={key} label={label} type={key==='web3Address'?'text':'number'} min={key.endsWith('WithdrawMin')?'0.000001':undefined} step="any" value={v[key]} onChange={e=>setV({...v,[key]:key==='web3Address'?e.target.value:Number(e.target.value)})}/>)}</div><div className="mt-5 border-t border-slate-100 pt-4"><h3 className="text-sm font-extrabold">الإعلانات (يُطبَّق من الخادم)</h3><p className="mb-3 mt-1 text-xs text-slate-500">عدد المكافآت اليومي لكل مستخدم وسعر المكافأة لكل إعلان. Monetag: كل زوج إعلانين = مكافأة واحدة.</p><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{([['monetagDailyLimit','Monetag · الحد اليومي (عدد)','1'],['monetagReward','Monetag · سعر المكافأة (USDT)','any'],['adsteraDailyLimit','Adsterra · الحد اليومي (عدد)','1'],['adsteraReward','Adsterra · سعر المكافأة (USDT)','any']] as [string,string,string][]).map(([key,label,step])=><Field key={key} label={label} type="number" min="0" step={step} value={v[key]} onChange={e=>setV({...v,[key]:Number(e.target.value)})}/>)}</div></div><label className="mt-4 flex min-h-11 items-center gap-3 rounded-xl bg-[#fff9eb] p-3 text-sm font-bold"><input type="checkbox" checked={v.maintenance} onChange={e=>setV({...v,maintenance:e.target.checked})}/> وضع الصيانة</label><button disabled={saving} className={`${primary} mt-4 min-h-11`} onClick={async()=>{setSaving(true);try{await onSave(v)}finally{setSaving(false)}}}>{saving?'جارٍ الحفظ…':'حفظ الإعدادات'}</button></section>
   <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5"><div className="mb-4"><h2 className="font-extrabold">أسعار المعلنين</h2><p className="mt-1 text-xs leading-5 text-slate-500">مكافآت مهام Telegram وTikTok الثابتة مستقلة عن هذه الأسعار.</p></div><div className="space-y-5">{pricingOptions.map(([platform,name])=><div key={platform}><div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-extrabold">{name}</h3><span className="text-[10px] text-slate-400">٤ خيارات ثابتة</span></div><div className="divide-y divide-slate-100 rounded-xl bg-[#f8faff] px-3">{pricingDraft[platform].map((tier,index)=><div key={`${platform}-${index}`} className="flex min-h-14 items-center gap-2 py-2"><div className="min-w-0 flex-1"><div className="truncate text-xs font-bold">{tier.value.toLocaleString('en-US')} {platform==='youtube'?'ثانية':platform==='tiktok'?'متابع':'مشترك'}</div><div className="mt-0.5 text-[11px] text-slate-500">{platform==='youtube'?<><b className="font-mono text-[#12234b]">${tier.price.toFixed(2)}</b> CPM</>:<>سعر المعلن <b className="font-mono text-[#12234b]">${tier.price.toFixed(2)}</b></>}</div></div><button type="button" data-testid={`button-edit-price-${platform}-${index}`} className={`${soft} min-h-10 min-w-[64px]`} onClick={()=>openTier(platform,index)}>تعديل</button></div>)}</div></div>)}</div></section>
   {editing&&<div className="fixed inset-0 z-[120] flex items-end justify-center bg-[#061333]/45 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={event=>{if(event.target===event.currentTarget)setEditing(null)}}><section role="dialog" aria-modal="true" aria-labelledby="pricing-editor-title" className="w-full max-w-md rounded-t-3xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-xl sm:rounded-3xl"><div className="mb-4 flex items-center justify-between"><div><h2 id="pricing-editor-title" className="font-extrabold">تعديل سعر {pricingOptions.find(item=>item[0]===editing.platform)?.[1]}</h2></div><button type="button" aria-label="إغلاق" className="grid h-11 w-11 place-items-center rounded-xl text-slate-500 hover:bg-slate-100" onClick={()=>setEditing(null)}><X size={18}/></button></div><div className="grid gap-3 sm:grid-cols-2"><Field label={editing.platform==='youtube'?'المدة (ثانية)':editing.platform==='tiktok'?'عدد المتابعين':'عدد المشتركين'} type="number" min="1" step="1" value={tierDraft.value} onChange={event=>setTierDraft({...tierDraft,value:event.target.value})}/><Field label={editing.platform==='youtube'?'سعر CPM ($)':'سعر المعلن ($)'} type="number" min="0" step="0.01" value={tierDraft.price} onChange={event=>setTierDraft({...tierDraft,price:event.target.value})}/></div><div className="mt-5 grid grid-cols-2 gap-2"><button type="button" className={`${soft} min-h-11`} onClick={()=>setEditing(null)}>إغلاق</button><button type="button" className={`${primary} min-h-11`} onClick={saveTier}>حفظ</button></div></section></div>}</div>;
 }
@@ -483,7 +530,7 @@ function NotificationPanel({reports,onSend}:{reports:Row[];onSend:(r:Record<stri
  <div className="flex flex-wrap gap-2"><button type="button" data-testid="button-send-notification" className={`${primary} min-h-11 w-full`} disabled={!title.trim()||!body.trim()||sending||imageBusy} onClick={()=>void send()}><Megaphone size={15}/>{sending?'جارٍ الإرسال…':image?'إرسال النص والصورة عبر البوت':'إرسال عبر البوت'}</button><button type="button" data-testid="button-clear-notification" className={soft} onClick={()=>{reset();setResult(null)}}>مسح المسودة</button></div></div></section><section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-4 font-extrabold">سجل الإشعارات</h2><div className="space-y-3">{reports.length?reports.map(r=><div key={r.id} className="rounded-xl bg-[#f7f9fc] p-3"><div className="flex justify-between gap-2"><b className="text-sm">{r.title}</b><Badge>{r.status}</Badge></div><p className="mt-1 text-xs text-slate-500">{r.body}</p>{r.hasImage&&<p className="mt-2 text-[11px] font-bold text-slate-500">مرفق صورة</p>}{r.buttonTitle&&<p className="mt-2 text-[11px] font-bold text-[#1557ee]">{r.buttonTitle}{r.link?` · ${r.link}`:''}</p>}<div className="mt-2 text-[10px] text-slate-400">{r.createdAt}</div></div>):<p className="rounded-xl bg-[#f7f9fc] p-5 text-center text-sm text-slate-400">لا توجد إشعارات مرسلة بعد</p>}</div></section></div>;
 }
 
-function Dialog({dialog,data,userBy,onClose,onConfirm,onConfirmAction,onDelete,onAction}:{dialog:{kind:string;id?:string|number};data:State;userBy:(id:number|undefined)=>User|undefined;onClose:()=>void;onConfirm:(id:any,patch:any,kind:string)=>Promise<boolean>;onConfirmAction:()=>void;onDelete:(id:number)=>Promise<boolean>;onAction:(cb:()=>Promise<boolean|void>|boolean|void)=>void}) {
+function Dialog({dialog,data,userBy,onClose,onConfirm,onConfirmAction,onDelete,onAction}:{dialog:{kind:string;id?:string|number};data:State;userBy:(id:number|undefined)=>User|undefined;onClose:()=>void;onConfirm:(id:any,patch:any,kind:string)=>Promise<boolean>;onConfirmAction:()=>void;onDelete:(id:number)=>Promise<boolean>;onAction:(cb:()=>Promise<boolean|void>|boolean|void,message?:string,successMessage?:string)=>void}) {
  const [values,setValues]=useState<Record<string,any>>({}); const user=dialog.kind==='user'||dialog.kind==='user-edit'?userBy(Number(dialog.id)):undefined;
   const campaign=data.campaigns.find(x=>x.id===dialog.id);const proof=data.proofs.find(x=>x.id===dialog.id);
  useEffect(()=>{if(user)setValues({...user})},[dialog.id]);
@@ -492,7 +539,7 @@ function Dialog({dialog,data,userBy,onClose,onConfirm,onConfirmAction,onDelete,o
  const save=(patch:Record<string,any>=values)=>onConfirm(dialog.id,patch,dialog.kind);
  const saveUserChanges=async()=>{if(!user||saving)return;const patch:Record<string,any>={};if(String(values.name??'').trim()!==String(user.name??'').trim())patch.name=values.name;if(String(values.username??'').replace(/^@/,'').trim()!==String(user.username??'').replace(/^@/,'').trim())patch.username=values.username;for(const key of ['advertiserBalance','earnedBalance'] as const){const raw=String(values[key]??'').trim();if(raw===''||Number(raw)!==Number(user[key]))patch[key]=raw}setSaving(true);try{await onConfirm(dialog.id,patch,dialog.kind)}finally{setSaving(false)}};
  let content:React.ReactNode=null;let heading='تفاصيل';
- if(dialog.kind==='user'||dialog.kind==='user-edit'){heading='ملف المستخدم';content=user&&<div className="space-y-3"><div className="grid grid-cols-2 gap-3"><div className="rounded-xl bg-slate-50 p-3"><small>معرّف Telegram</small><div className="font-mono font-bold">{user.id}</div></div><div className="rounded-xl bg-slate-50 p-3"><small>الحالة</small><div><Badge>{user.status}</Badge></div></div></div><div className="grid gap-3 sm:grid-cols-2">{field('name','الاسم')}{field('username','اسم المستخدم')}{field('advertiserBalance','رصيد المعلن','number')}{field('earnedBalance','الأرباح','number')}</div><div className="grid grid-cols-2 gap-3 text-xs"><p>تاريخ التسجيل<br/><b>{user.joinedAt}</b></p><p>آخر تسجيل دخول<br/><b>{user.lastLogin}</b></p><p>آخر نشاط<br/><b>{user.lastActive}</b></p><p>دُعي بواسطة<br/><b>{user.invitedBy}</b></p></div><div className="flex flex-wrap gap-2"><button className={primary} disabled={saving} onClick={()=>void saveUserChanges()}>{saving?'جارٍ الحفظ…':'حفظ التعديلات والأرصدة'}</button><button className={soft} onClick={()=>onAction(()=>save({status:user.status==='نشط'?'محظور':'نشط'}))}>{user.status==='نشط'?'حظر':'إلغاء الحظر'}</button><button className={`${btn} bg-rose-50 text-rose-700`} onClick={()=>onAction(()=>onDelete(user.id))}><Trash2 size={14}/> حذف</button></div></div>}
+ if(dialog.kind==='user'||dialog.kind==='user-edit'){heading='ملف المستخدم';content=user&&<div className="space-y-3"><div className="grid grid-cols-2 gap-3"><div className="rounded-xl bg-slate-50 p-3"><small>معرّف Telegram</small><div className="font-mono font-bold">{user.id}</div></div><div className="rounded-xl bg-slate-50 p-3"><small>الحالة</small><div><Badge>{user.status}</Badge></div></div></div><div className="grid gap-3 sm:grid-cols-2">{field('name','الاسم')}{field('username','اسم المستخدم')}{field('advertiserBalance','رصيد المعلن','number')}{field('earnedBalance','الأرباح','number')}</div><div className="grid grid-cols-2 gap-3 text-xs"><p>تاريخ التسجيل<br/><b>{user.joinedAt}</b></p><p>آخر تسجيل دخول<br/><b>{user.lastLogin}</b></p><p>آخر نشاط<br/><b>{user.lastActive}</b></p><p>دُعي بواسطة<br/><b>{user.invitedBy}</b></p></div><div className="flex flex-wrap gap-2"><button className={primary} disabled={saving} onClick={()=>void saveUserChanges()}>{saving?'جارٍ الحفظ…':'حفظ التعديلات والأرصدة'}</button><button className={soft} onClick={()=>onAction(()=>save({status:user.status==='نشط'?'محظور':'نشط'}))}>{user.status==='نشط'?'حظر':'إلغاء الحظر'}</button><button className={`${btn} bg-rose-50 text-rose-700`} onClick={()=>onAction(()=>onDelete(user.id),'حذف هذا المستخدم نهائيًا مع كل بياناته (أرصدته وحملاته وسجلاته)؟ لا يمكن التراجع. إن أردت منعه فقط فاستخدم «حظر».','تم حذف المستخدم')}><Trash2 size={14}/> حذف المستخدم</button></div></div>}
  else if(dialog.kind==='campaign'){heading='مراجعة الفيديو';content=campaign&&<div className="space-y-3"><div className="aspect-video overflow-hidden rounded-xl bg-slate-900"><iframe title="معاينة فيديو الحملة" className="h-full w-full" src={campaign.videoUrl} allow="encrypted-media; picture-in-picture" referrerPolicy="strict-origin-when-cross-origin"/></div><h3 className="font-bold">{campaign.title}</h3><div className="grid grid-cols-2 gap-2 text-xs text-slate-500"><span>النوع: {campaign.platform}</span><span>المدة: {campaign.duration} ثانية</span><span>الميزانية: {campaign.budget} USDT</span><span>المشاهدات: {campaign.views}</span></div><div className="flex flex-wrap gap-2">{['نشطة','مرفوضة','موقوفة'].map(status=><button key={status} className={status==='مرفوضة'?`${btn} bg-rose-50 text-rose-700`:soft} onClick={()=>status==='مرفوضة'?onAction(()=>save({status})):save({status})}>{status==='نشطة'?'اعتماد':status==='مرفوضة'?'رفض':'إيقاف مؤقت'}</button>)}</div></div>}
  else if(dialog.kind==='proof'){heading='صورة إثبات المهمة';content=proof&&<div><img src={proof.image} alt="صورة الإثبات" className="max-h-[60vh] w-full rounded-xl object-contain"/><p className="mt-3 text-xs text-slate-500">{userBy(proof.userId)?.name} · {proof.taskId}</p></div>}
  else if(dialog.kind==='reject-proof'){heading='رفض الإثبات';content=<div className="space-y-3"><label className="grid gap-1.5 text-xs font-bold">سبب الرفض<textarea value={values.reason??''} onChange={e=>setValues({...values,reason:e.target.value})} rows={3} className="rounded-xl border border-slate-200 p-3"/></label><button className={`${btn} bg-rose-600 text-white`} onClick={()=>onAction(()=>save({status:'مرفوض',rejectionReason:values.reason||'لم يطابق الإثبات المتطلبات'}))}>رفض الإثبات</button></div>}

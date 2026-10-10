@@ -3,6 +3,7 @@ import { ArrowRight, ArrowUpRight, CheckCircle2, Clock3, ImageIcon, ImagePlus, S
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
 import type { PromotionCampaign, TaskProof } from '@/legacy/shared';
+import { formatTaskReward, useTaskRewards } from '@/lib/useTaskRewards';
 
 export function TikTokTaskPage({
   campaign,
@@ -16,6 +17,7 @@ export function TikTokTaskPage({
   onBack: () => void;
 }) {
   const { dir, t } = useLanguage();
+  const rewards = useTaskRewards();
   const [proofImage, setProofImage] = useState('');
 
   const handleProofImage = (event: ChangeEvent<HTMLInputElement>) => {
@@ -65,7 +67,7 @@ export function TikTokTaskPage({
                 <span className="rounded-full bg-[#eafbf8] px-2.5 py-1 text-[10px] font-bold text-[#159b89]">متابعة</span>
               </div>
               <h1 className="break-words text-lg font-bold leading-7 text-[#12234b] sm:text-xl">{campaign.title}</h1>
-              <p className="mt-1 text-xs text-slate-500">{campaign.targetCount.toLocaleString()} متابع مستهدف · $0.01 لكل متابعة</p>
+              <p className="mt-1 text-xs text-slate-500">{campaign.targetCount.toLocaleString()} متابع مستهدف · {formatTaskReward(rewards.tiktokTaskReward)} لكل متابعة</p>
             </div>
           </div>
           <a
