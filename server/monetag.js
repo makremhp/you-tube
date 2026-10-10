@@ -16,17 +16,20 @@ function sameSecret(actual, expected) {
 
 async function settlePair(sessionId, step, action, userId = null, requireActive = false) {
   if (!SESSION_ID_PATTERN.test(sessionId) || (step !== 1 && step !== 2)) return null;
-  const column = action === 'valued'
-    ? (step === 1 ? 'first_valued_at' : 'second_valued_at')
-    : (step === 1 ? 'first_completed_at' : 'second_completed_at');
+  // إكمال الخطوة من التطبيق (بعد أن أعاد Monetag SDK حدث valued) يسجّل الخطوة كمُكتملة ومُقيَّمة معًا،
+  // فتُمنح المكافأة مباشرة بعد الإعلانين دون انتظار postback. أما الـ postback فيبقى يسجّل valued فقط.
+  const valuedColumn = step === 1 ? 'first_valued_at' : 'second_valued_at';
+  const completedColumn = step === 1 ? 'first_completed_at' : 'second_completed_at';
+  const columns = action === 'valued' ? [valuedColumn] : [valuedColumn, completedColumn];
   const flags = ['first_valued_at', 'second_valued_at', 'first_completed_at', 'second_completed_at'];
-  const pairComplete = flags.map((flag) => flag === column ? 'TRUE' : `${flag} IS NOT NULL`).join(' AND ');
+  const pairComplete = flags.map((flag) => columns.includes(flag) ? 'TRUE' : `${flag} IS NOT NULL`).join(' AND ');
+  const setColumns = columns.map((column) => `${column} = COALESCE(${column}, now())`).join(',\n           ');
   const { monetagReward, monetagDailyLimit } = await getAdSettings();
 
   const rows = await sql.query(
     `WITH changed AS (
        UPDATE vr_monetag_ad_sessions
-       SET ${column} = COALESCE(${column}, now()),
+       SET ${setColumns},
            rewarded_at = CASE
              WHEN ${pairComplete} THEN COALESCE(rewarded_at, now())
              ELSE rewarded_at
