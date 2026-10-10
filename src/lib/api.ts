@@ -72,6 +72,8 @@ export type ApiCampaignRow = {
   reward?: number | null;
   price?: number | null;
   targetCount?: number | null;
+  requestedViews?: number | null;
+  campaignBudget?: number | null;
   country?: string | null;
   device?: string | null;
   status: string;
@@ -126,6 +128,8 @@ export function toVideo(row: ApiCampaignRow): Video {
     created: formatCreatedAt(row.createdAt),
     art: 'media-art',
     link: row.youtubeUrl ?? row.link ?? '',
+    requestedViews: Number(row.requestedViews ?? 0) || undefined,
+    budget: Number(row.campaignBudget ?? row.price ?? 0) || undefined,
   };
 }
 
