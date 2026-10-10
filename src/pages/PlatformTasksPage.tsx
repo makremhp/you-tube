@@ -47,10 +47,8 @@ export function PlatformTasksPage({
     const initData = window.Telegram?.WebApp?.initData;
     if (!initData) {
       const message = 'افتح التطبيق من Telegram للتحقق الآلي من العضوية.';
-      setVerification((current) => ({
-        ...current,
-        [task.id]: { state: 'error', message },
-      }));
+      // الفشل يظهر كإشعار فقط ولا يُكتب داخل كارد المهمة.
+      setVerification((current) => ({ ...current, [task.id]: { state: 'idle' } }));
       onNotify?.('warning', 'تعذر التحقق من الاشتراك', message);
       return;
     }
@@ -74,18 +72,12 @@ export function PlatformTasksPage({
         onNotify?.('success', 'تم إكمال مهمة القناة', 'تم التحقق من اشتراكك عبر Telegram وإكمال المهمة.');
       } else {
         const message = 'لم يظهر اشتراكك بعد. انضم إلى القناة ثم أعد التحقق.';
-        setVerification((current) => ({
-          ...current,
-          [task.id]: { state: 'not-member', message },
-        }));
+        setVerification((current) => ({ ...current, [task.id]: { state: 'idle' } }));
         onNotify?.('warning', 'لم يكتمل التحقق', message);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'تعذر التحقق الآن. حاول مرة أخرى.';
-      setVerification((current) => ({
-        ...current,
-        [task.id]: { state: 'error', message },
-      }));
+      setVerification((current) => ({ ...current, [task.id]: { state: 'idle' } }));
       onNotify?.('warning', 'تعذر التحقق من الاشتراك', message);
     }
   };
@@ -147,7 +139,7 @@ export function PlatformTasksPage({
                   <div className="min-w-0 flex-1">
                     <h2 className="truncate text-[11px] font-bold leading-4 text-[#12234b]">{task.title}</h2>
                     <p className={`truncate text-[9px] leading-3 ${verificationState.state === 'member' ? 'text-[#159b89]' : verificationState.state === 'error' || verificationState.state === 'not-member' ? 'text-amber-700' : 'text-slate-400'}`} role={verificationState.state === 'idle' ? undefined : 'status'}>
-                      {t(verificationState.message ?? (returnedIds[task.id] && !telegramUserId ? 'افتح التطبيق من Telegram للتحقق الآلي من العضوية.' : `${task.targetCount.toLocaleString()} ${t('مشترك')} · ${task.link}`))}
+                      {verificationState.state === 'member' && verificationState.message ? t(verificationState.message) : `${task.targetCount.toLocaleString()} ${t('مشترك')} · ${task.link}`}
                     </p>
                   </div>
                   <span className="shrink-0 rounded-full bg-[#eafbf8] px-2 py-1 text-[9px] font-bold text-[#159b89]">{formatTaskReward(isTelegram ? rewards.telegramTaskReward : rewards.tiktokTaskReward)}</span>
