@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { SiTelegram, SiTiktok, SiYoutube } from 'react-icons/si';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { useLanguage } from '@/i18n';
 import {
   createBrowserWatchUrl, createUniqueIdentifier,
@@ -65,6 +66,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
   const [advertiserBalance, setAdvertiserBalance] = useState(0);
   const [viewerBalance, setViewerBalance] = useState(0);
   const [banned, setBanned] = useState(false);
+  const [initialDataLoaded, setInitialDataLoaded] = useState(false);
   const bannedRef = useRef(false);
   const [depositHistory, setDepositHistory] = useState<DepositRecord[]>([]);
   const [withdrawHistory, setWithdrawHistory] = useState<WithdrawRecord[]>([]);
@@ -234,29 +236,37 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     let active = true;
     const loadOnEntry = async () => {
       const initData = window.Telegram?.WebApp?.initData ?? '';
-      if (initData && auditedInitDataRef.current !== initData) {
-        auditedInitDataRef.current = initData;
-        try {
-          const audit = await apiPost<{
-            checkedChannels: number;
-            unavailableChannels: number;
-            revokedTasks: number;
-            reversedAmount: number;
-          }>('session/entry');
-          if (active && audit.revokedTasks > 0) {
-            notify(
-              'warning',
-              'أُعيد فتح مهام Telegram',
-              `غادرت ${audit.revokedTasks} قناة قبل إكمال 3 أيام، فتم خصم ${formatUsd(audit.reversedAmount)} من رصيد المهام وإتاحتها للانضمام مجددًا.`,
-            );
-          } else if (active && audit.unavailableChannels > 0) {
-            notify('info', 'تعذر فحص بعض القنوات', 'لم يُخصم أي رصيد عن قناة لم يؤكد Telegram حالة عضويتها.');
-          }
-        } catch {
-          if (active) notify('warning', 'تعذر فحص عضوية Telegram', 'لم يُعدّل الرصيد أو تُفتح المهام؛ سيُعاد التحقق عند فتح التطبيق مجددًا.');
-        }
+      const shouldAudit = Boolean(initData) && auditedInitDataRef.current !== initData;
+      if (shouldAudit) auditedInitDataRef.current = initData;
+      // فحص عضوية القنوات يعمل بالتوازي حتى لا يؤخر ظهور الرصيد والبيانات.
+      const auditPromise = shouldAudit
+        ? apiPost<{
+          checkedChannels: number;
+          unavailableChannels: number;
+          revokedTasks: number;
+          reversedAmount: number;
+        }>('session/entry').then((audit) => ({ audit, failed: false as const }), () => ({ audit: null, failed: true as const }))
+        : Promise.resolve(null);
+      // الرصيد والحملات والمهام تُحمَّل أولًا، ولا تُعرض الواجهة قبل وصولها.
+      await refreshData();
+      if (active) setInitialDataLoaded(true);
+      const auditResult = await auditPromise;
+      if (!active || !auditResult) return;
+      if (auditResult.failed) {
+        notify('warning', 'تعذر فحص عضوية Telegram', 'لم يُعدّل الرصيد أو تُفتح المهام؛ سيُعاد التحقق عند فتح التطبيق مجددًا.');
+        return;
       }
-      if (active) await refreshData();
+      const audit = auditResult.audit;
+      if (audit.revokedTasks > 0) {
+        await refreshData();
+        notify(
+          'warning',
+          'أُعيد فتح مهام Telegram',
+          `غادرت ${audit.revokedTasks} قناة قبل إكمال 3 أيام، فتم خصم ${formatUsd(audit.reversedAmount)} من رصيد المهام وإتاحتها للانضمام مجددًا.`,
+        );
+      } else if (audit.unavailableChannels > 0) {
+        notify('info', 'تعذر فحص بعض القنوات', 'لم يُخصم أي رصيد عن قناة لم يؤكد Telegram حالة عضويتها.');
+      }
     };
     void loadOnEntry();
     return () => { active = false; };
@@ -591,6 +601,14 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
           <h1 className="mt-4 text-2xl font-extrabold">{language === 'ar' ? 'تم حظر حسابك' : 'Your account is blocked'}</h1>
           <p className="mx-auto mt-3 max-w-sm text-sm leading-7 text-blue-100/70">{language === 'ar' ? 'لا يمكنك استخدام المنصة حاليًا.' : 'You can’t use the platform right now.'}</p>
         </section>
+      </main>
+    );
+  }
+
+  if (!initialDataLoaded) {
+    return (
+      <main dir={language === 'ar' ? 'rtl' : 'ltr'} className="grid min-h-dvh place-items-center bg-[#f7f9fc]" aria-busy="true">
+        <Spinner className="size-7 text-[#1557ee]" />
       </main>
     );
   }

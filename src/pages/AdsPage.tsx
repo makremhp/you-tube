@@ -399,6 +399,7 @@ type MonetagSession = {
 
 type MonetagSessionStatus = {
   rewarded: boolean;
+  credited?: boolean;
   settled: boolean;
   claimedToday: number;
   dailyLimit: number;
@@ -413,7 +414,7 @@ type MonetagSdkResult = {
 
 type MonetagShowAd = (options: { ymid: string; requestVar: string }) => Promise<MonetagSdkResult>;
 
-type MonetagFlow = 'idle' | 'loading' | 'first' | 'second' | 'confirming' | 'pending' | 'error' | 'limit';
+type MonetagFlow = 'idle' | 'loading' | 'first' | 'second' | 'confirming' | 'error' | 'limit';
 
 export function AdsPage({
   userId,
@@ -434,7 +435,6 @@ export function AdsPage({
   const [claiming, setClaiming] = useState(false);
   const [claimError, setClaimError] = useState('');
   const [monetagFlow, setMonetagFlow] = useState<MonetagFlow>('idle');
-  const [monetagMessage, setMonetagMessage] = useState('');
   const monetagSessionRef = useRef<string | null>(null);
   const monetagBusy = monetagFlow === 'loading' || monetagFlow === 'first' || monetagFlow === 'second' || monetagFlow === 'confirming';
 
@@ -532,44 +532,33 @@ export function AdsPage({
     }
   };
 
-  // Monetag: بعد الضغط على «شاهد» يبدأ الإعلان الأول فورًا، وعند انتهائه يبدأ الثاني تلقائيًا، ثم تُمنح المكافأة — بدون أي نافذة أو زر إضافي.
-  const pollMonetagReward = async (sessionId: string) => {
-    setMonetagFlow('confirming');
-    setMonetagMessage('');
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      const current = await apiGet<MonetagSessionStatus>(`ads/monetag/session/${encodeURIComponent(sessionId)}`);
-      setProgress(value => ({
-        ...(value.day === getLocalDayKey() ? value : emptyProgress()),
-        monetag: current.claimedToday,
-      }));
-      if (current.rewarded) {
-        monetagSessionRef.current = null;
-        setMonetagFlow('idle');
-        setMonetagMessage('');
-        await onReward(
-          current.reward,
-          copy.rewardAdded,
-          copy.rewardMessage(formatReward(current.reward)),
-        );
-        return;
-      }
-      if (current.settled && current.claimedToday >= current.dailyLimit) {
-        monetagSessionRef.current = null;
-        setMonetagFlow('limit');
-        onNotify?.('warning', isArabic ? 'الحد اليومي' : 'Daily limit', isArabic ? 'اكتمل الإعلانان، لكن الحد اليومي استُخدم قبل تسجيل المكافأة.' : 'Both ads completed, but the daily limit was reached before the reward was recorded.');
-        return;
-      }
-      await new Promise((resolve) => window.setTimeout(resolve, 1500));
+  // Monetag: بعد الضغط على «شاهد» يبدأ الإعلان الأول فورًا، وعند انتهائه يبدأ الثاني تلقائيًا، وبعد إكمال الإعلانين تُمنح المكافأة مباشرة.
+  const finishMonetagReward = async (current: MonetagSessionStatus) => {
+    setProgress(value => ({
+      ...(value.day === getLocalDayKey() ? value : emptyProgress()),
+      monetag: current.claimedToday,
+    }));
+    monetagSessionRef.current = null;
+    if (current.rewarded || current.credited) {
+      setMonetagFlow('idle');
+      await onReward(
+        current.reward,
+        copy.rewardAdded,
+        copy.rewardMessage(formatReward(current.reward)),
+      );
+      return;
     }
-    setMonetagFlow('pending');
-    setMonetagMessage(isArabic
-      ? 'تم إرسال إكمال الإعلانين. ننتظر تأكيد Monetag؛ يمكنك التحقق مجددًا بعد قليل.'
-      : 'Both ad completions were submitted. Waiting for Monetag confirmation; check again shortly.');
+    if (current.settled && current.claimedToday >= current.dailyLimit) {
+      setMonetagFlow('limit');
+      onNotify?.('warning', isArabic ? 'الحد اليومي' : 'Daily limit', isArabic ? 'اكتمل الإعلانان، لكن الحد اليومي استُخدم قبل تسجيل المكافأة.' : 'Both ads completed, but the daily limit was reached before the reward was recorded.');
+      return;
+    }
+    setMonetagFlow('error');
+    onNotify?.('warning', isArabic ? 'تعذر تسجيل المكافأة' : 'Reward could not be recorded', isArabic ? 'حاول مجددًا بعد قليل.' : 'Try again shortly.');
   };
 
   const runMonetagPair = async () => {
     if (monetagBusy) return;
-    setMonetagMessage('');
     setMonetagFlow('loading');
     const notifyLoading = () => onNotify?.('info', isArabic ? 'تحميل Monetag' : 'Loading Monetag', '');
     const notifyIncomplete = () => onNotify?.('warning', isArabic ? 'لم يكتمل إعلان' : 'Ad not completed', '');
@@ -627,31 +616,19 @@ export function AdsPage({
       const second = await showAd({ ymid: `${session.id}_2`, requestVar: `vidreward_${session.id}_2` });
       if (second?.reward_event_type !== 'valued') throw new Error('Second ad was not valued');
       bothWatched = true;
+      setMonetagFlow('confirming');
       if (!(await firstReport)) await reportStep(1);
-      await reportStep(2);
-      await pollMonetagReward(session.id);
+      const final = await reportStep(2) as MonetagSessionStatus;
+      await finishMonetagReward(final);
     } catch {
       if (bothWatched) {
         // شاهد المستخدم الإعلانين فعلًا؛ المشكلة في الاتصال بالخادم فقط، فلا نقول إنه لم يكمل.
-        setMonetagFlow('pending');
-        setMonetagMessage(isArabic
-          ? 'تم إرسال إكمال الإعلانين. ننتظر تأكيد Monetag؛ يمكنك التحقق مجددًا بعد قليل.'
-          : 'Both ad completions were submitted. Waiting for Monetag confirmation; check again shortly.');
+        setMonetagFlow('error');
+        onNotify?.('warning', isArabic ? 'تعذر تسجيل المكافأة' : 'Reward could not be recorded', isArabic ? 'تحقق من اتصالك ثم حاول مجددًا.' : 'Check your connection and try again.');
         return;
       }
       setMonetagFlow('error');
       notifyIncomplete();
-    }
-  };
-
-  const checkMonetagStatus = async () => {
-    const sessionId = monetagSessionRef.current;
-    if (!sessionId || monetagBusy) return;
-    try {
-      await pollMonetagReward(sessionId);
-    } catch {
-      setMonetagFlow('pending');
-      onNotify?.('warning', isArabic ? 'تعذر التحقق الآن' : 'Could not check the status', isArabic ? 'حاول مجددًا بعد قليل.' : 'Try again shortly.');
     }
   };
 
@@ -665,8 +642,6 @@ export function AdsPage({
     setClaimError('');
     setActiveProvider(provider);
   };
-
-  const monetagStatusText = monetagFlow === 'pending' ? monetagMessage : '';
 
   return (
     <main data-testid="page-ads" aria-label={isArabic ? 'الإعلانات' : 'Ads'} dir={dir} className="mx-auto min-h-[calc(100dvh-7rem)] w-full max-w-[980px] px-4 pb-28 pt-7 text-[#12234b] md:px-8 md:pt-10">
@@ -703,22 +678,6 @@ export function AdsPage({
           />;
         })}
       </div>
-
-      {monetagStatusText && (
-        <div
-          role="status"
-          aria-live="polite"
-          data-testid="status-monetag-flow"
-          className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5 text-xs font-semibold text-violet-800"
-        >
-          <span>{monetagStatusText}</span>
-          {monetagFlow === 'pending' && (
-            <button type="button" onClick={() => void checkMonetagStatus()} className="rounded-lg bg-violet-600 px-3 py-1.5 text-[11px] font-bold text-white">
-              {isArabic ? 'تحقق من المكافأة' : 'Check reward status'}
-            </button>
-          )}
-        </div>
-      )}
 
       {activeProvider === 'adstera' && (
         <AdsterraExperience
