@@ -469,8 +469,11 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
           ? `تمت إضافة إعلان ${platformName} إلى قائمة إعلاناتك بنجاح.`
           : `أُضيف إعلان ${platformName} إلى القائمة، ولن يظهر حتى يتم التحقق من صلاحيات البوت على القناة.`,
       );
-    } catch {
-      notify('warning', `تعذر نشر إعلان ${platformName}`, 'لم يحفظ الخادم الإعلان. تحقق من البيانات وحاول مرة أخرى.');
+    } catch (error) {
+      const message = error instanceof ApiError && error.status === 402
+        ? error.message
+        : 'لم يحفظ الخادم الإعلان. تحقق من البيانات وحاول مرة أخرى.';
+      notify('warning', `تعذر نشر إعلان ${platformName}`, message);
     }
   };
 
@@ -610,7 +613,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
                       : screen === 'telegram-tasks' && mode === 'viewer' ? <PlatformTasksPage platform="telegram" campaigns={taskCampaigns} proofs={taskProofs} onTaskCompleted={recordCampaignCompletion} onNotify={notify} telegramUserId={telegramUser?.id ?? null} />
                       : screen === 'tiktok-tasks' && mode === 'viewer' ? <PlatformTasksPage platform="tiktok" campaigns={taskCampaigns} proofs={taskProofs} onTaskCompleted={recordCampaignCompletion} onStartTask={openTikTokTask} onNotify={notify} telegramUserId={telegramUser?.id ?? null} />
                        : screen === 'tiktok-task' && mode === 'viewer' && selectedTikTokTask ? <TikTokTaskPage campaign={selectedTikTokTask} proof={taskProofs.find((item) => item.campaignId === selectedTikTokTask.id && item.userId === telegramUser?.id)} onSubmitProof={submitTaskProof} onBack={() => setScreen('tiktok-tasks')} />
-                         : screen === 'ads' && mode === 'viewer' ? <AdsPage key={telegramUser?.id ?? 'guest'} userId={telegramUser?.id ?? null} onReward={creditAdReward} />
+                         : screen === 'ads' && mode === 'viewer' ? <AdsPage key={telegramUser?.id ?? 'guest'} userId={telegramUser?.id ?? null} onReward={creditAdReward} onNotify={notify} />
                  : screen === 'publish' && mode === 'viewer' ? <PublishingSystemPage telegramUser={telegramUser} />
                 : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={taskVideos} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
                     : <CreatorOverview telegramUser={telegramUser} platformCampaigns={platformCampaigns} videos={videos} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}

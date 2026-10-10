@@ -154,10 +154,13 @@ export function CampaignsPage({
                     <span className="text-[10px] text-slate-300">· {video.created}</span>
                   </div>
                   <h3 className="mt-1 truncate text-sm font-bold text-slate-800">{video.title}</h3>
-                  <div className="mt-2 flex items-center gap-3 text-[10px] text-slate-400">
-                    <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> {video.views}</span>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-400">
+                    <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> {video.views}{video.requestedViews ? ` / ${formatCount(video.requestedViews)}` : ''} مشاهدة</span>
                     <span className="flex items-center gap-1"><Clock3 className="h-3 w-3" /> {formatDuration(video.duration)}</span>
+                    <span>CPM {formatCurrency(video.cpm)}</span>
+                    {video.budget ? <span>الميزانية {formatCurrency(video.budget)}</span> : null}
                   </div>
+                  {video.requestedViews ? <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#f1f4f9]" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, Math.round(parseViews(video.views) / video.requestedViews * 100))}><div className="h-full rounded-full bg-gradient-to-l from-[#1557ee] to-[#23bdc9]" style={{ width: `${Math.min(100, Math.round(parseViews(video.views) / video.requestedViews * 100))}%` }} /></div> : null}
                 </div>
                 <div className="hidden text-left sm:block">
                   <div className="text-sm font-bold text-[#12234b]">{video.reward}</div>
@@ -177,10 +180,13 @@ export function CampaignsPage({
                     <span className="text-[10px] text-slate-300">· {campaign.created}</span>
                   </div>
                   <h3 className="mt-1 truncate text-sm font-bold text-slate-800">{campaign.title}</h3>
-                  <div className="mt-2 flex items-center gap-3 text-[10px] text-slate-400">
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-400">
                     <span>{campaign.platform === 'telegram' ? 'Telegram' : 'TikTok'}</span>
-                    <span>{campaign.targetCount.toLocaleString(isArabic ? 'ar' : 'en-US')} {campaign.platform === 'telegram' ? 'مشترك' : 'متابع'}</span>
+                    <span>الهدف {formatCount(campaign.targetCount)} {campaign.platform === 'telegram' ? 'مشترك' : 'متابع'}</span>
+                    <span>انضموا {formatCount(campaign.joinedCount ?? 0)}</span>
+                    <span>اكتملوا {formatCount(campaign.completedCount ?? 0)}</span>
                   </div>
+                  {campaign.targetCount > 0 ? <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#f1f4f9]" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, Math.round((campaign.completedCount ?? 0) / campaign.targetCount * 100))}><div className="h-full rounded-full bg-gradient-to-l from-[#1557ee] to-[#23bdc9]" style={{ width: `${Math.min(100, Math.round((campaign.completedCount ?? 0) / campaign.targetCount * 100))}%` }} /></div> : null}
                 </div>
                 <div className="hidden text-left sm:block">
                   <div className="text-sm font-bold text-[#12234b]">${campaign.price.toFixed(2)}</div>

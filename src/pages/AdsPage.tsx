@@ -338,7 +338,7 @@ function RewardAdCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex flex-wrap items-center gap-2">
-            <span className={`text-[9px] font-bold uppercase tracking-[.13em] ${isMonetag?'text-violet-200':'text-[#f6c453]'}`}>{label}</span>
+            {label && <span className={`text-[9px] font-bold uppercase tracking-[.13em] ${isMonetag?'text-violet-200':'text-[#f6c453]'}`}>{label}</span>}
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-bold text-blue-100/75">
               {isMonetag?'Monetag':'Adsterra'}
             </span>
@@ -351,12 +351,12 @@ function RewardAdCard({
       </div>
 
       <div className="relative z-10 mt-2 px-1">
-        <p className="truncate text-[11px] leading-4 text-blue-100/75">{description}</p>
+        {description && <p className="truncate text-[11px] leading-4 text-blue-100/75">{description}</p>}
         <div className="mb-1.5 mt-3 flex items-center justify-between text-[10px] font-semibold text-blue-100/75">
-          <span className="flex items-center gap-1.5">
+          {isMonetag ? <span /> : <span className="flex items-center gap-1.5">
             <Clock3 size={13} className="text-cyan-200" />
-            {isMonetag ? (isArabic ? 'إعلانان متتاليان' : '2 ads in a row') : `${ADSTERRA_COUNTDOWN_SECONDS} ${isArabic ? 'ثانية' : 'seconds'}`}
-          </span>
+            {`${ADSTERRA_COUNTDOWN_SECONDS} ${isArabic ? 'ثانية' : 'seconds'}`}
+          </span>}
           <span data-testid="text-task-limit-adstera" className="font-mono">
             {completed} / {limit} {isArabic ? 'اليوم' : 'today'}
           </span>
@@ -418,9 +418,11 @@ type MonetagFlow = 'idle' | 'loading' | 'first' | 'second' | 'confirming' | 'pen
 export function AdsPage({
   userId,
   onReward,
+  onNotify,
 }: {
   userId: number | null;
   onReward: (amount: number, title: string, message: string) => void | Promise<void>;
+  onNotify?: (tone: 'success' | 'info' | 'warning', title: string, message: string) => void;
 }) {
   const { dir, isArabic } = useLanguage();
   const { ads } = useAdsteraAds();
@@ -554,7 +556,7 @@ export function AdsPage({
       if (current.settled && current.claimedToday >= current.dailyLimit) {
         monetagSessionRef.current = null;
         setMonetagFlow('limit');
-        setMonetagMessage(isArabic ? 'اكتمل الإعلانان، لكن الحد اليومي استُخدم قبل تسجيل المكافأة.' : 'Both ads completed, but the daily limit was reached before the reward was recorded.');
+        onNotify?.('warning', isArabic ? 'الحد اليومي' : 'Daily limit', isArabic ? 'اكتمل الإعلانان، لكن الحد اليومي استُخدم قبل تسجيل المكافأة.' : 'Both ads completed, but the daily limit was reached before the reward was recorded.');
         return;
       }
       await new Promise((resolve) => window.setTimeout(resolve, 1500));
@@ -569,14 +571,14 @@ export function AdsPage({
     if (monetagBusy) return;
     setMonetagMessage('');
     setMonetagFlow('loading');
-    const failure = isArabic
-      ? 'لم يكتمل الإعلانان معًا، لذلك لم تُمنح المكافأة. اضغط «شاهد» للمحاولة مرة أخرى.'
-      : 'Both ads were not completed, so no reward was issued. Press Watch to try again.';
+    const notifyLoading = () => onNotify?.('info', isArabic ? 'تحميل Monetag' : 'Loading Monetag', '');
+    const notifyIncomplete = () => onNotify?.('warning', isArabic ? 'لم يكتمل إعلان' : 'Ad not completed', '');
+    let bothWatched = false;
     try {
       const showAd = (window as unknown as { show_11993293?: MonetagShowAd }).show_11993293;
       if (typeof showAd !== 'function') {
         setMonetagFlow('error');
-        setMonetagMessage(isArabic ? 'لم يتم تحميل إعلان Monetag بعد. حاول مجددًا بعد قليل.' : 'The Monetag SDK has not loaded yet. Try again in a moment.');
+        onNotify?.('warning', isArabic ? 'تحميل Monetag' : 'Loading Monetag', isArabic ? 'لم يتم تحميل إعلان Monetag بعد. حاول مجددًا بعد قليل.' : 'The Monetag SDK has not loaded yet. Try again in a moment.');
         return;
       }
 
@@ -586,21 +588,34 @@ export function AdsPage({
       } catch (error) {
         if (error instanceof Error && /limit/i.test(error.message)) {
           setMonetagFlow('limit');
-          setMonetagMessage(isArabic ? `وصلت إلى الحد اليومي (${config.monetagLimit}).` : `You have reached the daily limit (${config.monetagLimit}).`);
+          onNotify?.('warning', isArabic ? 'الحد اليومي' : 'Daily limit', isArabic ? `وصلت إلى الحد اليومي (${config.monetagLimit}).` : `You have reached the daily limit (${config.monetagLimit}).`);
         } else {
           setMonetagFlow('error');
-          setMonetagMessage(isArabic
-            ? 'تعذر تشغيل الإعلان. تأكد من فتح التطبيق داخل Telegram وحاول مجددًا.'
-            : 'Could not start the ad. Make sure the app is open in Telegram and try again.');
+          onNotify?.('warning', isArabic ? 'تعذر تشغيل الإعلان' : 'Could not start the ad', isArabic
+            ? 'تأكد من فتح التطبيق داخل Telegram وحاول مجددًا.'
+            : 'Make sure the app is open in Telegram and try again.');
         }
         return;
       }
       monetagSessionRef.current = session.id;
       setConfig(current => ({ ...current, monetagLimit: Number(session.dailyLimit), monetagReward: Number(session.reward) }));
-      const reportStep = (step: 1 | 2) => apiPost(`ads/monetag/session/${encodeURIComponent(session.id)}/complete`, { step });
+      // نعيد محاولة إبلاغ الخادم عند انقطاع لحظي حتى لا يضيع إعلان شاهده المستخدم فعلًا.
+      const reportStep = async (step: 1 | 2) => {
+        let lastError: unknown;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            return await apiPost(`ads/monetag/session/${encodeURIComponent(session.id)}/complete`, { step });
+          } catch (error) {
+            lastError = error;
+            await new Promise((resolve) => window.setTimeout(resolve, 700));
+          }
+        }
+        throw lastError;
+      };
 
       // الإعلان الأول
       setMonetagFlow('first');
+      notifyLoading();
       const first = await showAd({ ymid: `${session.id}_1`, requestVar: `vidreward_${session.id}_1` });
       if (first?.reward_event_type !== 'valued') throw new Error('First ad was not valued');
       // نُبلغ الخادم بإكمال الأول في الخلفية ونبدأ الثاني فورًا بدون انتظار.
@@ -608,14 +623,24 @@ export function AdsPage({
 
       // الإعلان الثاني يبدأ تلقائيًا
       setMonetagFlow('second');
+      notifyLoading();
       const second = await showAd({ ymid: `${session.id}_2`, requestVar: `vidreward_${session.id}_2` });
       if (second?.reward_event_type !== 'valued') throw new Error('Second ad was not valued');
+      bothWatched = true;
       if (!(await firstReport)) await reportStep(1);
       await reportStep(2);
       await pollMonetagReward(session.id);
     } catch {
+      if (bothWatched) {
+        // شاهد المستخدم الإعلانين فعلًا؛ المشكلة في الاتصال بالخادم فقط، فلا نقول إنه لم يكمل.
+        setMonetagFlow('pending');
+        setMonetagMessage(isArabic
+          ? 'تم إرسال إكمال الإعلانين. ننتظر تأكيد Monetag؛ يمكنك التحقق مجددًا بعد قليل.'
+          : 'Both ad completions were submitted. Waiting for Monetag confirmation; check again shortly.');
+        return;
+      }
       setMonetagFlow('error');
-      setMonetagMessage(failure);
+      notifyIncomplete();
     }
   };
 
@@ -626,7 +651,7 @@ export function AdsPage({
       await pollMonetagReward(sessionId);
     } catch {
       setMonetagFlow('pending');
-      setMonetagMessage(isArabic ? 'تعذر التحقق الآن. حاول مجددًا بعد قليل.' : 'Could not check the status. Try again shortly.');
+      onNotify?.('warning', isArabic ? 'تعذر التحقق الآن' : 'Could not check the status', isArabic ? 'حاول مجددًا بعد قليل.' : 'Try again shortly.');
     }
   };
 
@@ -641,15 +666,7 @@ export function AdsPage({
     setActiveProvider(provider);
   };
 
-  const monetagStatusText = monetagFlow === 'loading'
-    ? (isArabic ? 'جارٍ تجهيز الإعلان…' : 'Preparing the ad…')
-    : monetagFlow === 'first'
-      ? (isArabic ? 'جارٍ عرض الإعلان الأول…' : 'Showing the first ad…')
-      : monetagFlow === 'second'
-        ? (isArabic ? 'جارٍ عرض الإعلان الثاني…' : 'Showing the second ad…')
-        : monetagFlow === 'confirming'
-          ? (isArabic ? 'جارٍ انتظار تأكيد Monetag…' : 'Waiting for Monetag confirmation…')
-          : monetagMessage;
+  const monetagStatusText = monetagFlow === 'pending' ? monetagMessage : '';
 
   return (
     <main data-testid="page-ads" aria-label={isArabic ? 'الإعلانات' : 'Ads'} dir={dir} className="mx-auto min-h-[calc(100dvh-7rem)] w-full max-w-[980px] px-4 pb-28 pt-7 text-[#12234b] md:px-8 md:pt-10">
@@ -672,13 +689,11 @@ export function AdsPage({
           return <RewardAdCard
             key={provider}
             provider={provider}
-            title={isArabic ? `شاهد إعلانات ${name}` : `Watch ${name} ads`}
-            description={available
-              ? (provider === 'monetag'
-                ? (isArabic ? `شاهد إعلانين متتاليين لإكمال زوج واحد وربح ${formatReward(reward)}.` : `Watch two consecutive ads to complete one pair and earn ${formatReward(reward)}.`)
-                : (isArabic ? `شاهد الإعلان لمدة 30 ثانية واربح ${formatReward(reward)} لكل إعلان.` : `Watch for 30 seconds and earn ${formatReward(reward)} per ad.`))
+            title={provider === 'monetag' && isArabic ? 'شاهد إعلانات مونيتاج' : (isArabic ? `شاهد إعلانات ${name}` : `Watch ${name} ads`)}
+            description={provider === 'monetag' ? '' : available
+              ? (isArabic ? `شاهد الإعلان لمدة 30 ثانية واربح ${formatReward(reward)} لكل إعلان.` : `Watch for 30 seconds and earn ${formatReward(reward)} per ad.`)
               : (isArabic ? `لا توجد شيفرات ${name} مفعّلة حاليًا.` : `No ${name} ad codes are enabled yet.`)}
-            label={available ? (isArabic ? 'شاهد واربح' : 'WATCH & EARN') : (isArabic ? 'غير مهيأ' : 'NOT CONFIGURED')}
+            label={provider === 'monetag' ? '' : available ? (isArabic ? 'شاهد واربح' : 'WATCH & EARN') : (isArabic ? 'غير مهيأ' : 'NOT CONFIGURED')}
             reward={reward}
             completed={completed}
             limit={limit}
@@ -691,10 +706,10 @@ export function AdsPage({
 
       {monetagStatusText && (
         <div
-          role={monetagFlow === 'error' || monetagFlow === 'limit' ? 'alert' : 'status'}
+          role="status"
           aria-live="polite"
           data-testid="status-monetag-flow"
-          className={`mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-xs font-semibold ${monetagFlow === 'error' || monetagFlow === 'limit' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-violet-200 bg-violet-50 text-violet-800'}`}
+          className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5 text-xs font-semibold text-violet-800"
         >
           <span>{monetagStatusText}</span>
           {monetagFlow === 'pending' && (
