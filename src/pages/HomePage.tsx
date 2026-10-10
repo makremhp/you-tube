@@ -176,7 +176,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
 
   useEffect(() => {
     const tick = () => { if (document.visibilityState === 'visible') void refreshBalance(); };
-    const timer = window.setInterval(tick, 8000);
+    const timer = window.setInterval(tick, 4000);
     document.addEventListener('visibilitychange', tick);
     window.addEventListener('focus', tick);
     return () => {
@@ -185,6 +185,38 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       window.removeEventListener('focus', tick);
     };
   }, [refreshBalance]);
+
+  useEffect(() => {
+    if (screen !== 'withdraw-history' || mode !== 'viewer') return;
+    let active = true;
+    const refreshWithdrawalHistory = async () => {
+      try {
+        const [rows, balance] = await Promise.all([
+          apiGet<ApiHistoryRecordRow[]>('withdrawals'),
+          apiGet<ApiBalance>('balance'),
+        ]);
+        if (!active) return;
+        setWithdrawHistory(rows.map((row) => toWithdrawRecord(row, language)));
+        setViewerBalance(Number(balance?.viewerBalance ?? 0));
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 403 && error.message === 'Account banned') {
+          bannedRef.current = true;
+          setBanned(true);
+        }
+      }
+    };
+    const tick = () => { if (document.visibilityState === 'visible') void refreshWithdrawalHistory(); };
+    tick();
+    const timer = window.setInterval(tick, 4000);
+    document.addEventListener('visibilitychange', tick);
+    window.addEventListener('focus', tick);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+      window.removeEventListener('focus', tick);
+    };
+  }, [screen, mode, language]);
 
   useEffect(() => {
     let active = true;
@@ -471,15 +503,17 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
 
   const withdrawEarnings = async (record: WithdrawRecord) => {
     try {
-      await apiPost<ApiHistoryRecordRow>('withdrawals', {
+      const created = await apiPost<ApiHistoryRecordRow>('withdrawals', {
         amount: record.amount,
         method: record.method,
         destination: record.destination,
       });
+      setWithdrawHistory((current) => [toWithdrawRecord(created, language), ...current]);
       await refreshData();
       notify('success', 'تم إرسال طلب السحب', '');
-    } catch {
+    } catch (error) {
       notify('warning', 'تعذر إرسال طلب السحب', 'لم يقبل الخادم الطلب. تحقق من الرصيد والوجهة وحاول مرة أخرى.');
+      throw error;
     }
   };
 
@@ -544,11 +578,22 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
 
   if (banned) {
     return (
-      <main dir="rtl" className="grid min-h-dvh place-items-center bg-[#101a32] px-5 text-white">
-        <section className="w-full max-w-md rounded-3xl border border-white/10 bg-white/[.06] p-7 text-center shadow-2xl">
-          <span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-rose-400/15 text-3xl text-rose-300">⛔</span>
-          <h1 className="mt-5 text-2xl font-extrabold">تم حظر حسابك</h1>
-          <p className="mt-3 text-sm leading-6 text-blue-100/70">لا يمكنك استخدام المنصة حاليًا. تواصل مع الدعم إذا كنت تعتقد أن ذلك خطأ.</p>
+      <main dir={language === 'ar' ? 'rtl' : 'ltr'} className="relative grid min-h-dvh place-items-center overflow-hidden bg-[#0a1020] px-5 py-8 text-white">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_15%,rgba(239,68,68,.22),transparent_55%)]" />
+        <section className="relative w-full max-w-lg overflow-hidden rounded-[2rem] border border-white/10 bg-slate-900/80 p-7 text-center shadow-[0_28px_90px_rgba(0,0,0,.45)] backdrop-blur sm:p-9">
+          <div className="mx-auto grid h-56 w-56 max-w-full place-items-center rounded-full bg-black/25 p-3">
+            <img src={`${import.meta.env.BASE_URL}assets/account-banned.png`} alt={language === 'ar' ? 'رمز الحساب المحظور' : 'Blocked account illustration'} className="h-full w-full object-contain" />
+          </div>
+          <span className="mt-5 inline-flex rounded-full border border-rose-300/20 bg-rose-400/10 px-3 py-1 text-[11px] font-bold tracking-wide text-rose-200">{language === 'ar' ? 'حالة الحساب' : 'ACCOUNT STATUS'}</span>
+          <h1 className="mt-4 text-2xl font-extrabold">{language === 'ar' ? 'تم حظر حسابك' : 'Your account is blocked'}</h1>
+          <p className="mx-auto mt-3 max-w-sm text-sm leading-7 text-blue-100/70">{language === 'ar' ? 'لا يمكنك استخدام المنصة حاليًا. تواصل مع الدعم إذا كنت تعتقد أن هذا الإجراء تم بالخطأ.' : 'You can’t use the platform right now. Contact support if you believe this action was made in error.'}</p>
+          <div className="mx-auto mt-6 flex max-w-sm items-center gap-4 rounded-2xl border border-white/10 bg-white/[.04] p-3 text-start">
+            <img src={`${import.meta.env.BASE_URL}assets/telegram-support-qr.png`} alt={language === 'ar' ? 'رمز Telegram للتواصل مع الدعم' : 'Telegram support QR code'} className="h-20 w-20 shrink-0 rounded-xl bg-black object-contain p-1" />
+            <div>
+              <h2 className="text-sm font-bold">{language === 'ar' ? 'تواصل مع الدعم' : 'Contact support'}</h2>
+              <p className="mt-1 text-xs leading-5 text-blue-100/65">{language === 'ar' ? 'امسح رمز Telegram لفتح قناة التواصل.' : 'Scan the Telegram code to open the support contact.'}</p>
+            </div>
+          </div>
         </section>
       </main>
     );
