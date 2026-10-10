@@ -18,7 +18,12 @@ import {
   sendAdminNotification,
   setMaintenance,
   setWithdrawalSettings,
+  setAdSettings,
+  setTaskRewardSettings,
+  adminAdStats,
+  deleteUser,
 } from './admin.js';
+import { getTaskRewardSettings } from './settings.js';
 import {
   claimAdReward,
   createDeposit,
@@ -99,6 +104,10 @@ export async function dispatch(req, res) {
     return;
   }
   if (method === 'GET' && key === 'withdrawal/settings') return getPublicWithdrawalSettings(req, res);
+  if (method === 'GET' && key === 'settings/rewards') {
+    ok(res, await getTaskRewardSettings());
+    return;
+  }
   if (maintenance && !adminRequest) {
     fail(res, 503, 'Platform is under maintenance');
     return;
@@ -126,6 +135,7 @@ export async function dispatch(req, res) {
     if (key === 'deposits') return listDeposits(req, res);
     if (key === 'withdrawals') return listWithdrawals(req, res);
     if (key === 'admin/state') return adminState(req, res);
+    if (key === 'admin/ad-stats') return adminAdStats(req, res);
     throw new HttpError(404, 'Not found');
   }
 
@@ -154,6 +164,8 @@ export async function dispatch(req, res) {
   if (method === 'PATCH') {
     if (key === 'admin/settings/maintenance') return setMaintenance(req, res);
     if (key === 'admin/settings/withdrawal') return setWithdrawalSettings(req, res);
+    if (key === 'admin/settings/ads') return setAdSettings(req, res);
+    if (key === 'admin/settings/rewards') return setTaskRewardSettings(req, res);
     if (resource === 'campaigns' && segments.length === 2) {
       const id = readPositiveInteger(segments[1], Number.MAX_SAFE_INTEGER);
       if (!id) throw new HttpError(400, 'Invalid request');
@@ -164,6 +176,11 @@ export async function dispatch(req, res) {
   }
 
   if (method === 'DELETE') {
+    if (resource === 'admin' && segments[1] === 'users' && segments.length === 3) {
+      const id = readPositiveInteger(segments[2], Number.MAX_SAFE_INTEGER);
+      if (!id) throw new HttpError(400, 'Invalid request');
+      return deleteUser(req, res, id);
+    }
     if (resource === 'campaigns' && segments.length === 2) {
       const id = readPositiveInteger(segments[1], Number.MAX_SAFE_INTEGER);
       if (!id) throw new HttpError(400, 'Invalid request');

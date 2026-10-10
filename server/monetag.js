@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { sql } from './db.js';
 import { HttpError, fail, ok } from './errors.js';
 import { requireUser } from './auth.js';
-import { MONETAG_AD_DAILY_LIMIT, MONETAG_AD_REWARD } from './config.js';
+import { getAdSettings } from './settings.js';
 import { newIdentifier } from './validation.js';
 
 const SESSION_ID_PATTERN = /^MNT-[A-Z0-9-]{8,40}$/;
@@ -21,6 +21,7 @@ async function settlePair(sessionId, step, action, userId = null, requireActive 
     : (step === 1 ? 'first_completed_at' : 'second_completed_at');
   const flags = ['first_valued_at', 'second_valued_at', 'first_completed_at', 'second_completed_at'];
   const pairComplete = flags.map((flag) => flag === column ? 'TRUE' : `${flag} IS NOT NULL`).join(' AND ');
+  const { monetagReward, monetagDailyLimit } = await getAdSettings();
 
   const rows = await sql.query(
     `WITH changed AS (
@@ -80,7 +81,7 @@ async function settlePair(sessionId, step, action, userId = null, requireActive 
             (EXISTS (SELECT 1 FROM credit_ledger)
              OR EXISTS (SELECT 1 FROM vr_monetag_reward_credits WHERE session_id = changed.id)) AS credited
      FROM changed`,
-    [sessionId, userId, MONETAG_AD_REWARD, MONETAG_AD_DAILY_LIMIT, requireActive],
+    [sessionId, userId, monetagReward, monetagDailyLimit, requireActive],
   );
   return rows[0] ?? null;
 }
@@ -106,11 +107,12 @@ async function readSession(sessionId, userId) {
      WHERE user_id = $1 AND day = (now() AT TIME ZONE 'UTC')::date`,
     [userId],
   );
+  const { monetagReward, monetagDailyLimit } = await getAdSettings();
   return {
     ...rows[0],
     claimedToday: Number(progress[0]?.count ?? 0),
-    dailyLimit: MONETAG_AD_DAILY_LIMIT,
-    reward: MONETAG_AD_REWARD,
+    dailyLimit: monetagDailyLimit,
+    reward: monetagReward,
   };
 }
 
@@ -122,7 +124,8 @@ export async function createMonetagSession(req, res) {
     [user.id],
   );
   const claimedToday = Number(progress[0]?.count ?? 0);
-  if (claimedToday >= MONETAG_AD_DAILY_LIMIT) throw new HttpError(429, 'Daily Monetag reward limit reached');
+  const { monetagReward, monetagDailyLimit } = await getAdSettings();
+  if (claimedToday >= monetagDailyLimit) throw new HttpError(429, 'Daily Monetag reward limit reached');
 
   const id = newIdentifier('MNT');
   await sql.query(
@@ -130,7 +133,7 @@ export async function createMonetagSession(req, res) {
      VALUES ($1, $2, (now() AT TIME ZONE 'UTC')::date)`,
     [id, user.id],
   );
-  ok(res, { id, claimedToday, dailyLimit: MONETAG_AD_DAILY_LIMIT, reward: MONETAG_AD_REWARD }, 201);
+  ok(res, { id, claimedToday, dailyLimit: monetagDailyLimit, reward: monetagReward }, 201);
 }
 
 export async function completeMonetagStep(req, res, sessionId) {

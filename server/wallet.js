@@ -2,9 +2,10 @@ import { sql } from './db.js';
 import { HttpError, ok } from './errors.js';
 import { isAdmin, requireUser } from './auth.js';
 import {
-  AD_DAILY_LIMIT, AD_MIN_INTERVAL_SECONDS, AD_REWARD,
-  DEFAULT_WITHDRAWAL_SETTINGS, MONETAG_AD_DAILY_LIMIT, MONETAG_AD_REWARD, normalizeWithdrawalSettings,
+  AD_MIN_INTERVAL_SECONDS,
+  DEFAULT_WITHDRAWAL_SETTINGS, normalizeWithdrawalSettings,
 } from './config.js';
+import { getAdSettings, providerAdConfig } from './settings.js';
 import { newIdentifier, readHttpUrl, readMoney, readPositiveInteger, readText } from './validation.js';
 
 async function nextMemoTag(userId) {
@@ -15,6 +16,7 @@ async function nextMemoTag(userId) {
 export async function claimAdReward(req, res, provider = 'adstera') {
   const user = await requireUser(req);
   const rewardsTable = provider === 'monetag' ? 'vr_monetag_ad_rewards' : 'vr_ad_rewards';
+  const { limit, reward } = providerAdConfig(await getAdSettings(), provider);
   const rows = await sql.query(
     `WITH bump AS (
        INSERT INTO ${rewardsTable} (user_id, day, count, last_at)
@@ -30,10 +32,10 @@ export async function claimAdReward(req, res, provider = 'adstera') {
        RETURNING id
      )
      SELECT count FROM bump`,
-    [user.id, AD_DAILY_LIMIT, AD_REWARD, AD_MIN_INTERVAL_SECONDS],
+    [user.id, limit, reward, AD_MIN_INTERVAL_SECONDS],
   );
   if (!rows.length) throw new HttpError(429, 'Reward not available');
-  ok(res, { reward: AD_REWARD, claimedToday: Number(rows[0].count), provider });
+  ok(res, { reward, claimedToday: Number(rows[0].count), provider });
 }
 
 export async function getAdProgress(req, res, provider = 'adstera') {
@@ -43,10 +45,11 @@ export async function getAdProgress(req, res, provider = 'adstera') {
     `SELECT count FROM ${rewardsTable} WHERE user_id = $1 AND day = (now() AT TIME ZONE 'UTC')::date`,
     [user.id],
   );
+  const { limit, reward } = providerAdConfig(await getAdSettings(), provider);
   ok(res, {
     claimedToday: Number(rows[0]?.count ?? 0),
-    dailyLimit: provider === 'monetag' ? MONETAG_AD_DAILY_LIMIT : AD_DAILY_LIMIT,
-    reward: provider === 'monetag' ? MONETAG_AD_REWARD : AD_REWARD,
+    dailyLimit: limit,
+    reward,
   });
 }
 

@@ -1,9 +1,10 @@
 import { sql } from './db.js';
 import { HttpError, ok } from './errors.js';
-import { readMoney, readPositiveInteger, readText } from './validation.js';
+import { readMoney, readNonNegativeInteger, readPositiveInteger, readText } from './validation.js';
 import { isAdmin, requireAdmin, telegramRequest } from './auth.js';
 import { normalizeWithdrawalSettings } from './config.js';
 import { getWithdrawalSettings } from './wallet.js';
+import { getAdSettings, getTaskRewardSettings, normalizeAdSettings, normalizeTaskRewardSettings } from './settings.js';
 
 async function recordAdminAction(adminId, collection, recordId, status) {
   try {
@@ -90,6 +91,8 @@ export async function adminState(req, res) {
     users, deposits, withdrawals, campaigns, proofs, suspicious, adminAudit,
     maintenance: settings[0]?.maintenance === 'true',
     withdrawalSettings: await getWithdrawalSettings(),
+    adSettings: await getAdSettings(),
+    taskRewardSettings: await getTaskRewardSettings(),
   });
 }
 
@@ -256,6 +259,142 @@ export async function setWithdrawalSettings(req, res) {
   );
   await recordAdminAction(admin.id, 'settings', 'withdrawal-minimums', JSON.stringify(withdrawalSettings));
   ok(res, withdrawalSettings);
+}
+
+export async function setAdSettings(req, res) {
+  const admin = await requireAdmin(req);
+  const body = req.body ?? {};
+  const monetagDailyLimit = readNonNegativeInteger(body.monetagDailyLimit, 1_000_000);
+  const adsteraDailyLimit = readNonNegativeInteger(body.adsteraDailyLimit, 1_000_000);
+  const monetagReward = readMoney(body.monetagReward, 0.000001, 1000);
+  const adsteraReward = readMoney(body.adsteraReward, 0.000001, 1000);
+  if (monetagDailyLimit === null || adsteraDailyLimit === null || monetagReward === null || adsteraReward === null) {
+    throw new HttpError(400, 'الحد اليومي يجب أن يكون عددًا صحيحًا (0 أو أكثر) والسعر رقمًا موجبًا');
+  }
+  const adSettings = normalizeAdSettings({ monetagDailyLimit, monetagReward, adsteraDailyLimit, adsteraReward });
+  await sql.query(
+    `INSERT INTO vr_platform_settings (key, value, updated_at)
+     VALUES ('ads', $1::jsonb, now())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    [JSON.stringify(adSettings)],
+  );
+  await recordAdminAction(admin.id, 'settings', 'ads', JSON.stringify(adSettings));
+  ok(res, adSettings);
+}
+
+export async function setTaskRewardSettings(req, res) {
+  const admin = await requireAdmin(req);
+  const body = req.body ?? {};
+  const telegramTaskReward = readMoney(body.telegramTaskReward, 0.000001, 1000);
+  const tiktokTaskReward = readMoney(body.tiktokTaskReward, 0.000001, 1000);
+  if (telegramTaskReward === null || tiktokTaskReward === null) {
+    throw new HttpError(400, 'مكافأة المهمة يجب أن تكون رقمًا موجبًا');
+  }
+  const taskRewardSettings = normalizeTaskRewardSettings({ telegramTaskReward, tiktokTaskReward });
+  await sql.query(
+    `WITH saved AS (
+       INSERT INTO vr_platform_settings (key, value, updated_at)
+       VALUES ('task_rewards', $1::jsonb, now())
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+       RETURNING key
+     )
+     UPDATE vr_campaigns
+     SET reward = CASE platform WHEN 'telegram' THEN $2::numeric ELSE $3::numeric END
+     WHERE platform IN ('telegram', 'tiktok') AND EXISTS (SELECT 1 FROM saved)`,
+    [JSON.stringify(taskRewardSettings), taskRewardSettings.telegramTaskReward, taskRewardSettings.tiktokTaskReward],
+  );
+  await recordAdminAction(admin.id, 'settings', 'task-rewards', JSON.stringify(taskRewardSettings));
+  ok(res, taskRewardSettings);
+}
+
+export async function adminAdStats(req, res) {
+  await requireAdmin(req);
+  const today = `(now() AT TIME ZONE 'UTC')::date`;
+  const [monetag, monetagRewards, adstera, daily] = await Promise.all([
+    sql.query(
+      `SELECT
+         (COUNT(*) FILTER (WHERE (first_valued_at AT TIME ZONE 'UTC')::date = ${today})
+          + COUNT(*) FILTER (WHERE (second_valued_at AT TIME ZONE 'UTC')::date = ${today}))::int AS "viewedToday",
+         (COUNT(first_valued_at) + COUNT(second_valued_at))::int AS "viewedTotal"
+       FROM vr_monetag_ad_sessions`,
+    ),
+    sql.query(
+      `SELECT COALESCE(SUM(count) FILTER (WHERE day = ${today}), 0)::int AS "pairsToday",
+              COUNT(DISTINCT user_id) FILTER (WHERE day = ${today})::int AS "usersToday",
+              COALESCE(SUM(count), 0)::int AS "pairsTotal"
+       FROM vr_monetag_ad_rewards`,
+    ),
+    sql.query(
+      `SELECT COALESCE(SUM(count) FILTER (WHERE day = ${today}), 0)::int AS "tasksToday",
+              COUNT(DISTINCT user_id) FILTER (WHERE day = ${today})::int AS "usersToday",
+              COALESCE(SUM(count), 0)::int AS "tasksTotal",
+              COUNT(DISTINCT user_id)::int AS "usersTotal"
+       FROM vr_ad_rewards`,
+    ),
+    sql.query(
+      `WITH days AS (
+         SELECT (${today} - g)::date AS day FROM generate_series(0, 6) AS g
+       )
+       SELECT to_char(days.day, 'YYYY-MM-DD') AS day,
+              (SELECT COUNT(*) FROM vr_monetag_ad_sessions s WHERE (s.first_valued_at AT TIME ZONE 'UTC')::date = days.day)::int
+              + (SELECT COUNT(*) FROM vr_monetag_ad_sessions s WHERE (s.second_valued_at AT TIME ZONE 'UTC')::date = days.day)::int AS "monetagAds",
+              COALESCE((SELECT SUM(count) FROM vr_monetag_ad_rewards r WHERE r.day = days.day), 0)::int AS "monetagPairs",
+              COALESCE((SELECT SUM(count) FROM vr_ad_rewards r WHERE r.day = days.day), 0)::int AS "browseTasks"
+       FROM days ORDER BY days.day DESC`,
+    ),
+  ]);
+  ok(res, {
+    day: new Date().toISOString().slice(0, 10),
+    monetag: {
+      viewedToday: Number(monetag[0]?.viewedToday ?? 0),
+      viewedTotal: Number(monetag[0]?.viewedTotal ?? 0),
+      pairsToday: Number(monetagRewards[0]?.pairsToday ?? 0),
+      pairsTotal: Number(monetagRewards[0]?.pairsTotal ?? 0),
+      usersToday: Number(monetagRewards[0]?.usersToday ?? 0),
+    },
+    browsing: {
+      tasksToday: Number(adstera[0]?.tasksToday ?? 0),
+      tasksTotal: Number(adstera[0]?.tasksTotal ?? 0),
+      usersToday: Number(adstera[0]?.usersToday ?? 0),
+      usersTotal: Number(adstera[0]?.usersTotal ?? 0),
+    },
+    daily,
+  });
+}
+
+export async function deleteUser(req, res, userId) {
+  const admin = await requireAdmin(req);
+  if (isAdmin(userId)) throw new HttpError(400, 'لا يمكن حذف حساب مدير');
+  const pending = await sql.query(
+    `SELECT 1 FROM vr_withdrawals WHERE user_id = $1 AND status = 'قيد المعالجة' LIMIT 1`,
+    [userId],
+  );
+  if (pending.length) throw new HttpError(409, 'لا يمكن حذف مستخدم لديه طلب سحب قيد المراجعة. عالج الطلب أولًا.');
+  let rows;
+  try {
+    // جملة واحدة = عملية ذرّية: تُحذف بيانات المستخدم وحسابه معًا أو لا يُحذف شيء.
+    rows = await sql.query(
+      `WITH d_claims AS (DELETE FROM vr_monetag_reward_claims WHERE user_id = $1),
+            d_credits AS (DELETE FROM vr_monetag_reward_credits WHERE user_id = $1),
+            d_sessions AS (DELETE FROM vr_monetag_ad_sessions WHERE user_id = $1),
+            d_monetag AS (DELETE FROM vr_monetag_ad_rewards WHERE user_id = $1),
+            d_adstera AS (DELETE FROM vr_ad_rewards WHERE user_id = $1),
+            d_signals AS (DELETE FROM vr_suspicious_signals WHERE user_id = $1),
+            d_completions AS (DELETE FROM vr_completions WHERE user_id = $1),
+            d_deposits AS (DELETE FROM vr_deposits WHERE user_id = $1),
+            d_withdrawals AS (DELETE FROM vr_withdrawals WHERE user_id = $1),
+            d_requests AS (DELETE FROM vr_campaign_requests WHERE owner_id = $1),
+            d_campaigns AS (DELETE FROM vr_campaigns WHERE owner_id = $1)
+       DELETE FROM vr_users WHERE id = $1 RETURNING id::text AS id`,
+      [userId],
+    );
+  } catch (error) {
+    console.error('Delete user failed:', error instanceof Error ? error.message : 'unknown');
+    throw new HttpError(409, 'تعذر حذف المستخدم لوجود سجلات مرتبطة به. يمكنك حظره بدلًا من ذلك.');
+  }
+  if (!rows.length) throw new HttpError(404, 'Not found');
+  await recordAdminAction(admin.id, 'users', userId, 'deleted');
+  ok(res, { id: rows[0].id });
 }
 
 export async function adminAction(req, res, collection, id) {

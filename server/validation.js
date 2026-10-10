@@ -4,6 +4,13 @@ export function readPositiveInteger(value, max) {
   return number;
 }
 
+export function readNonNegativeInteger(value, max) {
+  if (value === '' || value === null || value === undefined) return null;
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number < 0 || number > max) return null;
+  return number;
+}
+
 export function readMoney(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number) || number < min || number > max) return null;

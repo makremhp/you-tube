@@ -6,11 +6,10 @@ import {
   getYoutubeSettings,
   MAX_REQUESTED_VIEWS,
   MIN_WATCH_TOLERANCE,
-  TELEGRAM_TASK_REWARD,
-  TIKTOK_TASK_REWARD,
   roundMoney,
   viewerReward,
 } from './config.js';
+import { getTaskRewardSettings } from './settings.js';
 import {
   readHttpUrl,
   readIdempotencyKey,
@@ -240,7 +239,8 @@ export async function createCampaign(req, res) {
 
   const targetCount = readPositiveInteger(body.targetCount, 1000000);
   const price = readMoney(body.price, 0.01, 1000000);
-  const taskReward = platform === 'telegram' ? TELEGRAM_TASK_REWARD : TIKTOK_TASK_REWARD;
+  const rewardSettings = await getTaskRewardSettings();
+  const taskReward = platform === 'telegram' ? rewardSettings.telegramTaskReward : rewardSettings.tiktokTaskReward;
   if (!targetCount || !price || price / targetCount < taskReward) throw new HttpError(400, 'Invalid request');
   let status = 'نشط';
   if (platform === 'telegram') {
@@ -253,7 +253,7 @@ export async function createCampaign(req, res) {
     [
       user.id, platform, title, readText(body.description, 2000), link,
       typeof body.image === 'string' && body.image.length <= 600000 ? body.image : null,
-      targetCount, price, platform === 'telegram' ? TELEGRAM_TASK_REWARD : TIKTOK_TASK_REWARD, status,
+      targetCount, price, taskReward, status,
     ],
   );
   ok(res, { id: rows[0].id, status: rows[0].status }, 201);
@@ -389,7 +389,7 @@ export async function completeTask(req, res, id) {
          RETURNING id
        )
        SELECT reward::float8 AS reward FROM done`,
-      [id, user.id, campaign.reward ?? TELEGRAM_TASK_REWARD, campaign.link],
+      [id, user.id, campaign.reward ?? (await getTaskRewardSettings()).telegramTaskReward, campaign.link],
     );
     if (!rows.length) throw new HttpError(409, 'Task already completed');
     ok(res, { reward: rows[0].reward });

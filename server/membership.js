@@ -1,13 +1,15 @@
 import { sql } from './db.js';
 import { HttpError, ok } from './errors.js';
 import { channelMembershipState, publicChannelHandle, requireUser } from './auth.js';
-import { TELEGRAM_RETENTION_DAYS, TELEGRAM_TASK_REWARD } from './config.js';
+import { TELEGRAM_RETENTION_DAYS } from './config.js';
+import { getTaskRewardSettings } from './settings.js';
 
 async function reverseLostMembershipRewards(userId, memberships) {
+  const { telegramTaskReward } = await getTaskRewardSettings();
   const payload = memberships.map((item) => ({
     campaign_id: item.campaignId,
     completed_at: item.completedAt,
-    fallback_reward: TELEGRAM_TASK_REWARD,
+    fallback_reward: telegramTaskReward,
   }));
   const rows = await sql.query(
     `WITH candidates AS (
