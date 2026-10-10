@@ -1,10 +1,11 @@
-import { useState, type ChangeEvent } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import {
   CheckCircle2, Clipboard, Clock3, Copy, History, Image as ImageIcon, Info,
   Link2, Share2, Target, Trash2, Upload, Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
+import { apiGet } from '@/lib/api';
 import type { TelegramUser } from '@/legacy/shared';
 
 type PublishStatus = 'pending' | 'approved' | 'rejected';
@@ -20,7 +21,10 @@ export function PublishingSystemPage({ telegramUser }: { telegramUser: TelegramU
   const promotionalPost = isArabic
     ? `بصراحة تجربة VidReward عجبتني 😄 بدأت أشاهد فيديوهات قصيرة في وقت فراغي، وكل مشاهدة مكتملة تضيف لي مكافأة على رصيدي 💸\n\nوالأجمل أنني أربح 20% من أرباح أي شخص يدخل عن طريق رابط الإحالة الخاص بي. إذا تحب تجربها وتربح من وقتك، ادخل من هنا 👇\n${promotionalLink}`
     : `Honestly, I have been enjoying VidReward 😄 I started watching short videos in my free time, and every completed view adds a reward to my balance 💸\n\nEven better, I earn 20% of the rewards of anyone who joins through my referral link. If you want to try it and earn from your time, join here 👇\n${promotionalLink}`;
-  const invitedUsers = 0;
+  const [invitedUsers, setInvitedUsers] = useState(0);
+  useEffect(() => {
+    apiGet<{ invited: number }>('referrals').then((result) => setInvitedUsers(Number(result.invited) || 0)).catch(() => undefined);
+  }, []);
   const referralEarnings = '$0.00';
   const statusConfig: Record<PublishStatus, {
     title: string;

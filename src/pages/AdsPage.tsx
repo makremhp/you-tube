@@ -553,14 +553,12 @@ export function AdsPage({
       onNotify?.('warning', isArabic ? 'الحد اليومي' : 'Daily limit', isArabic ? 'اكتمل الإعلانان، لكن الحد اليومي استُخدم قبل تسجيل المكافأة.' : 'Both ads completed, but the daily limit was reached before the reward was recorded.');
       return;
     }
-    setMonetagFlow('error');
-    onNotify?.('warning', isArabic ? 'تعذر تسجيل المكافأة' : 'Reward could not be recorded', isArabic ? 'حاول مجددًا بعد قليل.' : 'Try again shortly.');
+    setMonetagFlow('idle');
   };
 
   const runMonetagPair = async () => {
     if (monetagBusy) return;
     setMonetagFlow('loading');
-    const notifyLoading = () => onNotify?.('info', isArabic ? 'تحميل Monetag' : 'Loading Monetag', '');
     const notifyIncomplete = () => onNotify?.('warning', isArabic ? 'لم يكتمل إعلان' : 'Ad not completed', '');
     let bothWatched = false;
     try {
@@ -604,7 +602,6 @@ export function AdsPage({
 
       // الإعلان الأول
       setMonetagFlow('first');
-      notifyLoading();
       const first = await showAd({ ymid: `${session.id}_1`, requestVar: `vidreward_${session.id}_1` });
       if (first?.reward_event_type !== 'valued') throw new Error('First ad was not valued');
       // نُبلغ الخادم بإكمال الأول في الخلفية ونبدأ الثاني فورًا بدون انتظار.
@@ -612,7 +609,6 @@ export function AdsPage({
 
       // الإعلان الثاني يبدأ تلقائيًا
       setMonetagFlow('second');
-      notifyLoading();
       const second = await showAd({ ymid: `${session.id}_2`, requestVar: `vidreward_${session.id}_2` });
       if (second?.reward_event_type !== 'valued') throw new Error('Second ad was not valued');
       bothWatched = true;
@@ -623,8 +619,7 @@ export function AdsPage({
     } catch {
       if (bothWatched) {
         // شاهد المستخدم الإعلانين فعلًا؛ المشكلة في الاتصال بالخادم فقط، فلا نقول إنه لم يكمل.
-        setMonetagFlow('error');
-        onNotify?.('warning', isArabic ? 'تعذر تسجيل المكافأة' : 'Reward could not be recorded', isArabic ? 'تحقق من اتصالك ثم حاول مجددًا.' : 'Check your connection and try again.');
+        setMonetagFlow('idle');
         return;
       }
       setMonetagFlow('error');
