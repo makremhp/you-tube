@@ -326,7 +326,7 @@ function RewardAdCard({
   return (
     <section
       data-testid="card-task-adstera"
-      className={`relative isolate overflow-hidden rounded-2xl border p-3 text-white shadow-xl transition duration-200 hover:-translate-y-0.5 ${isMonetag?'border-violet-300/35 bg-[radial-gradient(circle_at_94%_0%,rgba(167,139,250,.27),transparent_8rem),linear-gradient(135deg,#31215f_0%,#241943_58%,#17152c_100%)] shadow-violet-950/20':'border-red-400/40 bg-[radial-gradient(circle_at_94%_0%,rgba(248,90,90,.22),transparent_8rem),linear-gradient(135deg,#64221f_0%,#361a20_58%,#1d131e_100%)] shadow-red-950/20'} ${blocked ? 'opacity-60' : ''}`}
+      className={`relative isolate overflow-hidden rounded-2xl border p-3 text-white shadow-xl transition duration-200 hover:-translate-y-0.5 ${isMonetag?'border-violet-300/35 bg-[radial-gradient(circle_at_94%_0%,rgba(167,139,250,.27),transparent_8rem),linear-gradient(135deg,#31215f_0%,#241943_58%,#17152c_100%)] shadow-violet-950/20':'border-red-400/40 bg-[radial-gradient(circle_at_94%_0%,rgba(248,90,90,.22),transparent_8rem),linear-gradient(135deg,#64221f_0%,#361a20_58%,#1d131e_100%)] shadow-red-950/20'}`}
     >
       <div className="relative z-10 flex items-center gap-3 rounded-xl px-1.5 py-1">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-lg">
@@ -559,6 +559,7 @@ export function AdsPage({
   const runMonetagPair = async () => {
     if (monetagBusy) return;
     setMonetagFlow('loading');
+    const notifyLoading = () => onNotify?.('info', isArabic ? 'تحميل Monetag' : 'Loading Monetag', '');
     const notifyIncomplete = () => onNotify?.('warning', isArabic ? 'لم يكتمل إعلان' : 'Ad not completed', '');
     let bothWatched = false;
     try {
@@ -602,6 +603,7 @@ export function AdsPage({
 
       // الإعلان الأول
       setMonetagFlow('first');
+      notifyLoading();
       const first = await showAd({ ymid: `${session.id}_1`, requestVar: `vidreward_${session.id}_1` });
       if (first?.reward_event_type !== 'valued') throw new Error('First ad was not valued');
       // نُبلغ الخادم بإكمال الأول في الخلفية ونبدأ الثاني فورًا بدون انتظار.
@@ -609,6 +611,7 @@ export function AdsPage({
 
       // الإعلان الثاني يبدأ تلقائيًا
       setMonetagFlow('second');
+      notifyLoading();
       const second = await showAd({ ymid: `${session.id}_2`, requestVar: `vidreward_${session.id}_2` });
       if (second?.reward_event_type !== 'valued') throw new Error('Second ad was not valued');
       bothWatched = true;
