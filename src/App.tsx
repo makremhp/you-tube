@@ -104,11 +104,16 @@ function ProductExperience() {
   return (
     <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
       {maintenanceActive ? (
-        <main dir={language === 'ar' ? 'rtl' : 'ltr'} className="grid min-h-dvh place-items-center bg-[#101a32] px-5 text-white">
-          <section className="w-full max-w-md rounded-3xl border border-white/10 bg-white/[.06] p-7 text-center shadow-2xl">
-            <span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-amber-300/15 text-amber-300"><span className="text-3xl">⚙</span></span>
-            <h1 className="mt-5 text-2xl font-extrabold">{language === 'ar' ? 'المنصة تحت الصيانة' : 'We’ll be back shortly'}</h1>
-            <p className="mt-3 text-sm leading-6 text-blue-100/70">{language === 'ar' ? 'نعمل على تحسين الخدمة. حاول مرة أخرى بعد قليل.' : 'We are making improvements. Please check back soon.'}</p>
+        <main dir={language === 'ar' ? 'rtl' : 'ltr'} className="relative grid min-h-dvh place-items-center overflow-hidden bg-[#101827] px-5 py-8 text-white">
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_10%,rgba(251,191,36,.16),transparent_60%)]" />
+          <section className="relative w-full max-w-lg overflow-hidden rounded-[2rem] border border-white/10 bg-slate-900/80 p-7 text-center shadow-[0_28px_90px_rgba(0,0,0,.42)] backdrop-blur sm:p-9">
+            <div className="mx-auto grid h-56 w-56 max-w-full place-items-center rounded-full bg-black/20 p-2">
+              <img src={`${import.meta.env.BASE_URL}assets/maintenance-work.png`} alt={language === 'ar' ? 'رسم توضيحي لأعمال الصيانة' : 'Maintenance work illustration'} className="h-full w-full object-contain" />
+            </div>
+            <span className="mt-4 inline-flex items-center gap-2 rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-[11px] font-bold text-amber-200"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-300" />{language === 'ar' ? 'تحديث مؤقت' : 'TEMPORARY UPDATE'}</span>
+            <h1 className="mt-4 text-2xl font-extrabold">{language === 'ar' ? 'المنصة تحت الصيانة' : 'We’ll be back shortly'}</h1>
+            <p className="mx-auto mt-3 max-w-sm text-sm leading-7 text-blue-100/70">{language === 'ar' ? 'نعمل على تحسين الخدمة. بيانات حسابك محفوظة، وستعود المنصة للعمل فور انتهاء التحديث.' : 'We’re improving the service. Your account data is safe, and the platform will return as soon as maintenance is complete.'}</p>
+            <button type="button" onClick={() => apiGet<{ maintenance: boolean; isAdmin: boolean }>('maintenance').then((result) => setMaintenanceActive(result.maintenance && !result.isAdmin)).catch(() => undefined)} className="mt-6 min-h-11 rounded-xl border border-white/15 bg-white/5 px-5 text-sm font-bold text-white transition hover:bg-white/10">{language === 'ar' ? 'إعادة التحقق' : 'Check again'}</button>
           </section>
         </main>
       ) : showLanding ? (
