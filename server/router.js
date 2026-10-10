@@ -42,6 +42,7 @@ import {
   getMonetagSession,
   handleMonetagPostback,
 } from './monetag.js';
+import { getReferrals } from './referrals.js';
 import { checkTelegramMembershipOnEntry, sweepTelegramMemberships } from './membership.js';
 import { readPositiveInteger, readText } from './validation.js';
 
@@ -131,6 +132,7 @@ export async function dispatch(req, res) {
     if (key === 'campaigns') return listCampaigns(req, res);
     if (key === 'user') return getUser(req, res);
     if (key === 'balance') return getBalance(req, res);
+    if (key === 'referrals') return getReferrals(req, res);
     if (key === 'ads/progress') return getAdProgress(req, res);
     if (key === 'ads/progress/adstera' || key === 'ads/progress/monetag') return getAdProgress(req, res, segments[2]);
     if (resource === 'ads' && segments[1] === 'monetag' && segments[2] === 'session' && segments.length === 4) {

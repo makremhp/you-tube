@@ -58,7 +58,8 @@ export async function adminState(req, res) {
               COALESCE(campaign_budget, price)::float8 AS budget,
               COALESCE(campaign_budget, price)::float8 AS price,
               target_count AS "targetCount", requested_views AS "requestedViews",
-              completed_count AS "completedCount", views::float8 AS views,
+              completed_count AS "completedCount", joined_count AS "joinedCount", views::float8 AS views,
+              cpm::float8 AS cpm, thumbnail AS image,
               CASE status WHEN 'نشط' THEN 'نشطة' WHEN 'موقوف' THEN 'موقوفة' WHEN 'مسودة' THEN 'بانتظار المراجعة' ELSE status END AS status
        FROM vr_campaigns ORDER BY created_at DESC LIMIT 1000`,
     ),

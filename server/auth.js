@@ -33,6 +33,7 @@ export function verifiedTelegramUser(initData, botToken) {
       last_name: typeof user.last_name === 'string' ? user.last_name.slice(0, 80) : null,
       username: typeof user.username === 'string' ? user.username.slice(0, 64) : null,
       photo_url: typeof user.photo_url === 'string' && /^https?:\/\//i.test(user.photo_url) ? user.photo_url.slice(0, 500) : null,
+      startParam: (parameters.get('start_param') ?? '').slice(0, 64),
     };
   } catch {
     return null;
@@ -46,12 +47,18 @@ export function authenticate(req) {
   return verifiedTelegramUser(Array.isArray(header) ? header[0] : header, botToken);
 }
 
+// رابط الدعوة: ?startapp=ref_<معرّف المُحيل>. يُسجَّل المُحيل مرة واحدة فقط عند إنشاء المستخدم الجديد.
+function referrerIdFromStartParam(startParam) {
+  const match = /^ref_(\d{1,15})$/.exec(startParam ?? '');
+  return match ? Number(match[1]) : null;
+}
+
 export async function requireUser(req) {
   const telegramUser = authenticate(req);
   if (!telegramUser) throw new HttpError(401, 'Unauthorized');
   const rows = await sql.query(
-    `INSERT INTO vr_users (id, first_name, last_name, username, photo_url)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO vr_users (id, first_name, last_name, username, photo_url, invited_by)
+     VALUES ($1, $2, $3, $4, $5, (SELECT id FROM vr_users WHERE id = $6::bigint AND id <> $1))
      ON CONFLICT (id) DO UPDATE SET
        first_name = EXCLUDED.first_name,
        last_name = EXCLUDED.last_name,
@@ -59,7 +66,7 @@ export async function requireUser(req) {
        photo_url = EXCLUDED.photo_url,
        last_active_at = now()
      RETURNING id::float8 AS id, status`,
-    [telegramUser.id, telegramUser.first_name, telegramUser.last_name, telegramUser.username, telegramUser.photo_url],
+    [telegramUser.id, telegramUser.first_name, telegramUser.last_name, telegramUser.username, telegramUser.photo_url, referrerIdFromStartParam(telegramUser.startParam)],
   );
   const user = rows[0];
   // الحظر مطبّق على الخادم لكل مسارات المستخدم؛ المدير يبقى قادرًا على الوصول لأدوات الإدارة.
