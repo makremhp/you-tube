@@ -42,7 +42,7 @@ import {
   getMonetagSession,
   handleMonetagPostback,
 } from './monetag.js';
-import { checkTelegramMembershipOnEntry } from './membership.js';
+import { checkTelegramMembershipOnEntry, sweepTelegramMemberships } from './membership.js';
 import { readPositiveInteger, readText } from './validation.js';
 
 function routePath(req) {
@@ -91,6 +91,11 @@ export async function dispatch(req, res) {
 
   if (method === 'GET' && key === 'monetag/postback') {
     await handleMonetagPostback(req, res, query);
+    return;
+  }
+
+  if (method === 'GET' && key === 'membership/sweep') {
+    await sweepTelegramMemberships(req, res);
     return;
   }
 

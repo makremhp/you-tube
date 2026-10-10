@@ -246,9 +246,17 @@ export async function createCampaign(req, res) {
   if (platform === 'telegram') {
     status = (await botIsChannelAdmin(link)) ? 'نشط' : 'بانتظار تحقق البوت';
   }
+  // خصم ميزانية الحملة من رصيد المعلن وإنشاء الحملة في عملية ذرّية واحدة؛ لا تُنشأ الحملة إن كان الرصيد غير كافٍ.
   const rows = await sql.query(
-    `INSERT INTO vr_campaigns (owner_id, platform, title, description, link, thumbnail, target_count, price, reward, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `WITH debited AS (
+       UPDATE vr_users
+       SET advertiser_balance = advertiser_balance - $8::numeric
+       WHERE id = $1 AND advertiser_balance >= $8::numeric
+       RETURNING id
+     )
+     INSERT INTO vr_campaigns (owner_id, platform, title, description, link, thumbnail, target_count, price, campaign_budget, reward, status)
+     SELECT $1::bigint, $2::text, $3::text, $4::text, $5::text, $6::text, $7::int, $8::numeric, $8::numeric, $9::numeric, $10::text
+     FROM debited
      RETURNING id::text AS id, status`,
     [
       user.id, platform, title, readText(body.description, 2000), link,
@@ -256,6 +264,7 @@ export async function createCampaign(req, res) {
       targetCount, price, taskReward, status,
     ],
   );
+  if (!rows.length) throw new HttpError(402, 'رصيد المعلن غير كافٍ لنشر هذه الحملة. أضف رصيدًا ثم أعد المحاولة.');
   ok(res, { id: rows[0].id, status: rows[0].status }, 201);
 }
 

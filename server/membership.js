@@ -57,7 +57,7 @@ export async function checkTelegramMembershipOnEntry(req, res) {
   const user = await requireUser(req);
   const completions = await sql.query(
     `SELECT completion.campaign_id::text AS "campaignId",
-            completion.completed_at AS "completedAt",
+            completion.completed_at::text AS "completedAt",
             COALESCE(completion.campaign_link, campaign.link) AS link
      FROM vr_completions AS completion
      JOIN vr_campaigns AS campaign ON campaign.id = completion.campaign_id
@@ -103,4 +103,70 @@ export async function checkTelegramMembershipOnEntry(req, res) {
   }
 
   ok(res, { checkedChannels, unavailableChannels, revokedTasks, reversedAmount });
+}
+
+const SWEEP_TIME_BUDGET_MS = 45_000;
+const SWEEP_MAX_COMPLETIONS = 3000;
+
+export async function sweepTelegramMemberships(req, res) {
+  const secret = process.env.CRON_SECRET;
+  const header = req.headers.authorization ?? '';
+  if (!secret || header !== `Bearer ${secret}`) throw new HttpError(401, 'Unauthorized');
+
+  const startedAt = Date.now();
+  const completions = await sql.query(
+    `SELECT completion.user_id::float8 AS "userId",
+            completion.campaign_id::text AS "campaignId",
+            completion.completed_at::text AS "completedAt",
+            COALESCE(completion.campaign_link, campaign.link) AS link
+     FROM vr_completions AS completion
+     JOIN vr_campaigns AS campaign ON campaign.id = completion.campaign_id
+     WHERE completion.status = 'completed'
+       AND completion.completed_at > now() - make_interval(days => $1::int)
+       AND campaign.platform = 'telegram'
+     ORDER BY completion.completed_at ASC
+     LIMIT $2`,
+    [TELEGRAM_RETENTION_DAYS, SWEEP_MAX_COMPLETIONS],
+  );
+
+  const groups = new Map();
+  for (const completion of completions) {
+    const handle = publicChannelHandle(completion.link);
+    if (!handle) continue;
+    const key = `${completion.userId}|${handle}`;
+    const group = groups.get(key) ?? { userId: Number(completion.userId), tasks: [] };
+    group.tasks.push(completion);
+    groups.set(key, group);
+  }
+
+  let checked = 0;
+  let unavailable = 0;
+  let revokedTasks = 0;
+  let reversedAmount = 0;
+  let skippedForTime = 0;
+  const entries = [...groups.values()];
+  for (let offset = 0; offset < entries.length; offset += 5) {
+    if (Date.now() - startedAt > SWEEP_TIME_BUDGET_MS) {
+      skippedForTime = entries.length - offset;
+      break;
+    }
+    const batch = entries.slice(offset, offset + 5);
+    const checks = await Promise.all(batch.map(async (group) => ({
+      group,
+      state: await channelMembershipState(group.tasks[0].link, group.userId),
+    })));
+    for (const check of checks) {
+      if (check.state === null) {
+        unavailable += 1;
+        continue;
+      }
+      checked += 1;
+      if (check.state !== 'left') continue;
+      const reversal = await reverseLostMembershipRewards(check.group.userId, check.group.tasks);
+      revokedTasks += reversal.revokedCount;
+      reversedAmount += reversal.reversedAmount;
+    }
+  }
+
+  ok(res, { checked, unavailable, revokedTasks, reversedAmount, skippedForTime });
 }
