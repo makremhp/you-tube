@@ -491,9 +491,23 @@ export async function sendNotificationToChat(type, chatId, values = {}, language
   }
 }
 
+const channelIdCache = new Map();
+
+async function resolveChannelId(chatId) {
+  const raw = String(chatId ?? "").trim();
+  if (/^-?\d{1,20}$/.test(raw)) return raw;
+  const handle = raw.replace(/^https?:\/\/t\.me\//i, "").replace(/^@/, "").split(/[/?#]/)[0];
+  if (!/^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(handle)) return "";
+  if (channelIdCache.has(handle)) return channelIdCache.get(handle);
+  const result = await telegramSend("getChat", { chat_id: `@${handle}` });
+  const id = result.ok && result.result?.id ? String(result.result.id) : "";
+  if (id) channelIdCache.set(handle, id);
+  return id;
+}
+
 export async function sendAdminChannelNotification(type, chatId, values = {}, eventId) {
   const rendered = renderTemplate(type, "en", values, await resolveBotUsername());
-  const destination = String(chatId ?? "");
+  const destination = await resolveChannelId(chatId);
   const eventKey = eventKeyFor(type, eventId);
   if (!rendered || !/^-?\d{1,20}$/.test(destination) || !eventKey || !process.env.TELEGRAM_BOT_TOKEN) {
     return { ok: false, reason: "not_configured" };
