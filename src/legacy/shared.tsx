@@ -10,6 +10,7 @@ import {
   ArrowUpLeft,
   Activity,
   BarChart3,
+  BellRing,
   Check,
   CheckCircle2,
   ChevronLeft,
@@ -199,7 +200,7 @@ type TransactionStatus = 'تم' | 'قيد المعالجة' | 'تم الإلغا
 type PaymentMethod = 'stars' | 'binance' | 'web3';
 type DepositMethod = 'stars' | 'web3';
 type WithdrawMethod = 'binance' | 'web3';
-type AppScreen = 'overview' | 'campaigns' | 'campaign-detail' | 'watch' | 'publish' | 'add' | 'deposit' | 'withdraw' | 'deposit-history' | 'withdraw-history' | 'telegram-tasks' | 'tiktok-tasks' | 'tiktok-task' | 'ads' | 'admin-overview' | 'admin-users' | 'admin-banned' | 'admin-deposits' | 'admin-withdrawals' | 'admin-campaigns' | 'admin-proofs' | 'admin-ads' | 'admin-ad-stats' | 'admin-settings' | 'admin-maintenance' | 'admin-notifications' | 'admin-suspicious' | 'admin-audit';
+type AppScreen = 'overview' | 'campaigns' | 'campaign-detail' | 'watch' | 'publish' | 'add' | 'deposit' | 'withdraw' | 'deposit-history' | 'withdraw-history' | 'telegram-tasks' | 'tiktok-tasks' | 'tiktok-task' | 'ads' | 'admin-overview' | 'admin-users' | 'admin-banned' | 'admin-deposits' | 'admin-withdrawals' | 'admin-campaigns' | 'admin-proofs' | 'admin-ads' | 'admin-ad-stats' | 'admin-settings' | 'admin-maintenance' | 'admin-notifications' | 'admin-notification-preview' | 'admin-suspicious' | 'admin-audit';
 
 type DepositRecord = {
   id: string;
@@ -423,6 +424,7 @@ function Sidebar({
         { icon: Settings2, label: 'الإعدادات', screen: 'admin-settings' as AppScreen },
         { icon: Activity, label: 'الصيانة', screen: 'admin-maintenance' as AppScreen },
         { icon: Share2, label: 'الإشعارات', screen: 'admin-notifications' as AppScreen },
+        { icon: BellRing, label: 'معاينة إشعارات البوت', screen: 'admin-notification-preview' as AppScreen },
         { icon: Timer, label: 'مستخدمون مشبوهون', screen: 'admin-suspicious' as AppScreen },
         { icon: Activity, label: 'سجل إجراءات الإدارة', screen: 'admin-audit' as AppScreen },
       ]
