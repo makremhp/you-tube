@@ -139,7 +139,7 @@ export function PlatformTasksPage({
                   <div className="min-w-0 flex-1">
                     <h2 className="truncate text-[11px] font-bold leading-4 text-[#12234b]">{task.title}</h2>
                     <p className={`truncate text-[9px] leading-3 ${verificationState.state === 'member' ? 'text-[#159b89]' : verificationState.state === 'error' || verificationState.state === 'not-member' ? 'text-amber-700' : 'text-slate-400'}`} role={verificationState.state === 'idle' ? undefined : 'status'}>
-                      {verificationState.state === 'member' && verificationState.message ? t(verificationState.message) : `${task.targetCount.toLocaleString()} ${t('مشترك')} · ${task.link}`}
+                      {verificationState.state === 'member' && verificationState.message ? t(verificationState.message) : `${task.targetCount.toLocaleString()} ${t('مشترك')}`}
                     </p>
                   </div>
                   <span className="shrink-0 rounded-full bg-[#eafbf8] px-2 py-1 text-[9px] font-bold text-[#159b89]">{formatTaskReward(isTelegram ? rewards.telegramTaskReward : rewards.tiktokTaskReward)}</span>
@@ -179,7 +179,6 @@ export function PlatformTasksPage({
                       <span className="block font-semibold text-slate-500" dir="rtl">
                         {task.targetCount.toLocaleString()} {t('متابع')}
                       </span>
-                      <span className="block w-full truncate" dir="ltr">{task.link}</span>
                     </div>
                   )}
                 </div>
