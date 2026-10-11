@@ -171,8 +171,8 @@ export function PlatformTasksPage({
                 <div className="min-w-0 flex-1">
                   <h2 className="truncate text-[11px] font-bold leading-4 text-[#12234b] sm:text-xs">{task.title}</h2>
                   {proof ? (
-                    <p className="truncate text-[9px] font-semibold leading-3 text-[#2456b8]">
-                      {t('الإثبات قيد المراجعة')}
+                    <p className={`truncate text-[9px] font-semibold leading-3 ${proof.status === 'معتمد' ? 'text-[#159b89]' : proof.status === 'مرفوض' ? 'text-rose-600' : 'text-[#2456b8]'}`}>
+                      {t(proof.status === 'معتمد' ? 'تم اعتماد الإثبات' : proof.status === 'مرفوض' ? 'تم رفض الإثبات' : 'الإثبات قيد المراجعة')}
                     </p>
                   ) : (
                     <div className="mt-0.5 flex min-w-0 flex-col items-start gap-0.5 text-[9px] leading-3 text-slate-400">

@@ -48,6 +48,15 @@ function platformEarnings(data: State) {
   const target = Math.max(0, Number(campaign.targetCount ?? 0) || 0);
   if (budget <= 0 || target <= 0) return;
 
+  // Telegram: ربح المنصة = ميزانية الحملة − (مكافأة المهمة × عدد المشتركين المستهدف).
+  // مثال: ميزانية 3$ و700 مشترك و0.003$ لكل مهمة → 3 − (0.003 × 700) = 0.9$.
+  if (platform === 'telegram') {
+   if (campaign.status === 'مرفوضة' || campaign.status === 'مرفوض') return;
+   const telegramReward = Number(data.settings.telegramTaskReward) || 0;
+   taskNet.telegram += Math.max(0, budget - telegramReward * target);
+   return;
+  }
+
   const linkedProofs = proofs.filter(proof => String(proof.campaignId ?? '') === String(campaign.id));
   const recordedCompletions = Math.max(
    0,
@@ -221,7 +230,7 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
     ['مستخدمون حظرهم النظام',data.users.filter(x=>x.bannedBySystem).length,ShieldCheck]
      ].map(([l,v,I]:any)=><div key={l} className="flex min-h-[74px] items-center justify-between gap-2 border-b border-slate-100 py-2.5"><div className="min-w-0"><div className="text-[10px] font-bold leading-4 text-slate-500">{l}</div><div className="mt-0.5 flex flex-wrap items-baseline gap-x-2"><span className="text-xl font-extrabold text-[#12234b]">{v}</span></div></div><I className="h-4 w-4 shrink-0 text-[#1557ee]"/></div>)}</div>
     {panel(<div className="grid gap-3 sm:grid-cols-3" data-testid="platform-net-breakdown">
-      {[['YouTube',net.youtube,'70% من ميزانية حملات الفيديو'],['TikTok',net.tiktok,`بعد مكافأة ${Number(data.settings.tiktokTaskReward)}$ لكل مهمة مكتملة`],['Telegram',net.telegram,`بعد مكافأة ${Number(data.settings.telegramTaskReward)}$ لكل مهمة مكتملة`]].map(([platform,amount,description])=><div key={String(platform)} className="rounded-xl bg-[#f7f9fc] p-3"><div className="text-xs font-extrabold">{platform}</div><div className="mt-1 font-mono text-lg font-bold text-[#1557ee]">${Number(amount).toFixed(3)}</div><p className="mt-1 text-[10px] leading-4 text-slate-500">{description}</p></div>)}
+      {[['YouTube',net.youtube,'70% من ميزانية حملات الفيديو'],['TikTok',net.tiktok,`بعد مكافأة ${Number(data.settings.tiktokTaskReward)}$ لكل مهمة مكتملة`],['Telegram',net.telegram,`الميزانية − (${Number(data.settings.telegramTaskReward)}$ × عدد المشتركين المستهدف)`]].map(([platform,amount,description])=><div key={String(platform)} className="rounded-xl bg-[#f7f9fc] p-3"><div className="text-xs font-extrabold">{platform}</div><div className="mt-1 font-mono text-lg font-bold text-[#1557ee]">${Number(amount).toFixed(3)}</div><p className="mt-1 text-[10px] leading-4 text-slate-500">{description}</p></div>)}
     </div>)}
     {panel(<><div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#edf3ff] text-[#1557ee]"><ShieldCheck size={20}/></span><div><h2 className="font-extrabold">مركز العمليات</h2><p className="mt-1 text-sm leading-6 text-slate-500">تابع الطلبات والإثباتات وإشارات المخاطر من مساحة واحدة.</p></div></div><div className="mt-5 grid gap-3 md:grid-cols-2">{[['طلبات السحب',data.withdrawals.filter(x=>x.status==='قيد المراجعة').length,'withdrawals'],['إثباتات المهام',data.proofs.filter(x=>x.status==='قيد المراجعة').length,'proofs'],['إشارات المخاطر',data.suspicious.filter(x=>x.status==='مفتوح').length,'suspicious'],['تقارير الإرسال',data.reports.length,'notifications']].map(([a,b,c])=><button key={c} onClick={()=>navigateToPage(String(c))} className="flex items-center justify-between rounded-xl bg-[#f7f9fc] p-4 text-right"><span className="text-sm font-bold">{a}</span><span className="font-mono text-lg font-bold text-[#1557ee]">{b}</span></button>)}</div></>)}
   </div>;

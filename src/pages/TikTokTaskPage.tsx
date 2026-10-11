@@ -1,5 +1,5 @@
-import { useState, type ChangeEvent } from 'react';
-import { ArrowRight, ArrowUpRight, CheckCircle2, Clock3, ImageIcon, ImagePlus, ShieldCheck, X } from 'lucide-react';
+import { useRef, useState, type ChangeEvent } from 'react';
+import { ArrowRight, ArrowUpRight, CheckCircle2, Clock3, ImageIcon, ImagePlus, LoaderCircle, ShieldCheck, X, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
 import type { PromotionCampaign, TaskProof } from '@/legacy/shared';
@@ -13,12 +13,27 @@ export function TikTokTaskPage({
 }: {
   campaign: PromotionCampaign;
   proof?: TaskProof;
-  onSubmitProof: (campaignId: string, image: string) => void;
+  onSubmitProof: (campaignId: string, image: string) => void | Promise<void>;
   onBack: () => void;
 }) {
   const { dir, t } = useLanguage();
   const rewards = useTaskRewards();
   const [proofImage, setProofImage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
+
+  // يُقفل الزر فور الضغط ويبقى في حالة تحميل حتى يرد الخادم، لمنع الضغط المتكرر.
+  const submitProof = async () => {
+    if (!proofImage || submitLockRef.current) return;
+    submitLockRef.current = true;
+    setIsSubmitting(true);
+    try {
+      await onSubmitProof(campaign.id, proofImage);
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
+    }
+  };
 
   const handleProofImage = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -83,13 +98,27 @@ export function TikTokTaskPage({
 
         <div className="border-t border-slate-100 bg-[#fbfcff] p-4 sm:p-6">
           {proof ? (
-            <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-white p-3 sm:p-4" role="status">
+            <div className={`flex items-center gap-3 rounded-xl border bg-white p-3 sm:p-4 ${proof.status === 'معتمد' ? 'border-emerald-200' : proof.status === 'مرفوض' ? 'border-rose-200' : 'border-blue-100'}`} role="status">
               <img src={proof.image} alt="إثبات المتابعة" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
               <div className="min-w-0">
-                <p className="flex items-center gap-1.5 text-sm font-bold text-[#2456b8]"><Clock3 className="h-4 w-4" /> قيد المراجعة</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">وصل الإثبات، وسيُراجع قبل اعتماد المكافأة.</p>
+                {proof.status === 'معتمد' ? (
+                  <>
+                    <p className="flex items-center gap-1.5 text-sm font-bold text-[#159b89]"><CheckCircle2 className="h-4 w-4" /> {t('تم اعتماد الإثبات')}</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">{t('تمت إضافة المكافأة إلى رصيدك.')}</p>
+                  </>
+                ) : proof.status === 'مرفوض' ? (
+                  <>
+                    <p className="flex items-center gap-1.5 text-sm font-bold text-rose-600"><XCircle className="h-4 w-4" /> {t('تم رفض الإثبات')}</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">{t('لم يُقبل الإثبات ولا يمكن إرسال إثبات آخر لهذه المهمة.')}</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="flex items-center gap-1.5 text-sm font-bold text-[#2456b8]"><Clock3 className="h-4 w-4" /> {t('قيد المراجعة')}</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">{t('وصل الإثبات، وسيُراجع قبل اعتماد المكافأة.')}</p>
+                  </>
+                )}
               </div>
-              <CheckCircle2 className="mr-auto h-5 w-5 shrink-0 text-[#159b89]" />
+              {proof.status === 'معتمد' && <CheckCircle2 className="mr-auto h-5 w-5 shrink-0 text-[#159b89]" />}
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-[1fr_1fr]">
@@ -135,14 +164,15 @@ export function TikTokTaskPage({
                 <Button
                   type="button"
                   data-testid={`button-submit-proof-${campaign.id}`}
-                  disabled={!proofImage}
-                  onClick={() => onSubmitProof(campaign.id, proofImage)}
+                  disabled={!proofImage || isSubmitting}
+                  aria-busy={isSubmitting}
+                  onClick={() => { void submitProof(); }}
                   variant="primary"
                   size="sm"
                   className="min-h-12 justify-center gap-2 rounded-xl text-sm font-bold disabled:opacity-50"
                 >
-                  <ShieldCheck className="h-4 w-4" />
-                  {t('أرسل الإثبات للمراجعة')}
+                  {isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                  {isSubmitting ? t('جارٍ الإرسال…') : t('أرسل الإثبات للمراجعة')}
                 </Button>
               </div>
             </div>

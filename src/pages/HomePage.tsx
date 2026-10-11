@@ -53,6 +53,8 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
   const [videos, setVideos] = useState<Video[]>([]);
   const [taskVideos, setTaskVideos] = useState<Video[]>([]);
   const [taskProofs, setTaskProofs] = useState<TaskProof[]>([]);
+  const taskProofsRef = useRef<TaskProof[]>([]);
+  taskProofsRef.current = taskProofs;
   const [platformCampaigns, setPlatformCampaigns] = useState<PromotionCampaign[]>([]);
   const [taskCampaigns, setTaskCampaigns] = useState<PromotionCampaign[]>([]);
   const [completedVideoIds, setCompletedVideoIds] = useState<Set<number>>(() => new Set());
@@ -187,6 +189,44 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       window.removeEventListener('focus', tick);
     };
   }, [refreshBalance]);
+
+  // تحديث حالة الإثباتات قيد المراجعة دوريًا حتى يظهر قبول/رفض الإدارة دون إعادة فتح التطبيق.
+  const hasPendingProof = taskProofs.some((proof) => proof.status === 'قيد المراجعة');
+  useEffect(() => {
+    if (!hasPendingProof || !window.Telegram?.WebApp?.initData) return;
+    let active = true;
+    let running = false;
+    const checkProofs = async () => {
+      if (running || document.visibilityState !== 'visible') return;
+      running = true;
+      try {
+        const rows = await apiGet<ApiProofRecordRow[]>('proofs');
+        if (!active) return;
+        const next = rows.map(toTaskProof);
+        const changed = next.some((item) => {
+          const previous = taskProofsRef.current.find((proof) => proof.campaignId === item.campaignId);
+          return !previous || previous.status !== item.status;
+        });
+        if (changed) {
+          setTaskProofs(next);
+          void refreshData();
+        }
+      } catch {
+        // سيُعاد المحاولة في الدورة التالية.
+      } finally {
+        running = false;
+      }
+    };
+    const timer = window.setInterval(() => { void checkProofs(); }, 5000);
+    document.addEventListener('visibilitychange', checkProofs);
+    window.addEventListener('focus', checkProofs);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', checkProofs);
+      window.removeEventListener('focus', checkProofs);
+    };
+  }, [hasPendingProof, refreshData]);
 
   useEffect(() => {
     if (screen !== 'withdraw-history' || mode !== 'viewer') return;

@@ -25,7 +25,7 @@ export function AddPlatformCampaign({
   platform: PromotionPlatform;
   onSelectPlatform: (platform: 'youtube' | PromotionPlatform) => void;
   onBack: () => void;
-  onSubmit: (campaign: PromotionCampaign) => void;
+  onSubmit: (campaign: PromotionCampaign) => void | Promise<void>;
 }) {
   const { dir } = useLanguage();
   const rewards = useTaskRewards();
@@ -38,6 +38,8 @@ export function AddPlatformCampaign({
   const [botCheckMessage, setBotCheckMessage] = useState('');
   const [botVerifiedChannel, setBotVerifiedChannel] = useState('');
   const botCheckRequestId = useRef(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
   const isTelegram = platform === 'telegram';
   const PlatformIcon = isTelegram ? SiTelegram : SiTiktok;
   const packages = (isTelegram ? pricing.telegram : pricing.tiktok).map(({ value, price }) => ({ count: value, price }));
@@ -106,19 +108,27 @@ export function AddPlatformCampaign({
     reader.readAsDataURL(file);
   };
 
-  const submit = () => {
-    if (!canSubmit) return;
-    onSubmit({
-      id: createUniqueIdentifier('CAM'),
-      platform,
-      title: title.trim(),
-      link: link.trim(),
-      image,
-      targetCount: selectedPackage.count,
-      price: selectedPackage.price,
-      status: 'نشط',
-      created: 'الآن',
-    });
+  // يبقى الزر مقفلًا وفي حالة تحميل حتى ينتهي الطلب لمنع النشر المتكرر بالضغط السريع.
+  const submit = async () => {
+    if (!canSubmit || submitLockRef.current) return;
+    submitLockRef.current = true;
+    setIsSubmitting(true);
+    try {
+      await onSubmit({
+        id: createUniqueIdentifier('CAM'),
+        platform,
+        title: title.trim(),
+        link: link.trim(),
+        image,
+        targetCount: selectedPackage.count,
+        price: selectedPackage.price,
+        status: 'نشط',
+        created: 'الآن',
+      });
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -145,7 +155,7 @@ export function AddPlatformCampaign({
             <input value={title} onChange={(event) => setTitle(event.target.value)} data-testid="input-platform-campaign-title" maxLength={60} placeholder={isTelegram ? 'مثال: انضم إلى قناتنا التقنية' : 'مثال: تابع محتوى التصميم اليومي'} className="mt-2 w-full rounded-xl border border-slate-200 bg-[#fbfcff] px-4 py-3 text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" />
           </label>
           <label className="mt-5 block text-xs font-bold text-slate-700">
-            رابط {isTelegram ? 'القناة' : 'حساب TikTok'} <span className="text-[#1557ee]">*</span>
+            {isTelegram ? 'رابط القناة' : 'رابط حساب TikTok'} <span className="text-[#1557ee]">*</span>
             <div className="relative mt-2">
               <Link2 className="absolute right-4 top-3.5 h-4 w-4 text-slate-400" />
               <input value={link} onChange={(event) => setLink(event.target.value)} data-testid="input-platform-campaign-link" dir="ltr" placeholder={isTelegram ? 'https://t.me/yourchannel' : 'https://www.tiktok.com/@username'} className="w-full rounded-xl border border-slate-200 bg-[#fbfcff] py-3 pl-4 pr-11 text-left text-sm outline-none transition placeholder:text-slate-300 focus:border-[#1557ee] focus:ring-4 focus:ring-blue-50" />
@@ -160,7 +170,7 @@ export function AddPlatformCampaign({
             {image && <button type="button" onClick={() => setImage('')} className="mt-2 text-[10px] font-bold text-[#1557ee]">إزالة الصورة</button>}
           </label>
           <div className="mt-7">
-            <div className="flex items-center justify-between"><div><h3 className="text-xs font-bold text-slate-700">باقة {isTelegram ? 'المشتركين' : 'المتابعين'}</h3><p className="mt-1 text-[10px] text-slate-400">اختر الباقة المناسبة لحملتك.</p></div><PlatformIcon aria-hidden="true" className={`h-5 w-5 ${isTelegram ? 'text-[#229ED9]' : 'text-[#111111]'}`} /></div>
+            <div className="flex items-center justify-between"><div><h3 className="text-xs font-bold text-slate-700">{isTelegram ? 'باقة المشتركين' : 'باقة المتابعين'}</h3><p className="mt-1 text-[10px] text-slate-400">اختر الباقة المناسبة لحملتك.</p></div><PlatformIcon aria-hidden="true" className={`h-5 w-5 ${isTelegram ? 'text-[#229ED9]' : 'text-[#111111]'}`} /></div>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
               {packages.map((item) => <Button key={item.count} type="button" data-testid={`button-package-${platform}-${item.count}`} onClick={() => setSelectedCount(item.count)} variant="unstyled" size="fit" aria-pressed={selectedCount === item.count} className={`w-full rounded-xl border p-3 text-right transition ${selectedCount === item.count ? 'border-[#1557ee] bg-[#edf3ff] text-[#1557ee]' : 'border-slate-200 text-slate-500 hover:border-blue-200'}`}><div className="text-sm font-bold">{item.count}</div><div className="mt-1 text-[10px] opacity-70">${item.price.toFixed(2)}</div></Button>)}
             </div>
@@ -190,7 +200,7 @@ export function AddPlatformCampaign({
             </div>
           )}
           <div className="mt-6 flex items-center justify-between rounded-2xl bg-[#f4f8ff] p-4"><div><div className="text-[11px] text-slate-500">ميزانية الحملة</div><div className="mt-1 text-2xl font-bold text-[#12234b]">${selectedPackage.price.toFixed(2)}</div></div><div className="text-left text-[10px] leading-5 text-slate-400">{selectedPackage.count.toLocaleString('ar')} {isTelegram ? 'مشترك' : 'متابع'}</div></div>
-          <Button type="button" data-testid={`button-submit-${platform}-campaign`} disabled={!canSubmit} onClick={submit} variant="primary" size="lg" className="mt-7 flex w-full items-center justify-center gap-2 text-sm font-bold disabled:bg-slate-200 disabled:text-slate-400"><Upload className="h-4 w-4" /> نشر الإعلان</Button>
+          <Button type="button" data-testid={`button-submit-${platform}-campaign`} disabled={!canSubmit || isSubmitting} aria-busy={isSubmitting} onClick={() => { void submit(); }} variant="primary" size="lg" className="mt-7 flex w-full items-center justify-center gap-2 text-sm font-bold disabled:bg-slate-200 disabled:text-slate-400">{isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} {isSubmitting ? 'جارٍ النشر…' : 'نشر الإعلان'}</Button>
         </section>
 
         <section className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-[var(--shadow-soft)] md:p-6">
