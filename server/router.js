@@ -8,6 +8,7 @@ import {
   deleteCampaign,
   listCampaigns,
   listTasks,
+  listPublicTasks,
   startTask,
   submitProof,
   updateCampaign,
@@ -125,6 +126,8 @@ export async function dispatch(req, res) {
         fail(res, 401, 'Unauthorized');
         return;
       }
+      // المتصفح بدون جلسة Telegram: اعرض إعلانات يوتيوب النشطة للقراءة فقط.
+      if (key === 'tasks') return listPublicTasks(req, res);
       ok(res, key in EMPTY_GET_DATA ? EMPTY_GET_DATA[key] : []);
       return;
     }

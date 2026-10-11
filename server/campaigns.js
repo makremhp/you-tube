@@ -70,6 +70,37 @@ export async function listTasks(req, res, query) {
   ok(res, rows);
 }
 
+// قائمة عامة لإعلانات يوتيوب النشطة تُعرض خارج Telegram (المتصفح) للقراءة فقط.
+// لا تتضمن بيانات المالك أو الميزانية أو حالة أي مستخدم، ولا يمكن استلام مكافأة بدون جلسة Telegram.
+export async function listPublicTasks(_req, res) {
+  const rows = await sql.query(
+    `SELECT c.id::text AS id,
+            c.platform,
+            c.title,
+            c.description,
+            c.creator,
+            c.link,
+            c.link AS "youtubeUrl",
+            c.thumbnail,
+            c.duration,
+            c.cpm::float8 AS cpm,
+            c.reward::float8 AS reward,
+            c.requested_views AS "requestedViews",
+            c.status,
+            c.views::float8 AS views,
+            c.joined_count AS "joinedCount",
+            c.completed_count AS "completedCount",
+            c.created_at AS "createdAt"
+     FROM vr_campaigns c
+     WHERE c.status = 'نشط'
+       AND c.platform = 'youtube'
+       AND (c.requested_views IS NULL OR c.views < c.requested_views)
+     ORDER BY c.created_at DESC
+     LIMIT 200`,
+  );
+  ok(res, rows);
+}
+
 export async function listCampaigns(req, res) {
   const user = await requireUser(req);
   const rows = await sql.query(
