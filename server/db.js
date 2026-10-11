@@ -16,6 +16,7 @@ export function ensureSchema() {
           last_name TEXT,
           username TEXT,
           photo_url TEXT,
+          language TEXT,
           advertiser_balance NUMERIC(18,6) NOT NULL DEFAULT 0,
           earned_balance NUMERIC(18,6) NOT NULL DEFAULT 0,
           status TEXT NOT NULL DEFAULT 'نشط',
@@ -24,6 +25,7 @@ export function ensureSchema() {
           created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           last_active_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )`,
+        `ALTER TABLE vr_users ADD COLUMN IF NOT EXISTS language TEXT`,
         `CREATE TABLE IF NOT EXISTS vr_campaigns (
           id BIGSERIAL PRIMARY KEY,
           owner_id BIGINT NOT NULL REFERENCES vr_users(id),
@@ -177,6 +179,20 @@ export function ensureSchema() {
           new_status TEXT NOT NULL,
           created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )`,
+        `CREATE TABLE IF NOT EXISTS vr_notification_deliveries (
+          event_key TEXT NOT NULL,
+          recipient_id BIGINT NOT NULL,
+          notification_type TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'sending'
+            CHECK (status IN ('sending', 'sent', 'failed', 'retryable', 'uncertain')),
+          attempt_count INTEGER NOT NULL DEFAULT 1,
+          last_error TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (event_key, recipient_id)
+        )`,
+        `CREATE INDEX IF NOT EXISTS vr_notification_deliveries_status_idx
+          ON vr_notification_deliveries (status, updated_at)`,
         `CREATE TABLE IF NOT EXISTS vr_platform_settings (
           key TEXT PRIMARY KEY,
           value JSONB NOT NULL,

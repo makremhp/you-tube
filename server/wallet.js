@@ -7,6 +7,7 @@ import {
 } from './config.js';
 import { getAdSettings, providerAdConfig } from './settings.js';
 import { newIdentifier, readHttpUrl, readMoney, readPositiveInteger, readText } from './validation.js';
+import { sendNotification } from '../api/telegram/bot-messages.js';
 
 async function nextMemoTag(userId) {
   const rows = await sql.query(`SELECT nextval('vr_memo_seq')::text AS sequence`);
@@ -125,7 +126,15 @@ export async function createDeposit(req, res) {
      RETURNING ${HISTORY_COLUMNS}`,
     [newIdentifier('DEP'), user.id, amount, method, destination, memoTag],
   );
-  ok(res, rows[0], 201);
+  const deposit = rows[0];
+  await sendNotification('deposit_requested', user.id, {
+    amount: Number(deposit.amount).toFixed(2),
+    currency: method === 'stars' ? 'Stars' : 'USDT',
+    method: method === 'stars' ? 'Telegram Stars' : 'USDT (Web3)',
+    requestId: deposit.id,
+    status: deposit.status,
+  }, { eventId: `${deposit.id}:requested` });
+  ok(res, deposit, 201);
 }
 
 export async function createWithdrawal(req, res) {
@@ -152,7 +161,16 @@ export async function createWithdrawal(req, res) {
     [newIdentifier('WDR'), user.id, amount, method, destination, memoTag],
   );
   if (!rows.length) throw new HttpError(402, 'Insufficient balance');
-  ok(res, rows[0], 201);
+  const withdrawal = rows[0];
+  await sendNotification('withdrawal_requested', user.id, {
+    amount: Number(withdrawal.amount).toFixed(2),
+    currency: 'USDT',
+    method: method === 'binance' ? 'Binance' : 'Web3',
+    address: destination,
+    requestId: withdrawal.id,
+    status: withdrawal.status,
+  }, { eventId: `${withdrawal.id}:requested` });
+  ok(res, withdrawal, 201);
 }
 
 export async function getUser(req, res) {

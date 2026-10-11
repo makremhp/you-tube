@@ -10,6 +10,7 @@ import {
   viewerReward,
 } from './config.js';
 import { getTaskRewardSettings } from './settings.js';
+import { notifyCampaignStatus, notifyTaskAdvertiser, notifyTaskAvailable, sendNotification } from '../api/telegram/bot-messages.js';
 import {
   readHttpUrl,
   readIdempotencyKey,
@@ -252,6 +253,7 @@ async function createYoutubeCampaign(req, res, user, body, title, link) {
   if (result.status === 'insufficient_balance') {
     throw new HttpError(402, 'رصيد المعلن غير كافٍ لنشر هذه الحملة. أضف رصيدًا ثم أعد المحاولة.');
   }
+  if (status === 'نشط') await notifyTaskAvailable(result.id);
   ok(res, { id: result.id, campaignBudget, replayed: false }, 201);
 }
 
@@ -296,6 +298,7 @@ export async function createCampaign(req, res) {
     ],
   );
   if (!rows.length) throw new HttpError(402, 'رصيد المعلن غير كافٍ لنشر هذه الحملة. أضف رصيدًا ثم أعد المحاولة.');
+  if (rows[0].status === 'نشط') await notifyTaskAvailable(rows[0].id);
   ok(res, { id: rows[0].id, status: rows[0].status }, 201);
 }
 
@@ -309,10 +312,13 @@ export async function updateCampaign(req, res, id) {
   if (body.link !== undefined && !link) throw new HttpError(400, 'Invalid request');
   if (body.status !== undefined && !status) throw new HttpError(400, 'Invalid request');
 
+  const currentRows = await sql.query(
+    `SELECT platform, link, status FROM vr_campaigns WHERE id = $1 AND owner_id = $2`,
+    [id, user.id],
+  );
   let nextStatus = status;
   if (status === 'نشط') {
-    const current = await sql.query(`SELECT platform, link FROM vr_campaigns WHERE id = $1 AND owner_id = $2`, [id, user.id]);
-    if (current[0]?.platform === 'telegram' && !(await botIsChannelAdmin(link ?? current[0].link))) {
+    if (currentRows[0]?.platform === 'telegram' && !(await botIsChannelAdmin(link ?? currentRows[0].link))) {
       nextStatus = 'بانتظار تحقق البوت';
     }
   }
@@ -326,6 +332,7 @@ export async function updateCampaign(req, res, id) {
     [id, user.id, title, link, nextStatus],
   );
   if (!rows.length) throw new HttpError(404, 'Not found');
+  if (status) await notifyCampaignStatus(id, currentRows[0]?.status, rows[0].status);
   ok(res, rows[0]);
 }
 
@@ -390,7 +397,7 @@ export async function completeTask(req, res, id) {
          WHERE campaign_id = $1 AND user_id = $2 AND status = 'started'
            AND started_at <= now() - make_interval(secs => $4::float8)
            AND EXISTS (SELECT 1 FROM candidate)
-         RETURNING reward
+         RETURNING reward, completed_at
        ), bump AS (
          UPDATE vr_campaigns SET completed_count = completed_count + 1, views = views + 1
          WHERE id = $1 AND EXISTS (SELECT 1 FROM done)
@@ -400,10 +407,11 @@ export async function completeTask(req, res, id) {
          WHERE id = $2 AND EXISTS (SELECT 1 FROM bump)
          RETURNING id
        )
-       SELECT done.reward::float8 AS reward FROM done, bump, credit`,
+       SELECT done.reward::float8 AS reward, done.completed_at AS "completedAt" FROM done, bump, credit`,
       [id, user.id, reward, requiredSeconds],
     );
     if (!rows.length) throw new HttpError(409, 'لم تكتمل المشاهدة بعد أو وصلت الحملة إلى عدد المشاهدات المطلوب.');
+    await notifyTaskAdvertiser(id, user.id, `complete_${id}_${user.id}_${new Date(rows[0].completedAt).toISOString()}`);
     ok(res, { reward: rows[0].reward });
     return;
   }
@@ -418,7 +426,7 @@ export async function completeTask(req, res, id) {
            SET status = 'completed', reward = EXCLUDED.reward, completed_at = now(), campaign_link = EXCLUDED.campaign_link,
                started_at = now(), proof_image = NULL
            WHERE vr_completions.status IN ('membership_lost', 'started')
-         RETURNING reward
+         RETURNING reward, completed_at
        ), credit AS (
          UPDATE vr_users SET earned_balance = earned_balance + $3
          WHERE id = $2 AND EXISTS (SELECT 1 FROM done)
@@ -428,10 +436,11 @@ export async function completeTask(req, res, id) {
          WHERE id = $1 AND EXISTS (SELECT 1 FROM done)
          RETURNING id
        )
-       SELECT reward::float8 AS reward FROM done`,
+       SELECT reward::float8 AS reward, completed_at AS "completedAt" FROM done`,
       [id, user.id, campaign.reward ?? (await getTaskRewardSettings()).telegramTaskReward, campaign.link],
     );
     if (!rows.length) throw new HttpError(409, 'Task already completed');
+    await notifyTaskAdvertiser(id, user.id, `complete_${id}_${user.id}_${new Date(rows[0].completedAt).toISOString()}`);
     ok(res, { reward: rows[0].reward });
     return;
   }
@@ -447,20 +456,26 @@ export async function submitProof(req, res, id) {
   if (!image) throw new HttpError(400, 'Invalid request');
   const rows = await sql.query(
     `WITH target AS (
-       SELECT id, reward FROM vr_campaigns WHERE id = $1 AND status = 'نشط' AND platform = 'tiktok'
+       SELECT id, reward, title FROM vr_campaigns WHERE id = $1 AND status = 'نشط' AND platform = 'tiktok'
      ), proof AS (
        INSERT INTO vr_completions (campaign_id, user_id, status, proof_image, reward)
        SELECT id, $2, 'pending', $3, reward FROM target
        ON CONFLICT (campaign_id, user_id) DO NOTHING
-       RETURNING status
+       RETURNING status, campaign_id
      ), bump AS (
        UPDATE vr_campaigns SET joined_count = joined_count + 1
        WHERE id = $1 AND EXISTS (SELECT 1 FROM proof)
        RETURNING id
      )
-     SELECT status FROM proof`,
+     SELECT proof.status, proof.campaign_id::text AS "campaignId", target.title FROM proof
+     JOIN target ON target.id = proof.campaign_id`,
     [id, user.id, image],
   );
   if (!rows.length) throw new HttpError(409, 'Proof already submitted');
+  const proofId = `PRF-${rows[0].campaignId}-${user.id}`;
+  await sendNotification('proof_received', user.id, {
+    taskTitle: rows[0].title,
+    proofId,
+  }, { eventId: `${proofId}:received` });
   ok(res, { status: 'قيد المراجعة' }, 201);
 }

@@ -5,6 +5,16 @@ import { isAdmin, requireAdmin, telegramRequest } from './auth.js';
 import { normalizeWithdrawalSettings } from './config.js';
 import { getWithdrawalSettings } from './wallet.js';
 import { getAdSettings, getTaskRewardSettings, normalizeAdSettings, normalizeTaskRewardSettings } from './settings.js';
+import { notifyCampaignStatus, notifyTaskAdvertiser, sendAdminChannelNotification, sendNotification } from '../api/telegram/bot-messages.js';
+
+function paymentMethodLabel(method) {
+  return ({ binance: 'Binance', web3: 'Web3', stars: 'Telegram Stars' })[method] ?? String(method ?? '—');
+}
+
+function moneyLabel(amount) {
+  const value = Number(amount);
+  return Number.isFinite(value) ? value.toFixed(2) : '0.00';
+}
 
 async function recordAdminAction(adminId, collection, recordId, status) {
   try {
@@ -469,55 +479,101 @@ export async function adminAction(req, res, collection, id) {
          UPDATE vr_withdrawals SET status = $2,
            blockchain_tx_id = COALESCE($3, blockchain_tx_id)
          WHERE id = $1 AND status = 'قيد المعالجة'
-         RETURNING user_id, amount
+         RETURNING id, user_id, amount, method, destination, blockchain_tx_id
        ), refund AS (
          UPDATE vr_users SET earned_balance = earned_balance + (SELECT amount FROM updated)
          WHERE $2 = 'مرفوض' AND id = (SELECT user_id FROM updated)
          RETURNING id
        )
-       SELECT user_id::float8 AS "userId" FROM updated`,
+       SELECT id, user_id::text AS "userId", amount::float8 AS amount, method,
+              destination, blockchain_tx_id AS "transactionId"
+       FROM updated`,
       [id, stored, readText(body.txId, 200)],
     );
     if (!rows.length) throw new HttpError(409, 'Request already processed');
     await recordAdminAction(admin.id, collection, id, status);
+    const withdrawal = rows[0];
+    const userRows = await sql.query(
+      `SELECT first_name AS "firstName", username FROM vr_users WHERE id = $1`,
+      [withdrawal.userId],
+    );
+    const userInfo = userRows[0] ?? {};
+    await sendNotification(stored === 'مرفوض' ? 'withdrawal_rejected' : 'withdrawal_approved', withdrawal.userId, {
+      amount: moneyLabel(withdrawal.amount),
+      currency: 'USDT',
+      method: paymentMethodLabel(withdrawal.method),
+      address: withdrawal.destination,
+      requestId: withdrawal.id,
+      status: stored,
+      transactionId: withdrawal.transactionId,
+      reason: stored === 'مرفوض' ? readText(body.reason, 300) : '',
+    }, { eventId: `${withdrawal.id}:${stored}` });
+    const proofChannel = process.env.TELEGRAM_PAYMENT_PROOFS_CHAT_ID;
+    if (stored === 'تم' && withdrawal.transactionId && proofChannel) {
+      await sendAdminChannelNotification('payment_proof_admin', proofChannel, {
+        firstName: userInfo.firstName,
+        username: userInfo.username ? `@${userInfo.username}` : '',
+        telegramId: withdrawal.userId,
+        amount: moneyLabel(withdrawal.amount),
+        currency: 'USDT',
+        method: paymentMethodLabel(withdrawal.method),
+        address: withdrawal.destination,
+        requestId: withdrawal.id,
+        transactionId: withdrawal.transactionId,
+        date: new Date().toISOString(),
+      }, `withdrawal_${withdrawal.id}_reference_${withdrawal.transactionId}`);
+    }
     ok(res, { id });
     return;
   }
 
   if (collection === 'deposits') {
     if (!['ناجح', 'فاشل'].includes(status)) throw new HttpError(400, 'Invalid request');
+    let depositRows;
     if (status === 'ناجح') {
-      const rows = await sql.query(
+      depositRows = await sql.query(
         `WITH updated AS (
            UPDATE vr_deposits SET status = 'تم', credited = TRUE, blockchain_tx_id = COALESCE($2, blockchain_tx_id)
            WHERE id = $1 AND credited = FALSE
-           RETURNING user_id, amount
+           RETURNING id, user_id, amount, method, reason
          ), credit AS (
            UPDATE vr_users SET advertiser_balance = advertiser_balance + (SELECT amount FROM updated)
            WHERE id = (SELECT user_id FROM updated)
            RETURNING id
          )
-         SELECT user_id::float8 AS "userId" FROM updated`,
+         SELECT id, user_id::text AS "userId", amount::float8 AS amount, method,
+                reason FROM updated`,
         [id, readText(body.txId, 200)],
       );
-      if (!rows.length) throw new HttpError(409, 'Deposit already processed');
+      if (!depositRows.length) throw new HttpError(409, 'Deposit already processed');
     } else {
-      const rows = await sql.query(
+      depositRows = await sql.query(
         `WITH updated AS (
            UPDATE vr_deposits SET status = 'تم الإلغاء', reason = COALESCE($2, reason), credited = FALSE
            WHERE id = $1
-           RETURNING user_id, amount, (SELECT credited FROM vr_deposits WHERE id = $1) AS was_credited
+           RETURNING id, user_id, amount, method, reason,
+                     (SELECT credited FROM vr_deposits WHERE id = $1) AS was_credited
          ), reverse AS (
            UPDATE vr_users SET advertiser_balance = GREATEST(0, advertiser_balance - (SELECT amount FROM updated))
            WHERE id = (SELECT user_id FROM updated) AND (SELECT was_credited FROM updated)
            RETURNING id
          )
-         SELECT user_id::float8 AS "userId" FROM updated`,
+         SELECT id, user_id::text AS "userId", amount::float8 AS amount, method,
+                reason FROM updated`,
         [id, readText(body.reason, 300)],
       );
-      if (!rows.length) throw new HttpError(404, 'Not found');
+      if (!depositRows.length) throw new HttpError(404, 'Not found');
     }
     await recordAdminAction(admin.id, collection, id, status);
+    const deposit = depositRows[0];
+    await sendNotification(status === 'ناجح' ? 'deposit_confirmed' : 'deposit_rejected', deposit.userId, {
+      amount: moneyLabel(deposit.amount),
+      currency: deposit.method === 'stars' ? 'Stars' : 'USDT',
+      method: paymentMethodLabel(deposit.method),
+      requestId: deposit.id,
+      status: status === 'ناجح' ? 'تم التأكيد' : 'مرفوض',
+      reason: deposit.reason ?? readText(body.reason, 300) ?? '',
+    }, { eventId: `${deposit.id}:${status}` });
     ok(res, { id });
     return;
   }
@@ -538,11 +594,17 @@ export async function adminAction(req, res, collection, id) {
            WHERE $2 = 'approved' AND id = (SELECT user_id FROM updated)
            RETURNING id
          )
-         SELECT user_id::float8 AS "userId" FROM updated`,
+         SELECT user_id::text AS "userId", reward::float8 AS reward FROM updated`,
         [publishMatch[1], nextPublish, reason],
       );
       if (!rows.length) throw new HttpError(409, 'Proof already reviewed');
       await recordAdminAction(admin.id, collection, id, status);
+      await sendNotification(nextPublish === 'approved' ? 'proof_accepted' : 'proof_rejected', rows[0].userId, {
+        taskTitle: 'نشر محتوى',
+        proofId: id,
+        reward: moneyLabel(rows[0].reward),
+        reason,
+      }, { eventId: `${id}:${nextPublish}` });
       ok(res, { id });
       return;
     }
@@ -553,7 +615,7 @@ export async function adminAction(req, res, collection, id) {
       `WITH updated AS (
          UPDATE vr_completions SET status = $3, completed_at = now()
          WHERE campaign_id = $1 AND user_id = $2 AND status = 'pending'
-         RETURNING reward, user_id
+         RETURNING reward, user_id, campaign_id, completed_at
        ), credit AS (
          UPDATE vr_users SET earned_balance = earned_balance + (SELECT reward FROM updated)
          WHERE $3 = 'approved' AND id = (SELECT user_id FROM updated)
@@ -563,11 +625,27 @@ export async function adminAction(req, res, collection, id) {
          WHERE $3 = 'approved' AND id = $1 AND EXISTS (SELECT 1 FROM updated)
          RETURNING id
        )
-       SELECT user_id::float8 AS "userId" FROM updated`,
+       SELECT user_id::text AS "userId", campaign_id::text AS "campaignId",
+              reward::float8 AS reward, completed_at AS "completedAt" FROM updated`,
       [match[1], match[2], next],
     );
     if (!rows.length) throw new HttpError(409, 'Proof already reviewed');
     await recordAdminAction(admin.id, collection, id, status);
+    const campaignRows = await sql.query(`SELECT title FROM vr_campaigns WHERE id = $1`, [rows[0].campaignId]);
+    const completion = rows[0];
+    await sendNotification(next === 'approved' ? 'proof_accepted' : 'proof_rejected', completion.userId, {
+      taskTitle: campaignRows[0]?.title ?? 'مهمة TikTok',
+      proofId: id,
+      reward: moneyLabel(completion.reward),
+      reason: next === 'rejected' ? readText(body.rejectionReason, 300) ?? '' : '',
+    }, { eventId: `${id}:${next}` });
+    if (next === 'approved') {
+      await notifyTaskAdvertiser(
+        completion.campaignId,
+        completion.userId,
+        `proof_${id}_${new Date(completion.completedAt).toISOString()}`,
+      );
+    }
     ok(res, { id });
     return;
   }
@@ -576,9 +654,20 @@ export async function adminAction(req, res, collection, id) {
     const match = /^CMP-(\d+)$/.exec(id);
     const mapped = { 'نشطة': 'نشط', 'موقوفة': 'موقوف', 'مرفوضة': 'موقوف', 'أوقفتها الميزانية': 'موقوف' }[status];
     if (!match || !mapped) throw new HttpError(400, 'Invalid request');
-    const rows = await sql.query(`UPDATE vr_campaigns SET status = $2 WHERE id = $1 RETURNING id::text AS id`, [match[1], mapped]);
+    const rows = await sql.query(
+      `WITH before AS (
+         SELECT id, status FROM vr_campaigns WHERE id = $1 FOR UPDATE
+       ), updated AS (
+         UPDATE vr_campaigns SET status = $2 WHERE id = (SELECT id FROM before)
+         RETURNING id, status
+       )
+       SELECT updated.id::text AS id, before.status AS "previousStatus", updated.status
+       FROM before JOIN updated USING (id)`,
+      [match[1], mapped],
+    );
     if (!rows.length) throw new HttpError(404, 'Not found');
     await recordAdminAction(admin.id, collection, id, status);
+    await notifyCampaignStatus(match[1], rows[0].previousStatus, rows[0].status, status);
     ok(res, { id });
     return;
   }

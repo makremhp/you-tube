@@ -33,6 +33,7 @@ export function verifiedTelegramUser(initData, botToken) {
       last_name: typeof user.last_name === 'string' ? user.last_name.slice(0, 80) : null,
       username: typeof user.username === 'string' ? user.username.slice(0, 64) : null,
       photo_url: typeof user.photo_url === 'string' && /^https?:\/\//i.test(user.photo_url) ? user.photo_url.slice(0, 500) : null,
+      language_code: typeof user.language_code === 'string' ? user.language_code.slice(0, 12) : null,
       startParam: (parameters.get('start_param') ?? '').slice(0, 64),
     };
   } catch {
@@ -56,19 +57,46 @@ function referrerIdFromStartParam(startParam) {
 export async function requireUser(req) {
   const telegramUser = authenticate(req);
   if (!telegramUser) throw new HttpError(401, 'Unauthorized');
+  const appLanguageHeader = req.headers['x-app-language'];
+  const appLanguage = Array.isArray(appLanguageHeader) ? appLanguageHeader[0] : appLanguageHeader;
+  const acceptLanguage = Array.isArray(req.headers['accept-language'])
+    ? req.headers['accept-language'][0]
+    : req.headers['accept-language'];
+  const requestedLanguage = appLanguage === 'ar' || appLanguage === 'en'
+    ? appLanguage
+    : telegramUser.language_code?.toLowerCase().startsWith('ar')
+      ? 'ar'
+      : String(acceptLanguage ?? '').toLowerCase().startsWith('ar') ? 'ar' : 'en';
   const rows = await sql.query(
-    `INSERT INTO vr_users (id, first_name, last_name, username, photo_url, invited_by)
-     VALUES ($1, $2, $3, $4, $5, (SELECT id FROM vr_users WHERE id = $6::bigint AND id <> $1))
-     ON CONFLICT (id) DO UPDATE SET
-       first_name = EXCLUDED.first_name,
-       last_name = EXCLUDED.last_name,
-       username = EXCLUDED.username,
-       photo_url = EXCLUDED.photo_url,
-       last_active_at = now()
-     RETURNING id::float8 AS id, status`,
-    [telegramUser.id, telegramUser.first_name, telegramUser.last_name, telegramUser.username, telegramUser.photo_url, referrerIdFromStartParam(telegramUser.startParam)],
+    `WITH inserted AS (
+       INSERT INTO vr_users (id, first_name, last_name, username, photo_url, language, invited_by)
+       VALUES ($1, $2, $3, $4, $5, $7, (SELECT id FROM vr_users WHERE id = $6::bigint AND id <> $1))
+       ON CONFLICT (id) DO NOTHING
+       RETURNING id::float8 AS id, status, invited_by::float8 AS invited_by
+     ), updated AS (
+       UPDATE vr_users SET
+         first_name = $2,
+         last_name = $3,
+         username = $4,
+         photo_url = $5,
+         language = $7,
+         last_active_at = now()
+       WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM inserted)
+       RETURNING id::float8 AS id, status, invited_by::float8 AS invited_by
+     )
+     SELECT id, status, invited_by, TRUE AS is_new FROM inserted
+     UNION ALL
+     SELECT id, status, invited_by, FALSE AS is_new FROM updated`,
+    [telegramUser.id, telegramUser.first_name, telegramUser.last_name, telegramUser.username, telegramUser.photo_url, referrerIdFromStartParam(telegramUser.startParam), requestedLanguage],
   );
   const user = rows[0];
+  if (user?.is_new && user.invited_by) {
+    const { sendNotification } = await import('../api/telegram/bot-messages.js');
+    await sendNotification('referral_joined', String(user.invited_by), {
+      referralUsername: telegramUser.username ? `@${telegramUser.username}` : telegramUser.first_name,
+      date: new Date().toISOString(),
+    }, { eventId: `referral_${telegramUser.id}` });
+  }
   // الحظر مطبّق على الخادم لكل مسارات المستخدم؛ المدير يبقى قادرًا على الوصول لأدوات الإدارة.
   if (user.status === 'محظور' && !isAdmin(user.id)) throw new HttpError(403, 'Account banned');
   return { ...telegramUser, id: Number(user.id) };

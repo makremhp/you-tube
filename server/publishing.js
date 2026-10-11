@@ -1,6 +1,7 @@
 import { sql } from './db.js';
 import { HttpError, ok } from './errors.js';
 import { requireUser } from './auth.js';
+import { sendNotification } from '../api/telegram/bot-messages.js';
 
 // مكافأة نظام النشر اليومية (تظهر في الواجهة كمبلغ ثابت).
 export const PUBLISH_DAILY_REWARD = 0.02;
@@ -35,6 +36,10 @@ export async function submitPublishProof(req, res) {
     [user.id, JSON.stringify(images), PUBLISH_DAILY_REWARD],
   );
   if (!rows.length) throw new HttpError(409, 'أرسلت إثبات نشر اليوم بالفعل. حاول غدًا أو بعد مراجعة الإدارة.');
+  await sendNotification('proof_received', user.id, {
+    taskTitle: 'نشر محتوى',
+    proofId: `PUB-${rows[0].id}`,
+  }, { eventId: `PUB-${rows[0].id}:received` });
   ok(res, { id: rows[0].id, status: 'قيد المراجعة', reward: PUBLISH_DAILY_REWARD }, 201);
 }
 

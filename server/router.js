@@ -47,6 +47,7 @@ import { getReferrals } from './referrals.js';
 import { listPublishProofs, submitPublishProof } from './publishing.js';
 import { checkTelegramMembershipOnEntry, sweepTelegramMemberships } from './membership.js';
 import { readPositiveInteger, readText } from './validation.js';
+import { handleNotificationPreview, sendAdminTestNotification } from '../api/telegram/bot-messages.js';
 
 function routePath(req) {
   const url = new URL(req.url ?? '/', 'http://localhost');
@@ -148,12 +149,14 @@ export async function dispatch(req, res) {
     if (key === 'withdrawals') return listWithdrawals(req, res);
     if (key === 'admin/state') return adminState(req, res);
     if (key === 'admin/ad-stats') return adminAdStats(req, res);
+    if (key === 'admin/notifications/catalog') return handleNotificationPreview(req, res, query);
     throw new HttpError(404, 'Not found');
   }
 
   if (method === 'POST') {
     if (key === 'session/entry') return checkTelegramMembershipOnEntry(req, res);
     if (key === 'admin/notifications/send') return sendAdminNotification(req, res);
+    if (key === 'admin/notifications/test') return sendAdminTestNotification(req, res);
     if (key === 'publish/proof') return submitPublishProof(req, res);
     if (key === 'campaigns') return createCampaign(req, res);
     if (key === 'deposits') return createDeposit(req, res);
