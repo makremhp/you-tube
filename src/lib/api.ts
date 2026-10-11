@@ -25,6 +25,16 @@ export async function apiRequest<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   const headers: Record<string, string> = {};
   const initData = window.Telegram?.WebApp?.initData;
   if (initData) headers['x-telegram-init-data'] = initData;
+  let savedLanguage: string | null = null;
+  try {
+    savedLanguage = window.localStorage.getItem('vidreward-language');
+  } catch {
+    // Browser language remains the fallback when storage is unavailable.
+  }
+  const browserLanguage = navigator.languages?.[0] || navigator.language || '';
+  headers['x-app-language'] = savedLanguage === 'ar' || savedLanguage === 'en'
+    ? savedLanguage
+    : browserLanguage.toLowerCase().startsWith('ar') ? 'ar' : 'en';
   if (body !== undefined) headers['content-type'] = 'application/json';
   if (idempotencyKey) headers['idempotency-key'] = idempotencyKey;
   const response = await fetch(`${import.meta.env.BASE_URL}api/${path.replace(/^\/+/, '')}`, {
