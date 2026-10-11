@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+Arabic:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700;800&display=swap');
 
 .vr-landing {
   --vr-ink: #20251f;
@@ -41,8 +41,10 @@
   margin: 0;
 }
 
+/* الإنجليزية: نفس خط المنصة (Lemonada) بدل خط اللاندنج القديم */
 .vr-en {
-  --vr-display: 'Manrope', 'DM Sans', sans-serif;
+  --vr-display: var(--app-font-serif, 'Lemonada', sans-serif);
+  font-family: var(--app-font-sans, 'Lemonada', sans-serif);
 }
 
 .vr-ar {
