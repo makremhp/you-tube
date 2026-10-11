@@ -45,6 +45,7 @@ import {
   X,
   PlaySquare,
   Info,
+  Loader2,
 } from 'lucide-react';
 import { Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
 import { LanguageProvider, useLanguage } from '@/i18n';
@@ -722,12 +723,28 @@ function WatchPanel({
   completed: boolean;
   session: AdvertisementSession | null;
   onOpenVideo: () => void;
-  onComplete: () => void;
+  onComplete: () => Promise<boolean> | boolean | void;
   onClose: () => void;
 }) {
   const { dir } = useLanguage();
   const [hasOpenedVideo, setHasOpenedVideo] = useState(false);
   const [rewardClaimed, setRewardClaimed] = useState(Boolean(session?.credited));
+  const [claiming, setClaiming] = useState(false);
+  const claimLockRef = useRef(false);
+
+  // لا تظهر شاشة النجاح إلا بعد أن يؤكد الخادم المكافأة؛ عند الفشل يبقى الزر متاحًا لإعادة المحاولة.
+  const claimReward = async () => {
+    if (!completed || isPlaying || claimLockRef.current) return;
+    claimLockRef.current = true;
+    setClaiming(true);
+    try {
+      const result = await onComplete();
+      if (result !== false) setRewardClaimed(true);
+    } finally {
+      claimLockRef.current = false;
+      setClaiming(false);
+    }
+  };
   const percent = Math.min(100, (progress / video.duration) * 100);
 
   const openVideo = () => {
@@ -787,8 +804,8 @@ function WatchPanel({
                    <div className="flex items-center justify-between text-xs"><span className="text-slate-500">حالة المشاهدة</span><span className={`font-bold ${isPlaying ? 'text-[#1557ee]' : completed ? 'text-[#159b89]' : hasOpenedVideo ? 'text-amber-600' : 'text-slate-400'}`}>{isPlaying ? 'الفيديو مفتوح — الوقت يُحتسب' : completed ? 'اكتملت المدة — جاهز للتحقق' : hasOpenedVideo ? 'المدة غير مكتملة' : 'افتح الفيديو أولاً'}</span></div>
                 </div>
                  {!completed && hasOpenedVideo && !isPlaying && <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 p-3 text-[10px] leading-5 text-amber-700">لم تكتمل المدة بعد. ارجع إلى الفيديو وأكمل الوقت المطلوب؛ لن تُصرف المكافأة قبل إكماله.</div>}
-                <Button type="button" data-testid="button-start-watch" onClick={() => { if (completed && !isPlaying) { onComplete(); setRewardClaimed(true); } }} disabled={isPlaying || !hasOpenedVideo || !completed} variant="primary" size="lg" className="mt-7 flex w-full items-center justify-center gap-2 text-sm font-bold">
-                  <Check className="h-4 w-4" /> {completed ? 'تحقق واستلم المكافأة' : 'تحقق بعد إكمال مدة المشاهدة'}
+                <Button type="button" data-testid="button-start-watch" onClick={() => { void claimReward(); }} disabled={isPlaying || !hasOpenedVideo || !completed || claiming} aria-busy={claiming} variant="primary" size="lg" className="mt-7 flex w-full items-center justify-center gap-2 text-sm font-bold">
+                  {claiming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} {claiming ? 'جارٍ التحقق…' : completed ? 'تحقق واستلم المكافأة' : 'تحقق بعد إكمال مدة المشاهدة'}
                 </Button>
                 <div className="mt-5 flex items-center gap-2 text-[10px] leading-5 text-slate-400"><ShieldCheck className="h-4 w-4 shrink-0 text-[#159b89]" /> يُحتسب الوقت أثناء وجود التطبيق بالخلفية، وتُصرف المكافأة بعد العودة والتحقق.</div>
               </>
