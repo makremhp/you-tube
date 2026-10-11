@@ -86,8 +86,8 @@ const templates = [
     description: { ar: "بعد إنشاء طلب السحب وحفظه بحالة قيد المعالجة.", en: "After a withdrawal request is saved as processing." },
     sample: { status: "قيد المعالجة" }, buttonPayload: "withdrawals",
     render: (lang, v) => lang === "ar"
-      ? `📥 <b>تم استلام طلب السحب</b>\n━━━━━━━━━━━━\n${htmlLine("المحفظة / الشبكة", v.method)}\n${htmlLine("العنوان", v.address, true)}\n${htmlLine("المبلغ", `${v.amount} ${v.currency}`)}\n${htmlLine("الحالة", v.status)}\n${htmlLine("رقم الطلب", v.requestId)}`
-      : `📥 <b>Withdrawal request received</b>\n━━━━━━━━━━━━\n${htmlLine("Wallet / network", v.method)}\n${htmlLine("Address", v.address, true)}\n${htmlLine("Amount", `${v.amount} ${v.currency}`)}\n${htmlLine("Status", v.status)}\n${htmlLine("Request ID", v.requestId)}`,
+      ? `📥 <b>تم استلام طلب السحب</b>\n${htmlLine("المحفظة / الشبكة", v.method)}\n${htmlLine("العنوان", v.address, true)}\n${htmlLine("المبلغ", `${v.amount} ${v.currency}`)}\n${htmlLine("الحالة", v.status)}\n${htmlLine("رقم الطلب", v.requestId)}`
+      : `📥 <b>Withdrawal request received</b>\n${htmlLine("Wallet / network", v.method)}\n${htmlLine("Address", v.address, true)}\n${htmlLine("Amount", `${v.amount} ${v.currency}`)}\n${htmlLine("Status", v.status)}\n${htmlLine("Request ID", v.requestId)}`,
   }),
   template({
     id: "withdrawal_approved", category: "users", image: "sheet1-r3-c2.jpg",
@@ -95,8 +95,8 @@ const templates = [
     description: { ar: "بعد تغيير حالة الطلب في قاعدة البيانات؛ لا يدّعي الدفع عند غياب مرجع معاملة.", en: "After the database status changes; no payment claim is made without a transaction reference." },
     buttonPayload: "withdrawals",
     render: (lang, v) => lang === "ar"
-      ? `✅ <b>تم تحديث طلب السحب</b>\n━━━━━━━━━━━━\n${htmlLine("المبلغ", `${v.amount} ${v.currency}`)}\n${htmlLine("الطريقة", v.method)}\n${htmlLine("الحالة", v.status)}${v.transactionId ? `\n${htmlLine("مرجع المعاملة", v.transactionId, true)}` : "\nلم يُسجّل مرجع معاملة؛ لا يعني هذا الإشعار أن الدفع تم."}`
-      : `✅ <b>Withdrawal status updated</b>\n━━━━━━━━━━━━\n${htmlLine("Amount", `${v.amount} ${v.currency}`)}\n${htmlLine("Method", v.method)}\n${htmlLine("Status", v.status)}${v.transactionId ? `\n${htmlLine("Transaction reference", v.transactionId, true)}` : "\nNo transaction reference is recorded; this does not confirm payment."}`,
+      ? `✅ <b>تم تحديث طلب السحب</b>\n${htmlLine("المبلغ", `${v.amount} ${v.currency}`)}\n${htmlLine("الطريقة", v.method)}\n${htmlLine("الحالة", v.status)}${v.transactionId ? `\n${htmlLine("مرجع المعاملة", v.transactionId, true)}` : "\nلم يُسجّل مرجع معاملة؛ لا يعني هذا الإشعار أن الدفع تم."}`
+      : `✅ <b>Withdrawal status updated</b>\n${htmlLine("Amount", `${v.amount} ${v.currency}`)}\n${htmlLine("Method", v.method)}\n${htmlLine("Status", v.status)}${v.transactionId ? `\n${htmlLine("Transaction reference", v.transactionId, true)}` : "\nNo transaction reference is recorded; this does not confirm payment."}`,
   }),
   template({
     id: "withdrawal_rejected", category: "users", image: "sheet1-r3-c1.jpg",
@@ -104,16 +104,16 @@ const templates = [
     description: { ar: "بعد رفض طلب السحب وإرجاع المبلغ إلى رصيد المستخدم.", en: "After a withdrawal is declined and the amount is returned to the user's balance." },
     buttonPayload: "withdrawals",
     render: (lang, v) => lang === "ar"
-      ? `❌ <b>تم رفض طلب السحب</b>\n━━━━━━━━━━━━\n${htmlLine("المبلغ المُعاد إلى رصيدك", `${v.amount} ${v.currency}`)}\n${htmlLine("رقم الطلب", v.requestId)}${v.reason ? `\n${htmlLine("السبب", v.reason)}` : ""}`
-      : `❌ <b>Withdrawal request declined</b>\n━━━━━━━━━━━━\n${htmlLine("Amount returned to your balance", `${v.amount} ${v.currency}`)}\n${htmlLine("Request ID", v.requestId)}${v.reason ? `\n${htmlLine("Reason", v.reason)}` : ""}`,
+      ? `❌ <b>تم رفض طلب السحب</b>\n${htmlLine("المبلغ المُعاد إلى رصيدك", `${v.amount} ${v.currency}`)}\n${htmlLine("رقم الطلب", v.requestId)}${v.reason ? `\n${htmlLine("السبب", v.reason)}` : ""}`
+      : `❌ <b>Withdrawal request declined</b>\n${htmlLine("Amount returned to your balance", `${v.amount} ${v.currency}`)}\n${htmlLine("Request ID", v.requestId)}${v.reason ? `\n${htmlLine("Reason", v.reason)}` : ""}`,
   }),
   template({
     id: "payment_proof_admin", category: "admin", image: "sheet1-r1-c3.jpg",
     title: { ar: "تقرير مرجع السحب", en: "Withdrawal reference report" },
     description: { ar: "يُرسل إلى قناة الإدارة فقط عند تسجيل مرجع معاملة في قاعدة البيانات.", en: "Sent only to the admin channel when a transaction reference is stored." },
     render: (lang, v) => lang === "ar"
-      ? `🧾 <b>مرجع سحب مسجل</b>\n━━━━━━━━━━━━\n${htmlLine("المستخدم", v.firstName)}\n${htmlLine("Telegram", v.username)}\n${htmlLine("Telegram ID", v.telegramId)}\n${htmlLine("المبلغ", `${v.amount} ${v.currency}`)}\n${htmlLine("المحفظة / الشبكة", v.method)}\n${htmlLine("العنوان", v.address, true)}\n${htmlLine("رقم الطلب", v.requestId)}\n${htmlLine("مرجع المعاملة", v.transactionId, true)}\n${htmlLine("وقت التسجيل", v.date)}\nهذا المرجع أُدخل في النظام؛ لا يتضمن تحققًا مستقلاً من الشبكة.`
-      : `🧾 <b>Withdrawal reference recorded</b>\n━━━━━━━━━━━━\n${htmlLine("User", v.firstName)}\n${htmlLine("Telegram", v.username)}\n${htmlLine("Telegram ID", v.telegramId)}\n${htmlLine("Amount", `${v.amount} ${v.currency}`)}\n${htmlLine("Wallet / network", v.method)}\n${htmlLine("Address", v.address, true)}\n${htmlLine("Request ID", v.requestId)}\n${htmlLine("Transaction reference", v.transactionId, true)}\n${htmlLine("Recorded at", v.date)}\nThis reference was entered in the system; it has not been independently verified on-chain.`,
+      ? `🧾 <b>مرجع سحب مسجل</b>\n${htmlLine("المستخدم", v.firstName)}\n${htmlLine("Telegram", v.username)}\n${htmlLine("Telegram ID", v.telegramId)}\n${htmlLine("المبلغ", `${v.amount} ${v.currency}`)}\n${htmlLine("المحفظة / الشبكة", v.method)}\n${htmlLine("العنوان", v.address, true)}\n${htmlLine("رقم الطلب", v.requestId)}\n${htmlLine("مرجع المعاملة", v.transactionId, true)}\n${htmlLine("وقت التسجيل", v.date)}\nهذا المرجع أُدخل في النظام؛ لا يتضمن تحققًا مستقلاً من الشبكة.`
+      : `🧾 <b>Withdrawal reference recorded</b>\n${htmlLine("User", v.firstName)}\n${htmlLine("Telegram", v.username)}\n${htmlLine("Telegram ID", v.telegramId)}\n${htmlLine("Amount", `${v.amount} ${v.currency}`)}\n${htmlLine("Wallet / network", v.method)}\n${htmlLine("Address", v.address, true)}\n${htmlLine("Request ID", v.requestId)}\n${htmlLine("Transaction reference", v.transactionId, true)}\n${htmlLine("Recorded at", v.date)}\nThis reference was entered in the system; it has not been independently verified on-chain.`,
   }),
   template({
     id: "deposit_requested", category: "advertisers", image: "sheet2-r1-c1.jpg",
@@ -121,8 +121,8 @@ const templates = [
     description: { ar: "بعد حفظ طلب الإيداع، قبل تأكيده.", en: "After the deposit request is saved, before it is confirmed." },
     sample: { requestId: "DEP-2026-001", status: "قيد المعالجة" }, buttonPayload: "deposit",
     render: (lang, v) => lang === "ar"
-      ? `📥 <b>تم استلام طلب الإيداع</b>\n━━━━━━━━━━━━\n${htmlLine("المبلغ", `${v.amount} ${v.currency}`)}\n${htmlLine("الطريقة", v.method)}\n${htmlLine("الحالة", v.status)}\n${htmlLine("رقم الطلب", v.requestId)}`
-      : `📥 <b>Deposit request received</b>\n━━━━━━━━━━━━\n${htmlLine("Amount", `${v.amount} ${v.currency}`)}\n${htmlLine("Method", v.method)}\n${htmlLine("Status", v.status)}\n${htmlLine("Request ID", v.requestId)}`,
+      ? `📥 <b>تم استلام طلب الإيداع</b>\n${htmlLine("المبلغ", `${v.amount} ${v.currency}`)}\n${htmlLine("الطريقة", v.method)}\n${htmlLine("الحالة", v.status)}\n${htmlLine("رقم الطلب", v.requestId)}`
+      : `📥 <b>Deposit request received</b>\n${htmlLine("Amount", `${v.amount} ${v.currency}`)}\n${htmlLine("Method", v.method)}\n${htmlLine("Status", v.status)}\n${htmlLine("Request ID", v.requestId)}`,
   }),
   template({
     id: "deposit_confirmed", category: "advertisers", image: "sheet2-r1-c2.jpg",
@@ -130,8 +130,8 @@ const templates = [
     description: { ar: "بعد تأكيد الإيداع وإضافة الرصيد في قاعدة البيانات.", en: "After the deposit is confirmed and credited in the database." },
     sample: { status: "تم التأكيد" }, buttonPayload: "deposit",
     render: (lang, v) => lang === "ar"
-      ? `✅ <b>تم تأكيد الإيداع</b>\n━━━━━━━━━━━━\n${htmlLine("المبلغ المضاف", `${v.amount} ${v.currency}`)}\n${htmlLine("الطريقة", v.method)}\n${htmlLine("رقم الطلب", v.requestId)}\nأصبح الرصيد متاحًا وفق سجل المنصة.`
-      : `✅ <b>Deposit confirmed</b>\n━━━━━━━━━━━━\n${htmlLine("Amount credited", `${v.amount} ${v.currency}`)}\n${htmlLine("Method", v.method)}\n${htmlLine("Request ID", v.requestId)}\nThe balance is available according to the platform ledger.`,
+      ? `✅ <b>تم تأكيد الإيداع</b>\n${htmlLine("المبلغ المضاف", `${v.amount} ${v.currency}`)}\n${htmlLine("الطريقة", v.method)}\n${htmlLine("رقم الطلب", v.requestId)}\nأصبح الرصيد متاحًا وفق سجل المنصة.`
+      : `✅ <b>Deposit confirmed</b>\n${htmlLine("Amount credited", `${v.amount} ${v.currency}`)}\n${htmlLine("Method", v.method)}\n${htmlLine("Request ID", v.requestId)}\nThe balance is available according to the platform ledger.`,
   }),
   template({
     id: "deposit_rejected", category: "advertisers", image: "sheet2-r3-c5.jpg",
@@ -139,8 +139,8 @@ const templates = [
     description: { ar: "بعد حفظ حالة الإيداع المرفوضة وسببها إن وُجد.", en: "After a deposit is marked declined, with a reason when available." },
     sample: { status: "مرفوض" }, buttonPayload: "deposit-history",
     render: (lang, v) => lang === "ar"
-      ? `⚠️ <b>تعذر تأكيد الإيداع</b>\n━━━━━━━━━━━━\n${htmlLine("المبلغ", `${v.amount} ${v.currency}`)}\n${htmlLine("رقم الطلب", v.requestId)}${v.reason ? `\n${htmlLine("السبب", v.reason)}` : ""}`
-      : `⚠️ <b>Deposit could not be confirmed</b>\n━━━━━━━━━━━━\n${htmlLine("Amount", `${v.amount} ${v.currency}`)}\n${htmlLine("Request ID", v.requestId)}${v.reason ? `\n${htmlLine("Reason", v.reason)}` : ""}`,
+      ? `⚠️ <b>تعذر تأكيد الإيداع</b>\n${htmlLine("المبلغ", `${v.amount} ${v.currency}`)}\n${htmlLine("رقم الطلب", v.requestId)}${v.reason ? `\n${htmlLine("السبب", v.reason)}` : ""}`
+      : `⚠️ <b>Deposit could not be confirmed</b>\n${htmlLine("Amount", `${v.amount} ${v.currency}`)}\n${htmlLine("Request ID", v.requestId)}${v.reason ? `\n${htmlLine("Reason", v.reason)}` : ""}`,
   }),
   template({
     id: "task_available", category: "users", image: "sheet1-r2-c4.jpg",
@@ -148,8 +148,8 @@ const templates = [
     description: { ar: "عند نشر حملة نشطة ومؤهلة للمستخدمين.", en: "When an active campaign becomes available to users." },
     sample: { taskTitle: "تابع قناة VidReward", platform: "Telegram", reward: "0.003" }, buttonPayload: "task_204",
     render: (lang, v) => lang === "ar"
-      ? `🆕 <b>مهمة جديدة متاحة</b>\n━━━━━━━━━━━━\n${htmlLine("المهمة", v.taskTitle)}\n${htmlLine("المنصة", v.platform)}\n${htmlLine("المكافأة", `${v.reward} USDT`)}${v.description ? `\n${htmlLine("الشروط", v.description)}` : ""}`
-      : `🆕 <b>A new task is available</b>\n━━━━━━━━━━━━\n${htmlLine("Task", v.taskTitle)}\n${htmlLine("Platform", v.platform)}\n${htmlLine("Reward", `${v.reward} USDT`)}${v.description ? `\n${htmlLine("Requirements", v.description)}` : ""}`,
+      ? `🆕 <b>مهمة جديدة متاحة</b>\n${htmlLine("المهمة", v.taskTitle)}\n${htmlLine("المنصة", v.platform)}\n${htmlLine("المكافأة", `${v.reward} USDT`)}${v.description ? `\n${htmlLine("الشروط", v.description)}` : ""}`
+      : `🆕 <b>A new task is available</b>\n${htmlLine("Task", v.taskTitle)}\n${htmlLine("Platform", v.platform)}\n${htmlLine("Reward", `${v.reward} USDT`)}${v.description ? `\n${htmlLine("Requirements", v.description)}` : ""}`,
   }),
   template({
     id: "referral_joined", category: "users", image: "sheet1-r2-c1.jpg",
@@ -157,8 +157,8 @@ const templates = [
     description: { ar: "عند إنشاء مستخدم جديد برابط إحالة موثّق.", en: "When a new user is created from a verified referral link." },
     sample: { referralUsername: "@new_member" }, buttonPayload: "referrals",
     render: (lang, v) => lang === "ar"
-      ? `👥 <b>انضم مستخدم جديد عبر رابط الإحالة الخاص بك</b>\n━━━━━━━━━━━━\n${htmlLine("المستخدم", v.referralUsername)}\n${htmlLine("تاريخ الانضمام", v.date)}\nيمكنك متابعة الإحالات من حسابك.`
-      : `👥 <b>A new user joined through your referral link</b>\n━━━━━━━━━━━━\n${htmlLine("User", v.referralUsername)}\n${htmlLine("Joined", v.date)}\nYou can review your referrals in your account.`,
+      ? `👥 <b>انضم مستخدم جديد عبر رابط الإحالة الخاص بك</b>\n${htmlLine("المستخدم", v.referralUsername)}\n${htmlLine("تاريخ الانضمام", v.date)}\nيمكنك متابعة الإحالات من حسابك.`
+      : `👥 <b>A new user joined through your referral link</b>\n${htmlLine("User", v.referralUsername)}\n${htmlLine("Joined", v.date)}\nYou can review your referrals in your account.`,
   }),
   template({
     id: "advertiser_telegram_task", category: "advertisers", image: "sheet2-r1-c4.jpg",
@@ -166,8 +166,8 @@ const templates = [
     description: { ar: "بعد التحقق الفعلي من عضوية المستخدم وإضافة المكافأة.", en: "After the user's channel membership is verified and the reward is recorded." },
     sample: { platform: "Telegram" }, buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `🎉 <b>انضم مستخدم جديد إلى قناتك عبر المهمة</b>\n━━━━━━━━━━━━\n${htmlLine("المستخدم", v.username || v.firstName)}\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("وقت الحدث", v.date)}`
-      : `🎉 <b>A new user joined your channel through the task</b>\n━━━━━━━━━━━━\n${htmlLine("User", v.username || v.firstName)}\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Event time", v.date)}`,
+      ? `🎉 <b>انضم مستخدم جديد إلى قناتك عبر المهمة</b>\n${htmlLine("المستخدم", v.username || v.firstName)}\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("وقت الحدث", v.date)}`
+      : `🎉 <b>A new user joined your channel through the task</b>\n${htmlLine("User", v.username || v.firstName)}\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Event time", v.date)}`,
   }),
   template({
     id: "advertiser_tiktok_task", category: "advertisers", image: "sheet2-r2-c1.jpg",
@@ -175,8 +175,8 @@ const templates = [
     description: { ar: "بعد اعتماد إثبات المهمة فقط؛ لا يدّعي تحقق المتابعة عبر TikTok.", en: "Only after task proof approval; it does not claim TikTok independently verified a follow." },
     buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `✅ <b>تم اعتماد إثبات مهمة TikTok</b>\n━━━━━━━━━━━━\n${htmlLine("المستخدم", v.username || v.firstName)}\n${htmlLine("المهمة", v.campaignTitle)}\n${htmlLine("وقت الاعتماد", v.date)}`
-      : `✅ <b>TikTok task proof approved</b>\n━━━━━━━━━━━━\n${htmlLine("User", v.username || v.firstName)}\n${htmlLine("Task", v.campaignTitle)}\n${htmlLine("Approved at", v.date)}`,
+      ? `✅ <b>تم اعتماد إثبات مهمة TikTok</b>\n${htmlLine("المستخدم", v.username || v.firstName)}\n${htmlLine("المهمة", v.campaignTitle)}\n${htmlLine("وقت الاعتماد", v.date)}`
+      : `✅ <b>TikTok task proof approved</b>\n${htmlLine("User", v.username || v.firstName)}\n${htmlLine("Task", v.campaignTitle)}\n${htmlLine("Approved at", v.date)}`,
   }),
   template({
     id: "advertiser_youtube_task", category: "advertisers", image: "sheet2-r2-c2.jpg",
@@ -184,8 +184,8 @@ const templates = [
     description: { ar: "بعد تحقق النظام من اكتمال مشاهدة المهمة؛ ليس تحققًا من الاشتراك.", en: "After the system validates task watch completion; not a subscription check." },
     buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `🎬 <b>أكمل مستخدم مهمة YouTube على منصتنا</b>\n━━━━━━━━━━━━\n${htmlLine("المستخدم", v.username || v.firstName)}\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الإجراء المتحقق", "إكمال مدة المشاهدة المطلوبة")}\n${htmlLine("وقت الحدث", v.date)}`
-      : `🎬 <b>A user completed a YouTube task on our platform</b>\n━━━━━━━━━━━━\n${htmlLine("User", v.username || v.firstName)}\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Verified action", "Required watch duration completed")}\n${htmlLine("Event time", v.date)}`,
+      ? `🎬 <b>أكمل مستخدم مهمة YouTube على منصتنا</b>\n${htmlLine("المستخدم", v.username || v.firstName)}\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الإجراء المتحقق", "إكمال مدة المشاهدة المطلوبة")}\n${htmlLine("وقت الحدث", v.date)}`
+      : `🎬 <b>A user completed a YouTube task on our platform</b>\n${htmlLine("User", v.username || v.firstName)}\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Verified action", "Required watch duration completed")}\n${htmlLine("Event time", v.date)}`,
   }),
   template({
     id: "campaign_accepted", category: "advertisers", image: "sheet1-r1-c4.jpg",
@@ -193,8 +193,8 @@ const templates = [
     description: { ar: "عند انتقال الحملة فعليًا إلى الحالة النشطة.", en: "When the campaign actually enters the active state." },
     buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `✅ <b>حملتك أصبحت نشطة</b>\n━━━━━━━━━━━━\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الحالة", v.status)}`
-      : `✅ <b>Your campaign is active</b>\n━━━━━━━━━━━━\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Status", v.status)}`,
+      ? `✅ <b>حملتك أصبحت نشطة</b>\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الحالة", v.status)}`
+      : `✅ <b>Your campaign is active</b>\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Status", v.status)}`,
   }),
   template({
     id: "campaign_activated", category: "advertisers", image: "sheet2-r4-c4.jpg",
@@ -202,8 +202,8 @@ const templates = [
     description: { ar: "عند تفعيل الحملة من حالة غير نشطة.", en: "When a campaign is activated from an inactive state." },
     buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `▶️ <b>تم تفعيل الحملة</b>\n━━━━━━━━━━━━\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الحالة", v.status)}`
-      : `▶️ <b>Campaign activated</b>\n━━━━━━━━━━━━\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Status", v.status)}`,
+      ? `▶️ <b>تم تفعيل الحملة</b>\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الحالة", v.status)}`
+      : `▶️ <b>Campaign activated</b>\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Status", v.status)}`,
   }),
   template({
     id: "campaign_paused", category: "advertisers", image: "sheet2-r3-c3.jpg",
@@ -211,8 +211,8 @@ const templates = [
     description: { ar: "عند حفظ الحالة الموقوفة للحملة.", en: "When a campaign's paused state is saved." },
     buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `⏸️ <b>تم إيقاف الحملة</b>\n━━━━━━━━━━━━\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الحالة", v.status)}${v.reason ? `\n${htmlLine("السبب", v.reason)}` : ""}`
-      : `⏸️ <b>Campaign paused</b>\n━━━━━━━━━━━━\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Status", v.status)}${v.reason ? `\n${htmlLine("Reason", v.reason)}` : ""}`,
+      ? `⏸️ <b>تم إيقاف الحملة</b>\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الحالة", v.status)}${v.reason ? `\n${htmlLine("السبب", v.reason)}` : ""}`
+      : `⏸️ <b>Campaign paused</b>\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Status", v.status)}${v.reason ? `\n${htmlLine("Reason", v.reason)}` : ""}`,
   }),
   template({
     id: "campaign_rejected", category: "advertisers", image: "sheet2-r3-c5.jpg",
@@ -220,8 +220,8 @@ const templates = [
     description: { ar: "عند حفظ قرار رفض الحملة من الإدارة.", en: "When an administrator records a campaign rejection." },
     buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `❌ <b>لم تتم الموافقة على الحملة</b>\n━━━━━━━━━━━━\n${htmlLine("الحملة", v.campaignTitle)}`
-      : `❌ <b>Your campaign was not accepted</b>\n━━━━━━━━━━━━\n${htmlLine("Campaign", v.campaignTitle)}`,
+      ? `❌ <b>لم تتم الموافقة على الحملة</b>\n${htmlLine("الحملة", v.campaignTitle)}`
+      : `❌ <b>Your campaign was not accepted</b>\n${htmlLine("Campaign", v.campaignTitle)}`,
   }),
   template({
     id: "campaign_exhausted", category: "advertisers", image: "sheet2-r3-c5.jpg",
@@ -229,8 +229,8 @@ const templates = [
     description: { ar: "قالب جاهز؛ لا يُرسل تلقائيًا لأن النظام الحالي لا يغيّر حالة الحملات عند نفاد الرصيد.", en: "Template prepared; not sent automatically because the current system does not change campaign state on balance exhaustion." },
     buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `⚠️ <b>تحديث رصيد الحملة</b>\n━━━━━━━━━━━━\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الحالة المسجلة", v.status)}\nلم يتم إيقاف الحملة تلقائيًا ما لم تؤكد قاعدة البيانات ذلك.`
-      : `⚠️ <b>Campaign balance update</b>\n━━━━━━━━━━━━\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Recorded status", v.status)}\nThe campaign is not treated as paused unless the database confirms it.`,
+      ? `⚠️ <b>تحديث رصيد الحملة</b>\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الحالة المسجلة", v.status)}\nلم يتم إيقاف الحملة تلقائيًا ما لم تؤكد قاعدة البيانات ذلك.`
+      : `⚠️ <b>Campaign balance update</b>\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Recorded status", v.status)}\nThe campaign is not treated as paused unless the database confirms it.`,
   }),
   template({
     id: "campaign_resumed", category: "advertisers", image: "sheet2-r3-c4.jpg",
@@ -238,8 +238,8 @@ const templates = [
     description: { ar: "عند عودة الحملة إلى الحالة النشطة.", en: "When a campaign returns to the active state." },
     buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `▶️ <b>تم استئناف الحملة</b>\n━━━━━━━━━━━━\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الحالة", v.status)}`
-      : `▶️ <b>Campaign resumed</b>\n━━━━━━━━━━━━\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Status", v.status)}`,
+      ? `▶️ <b>تم استئناف الحملة</b>\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الحالة", v.status)}`
+      : `▶️ <b>Campaign resumed</b>\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Status", v.status)}`,
   }),
   template({
     id: "campaign_completed", category: "advertisers", image: "sheet1-r4-c1.jpg",
@@ -247,8 +247,8 @@ const templates = [
     description: { ar: "قالب جاهز للأحداث التي يسجلها النظام عند الاكتمال.", en: "Template for completion events recorded by the system." },
     buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `🏁 <b>اكتملت الحملة</b>\n━━━━━━━━━━━━\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الحالة", v.status)}`
-      : `🏁 <b>Campaign completed</b>\n━━━━━━━━━━━━\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Status", v.status)}`,
+      ? `🏁 <b>اكتملت الحملة</b>\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الحالة", v.status)}`
+      : `🏁 <b>Campaign completed</b>\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Status", v.status)}`,
   }),
   template({
     id: "proof_received", category: "users", image: "sheet2-r4-c5.jpg",
@@ -256,8 +256,8 @@ const templates = [
     description: { ar: "بعد حفظ إثبات المستخدم بحالة قيد المراجعة.", en: "After the user's proof is saved as pending review." },
     sample: { proofId: "PRF-204-9988" }, buttonPayload: "tiktok-tasks",
     render: (lang, v) => lang === "ar"
-      ? `📨 <b>تم استلام إثباتك بنجاح</b>\n━━━━━━━━━━━━\n${htmlLine("المهمة", v.taskTitle)}\n${htmlLine("الحالة", "قيد المراجعة")}\n${htmlLine("رقم الإثبات", v.proofId)}`
-      : `📨 <b>Your task proof was received</b>\n━━━━━━━━━━━━\n${htmlLine("Task", v.taskTitle)}\n${htmlLine("Status", "Under review")}\n${htmlLine("Proof ID", v.proofId)}`,
+      ? `📨 <b>تم استلام إثباتك بنجاح</b>\n${htmlLine("المهمة", v.taskTitle)}\n${htmlLine("الحالة", "قيد المراجعة")}\n${htmlLine("رقم الإثبات", v.proofId)}`
+      : `📨 <b>Your task proof was received</b>\n${htmlLine("Task", v.taskTitle)}\n${htmlLine("Status", "Under review")}\n${htmlLine("Proof ID", v.proofId)}`,
   }),
   template({
     id: "proof_accepted", category: "users", image: "sheet2-r4-c1.jpg",
@@ -265,8 +265,8 @@ const templates = [
     description: { ar: "بعد اعتماد الإثبات وإضافة المكافأة مرة واحدة.", en: "After the proof is approved and the reward is credited once." },
     buttonPayload: "proofs",
     render: (lang, v) => lang === "ar"
-      ? `✅ <b>تم قبول إثباتك بنجاح</b>\n━━━━━━━━━━━━\n${htmlLine("المهمة", v.taskTitle)}\n${htmlLine("المكافأة المسجلة", `${v.reward} USDT`)}\n${htmlLine("الحالة", "معتمد")}`
-      : `✅ <b>Your task proof was approved</b>\n━━━━━━━━━━━━\n${htmlLine("Task", v.taskTitle)}\n${htmlLine("Recorded reward", `${v.reward} USDT`)}\n${htmlLine("Status", "Approved")}`,
+      ? `✅ <b>تم قبول إثباتك بنجاح</b>\n${htmlLine("المهمة", v.taskTitle)}\n${htmlLine("المكافأة المسجلة", `${v.reward} USDT`)}\n${htmlLine("الحالة", "معتمد")}`
+      : `✅ <b>Your task proof was approved</b>\n${htmlLine("Task", v.taskTitle)}\n${htmlLine("Recorded reward", `${v.reward} USDT`)}\n${htmlLine("Status", "Approved")}`,
   }),
   template({
     id: "proof_rejected", category: "users", image: "sheet2-r4-c2.jpg",
@@ -274,24 +274,24 @@ const templates = [
     description: { ar: "بعد حفظ حالة الرفض وسببها إن توفر.", en: "After the proof is marked declined, with a reason when available." },
     buttonPayload: "proofs",
     render: (lang, v) => lang === "ar"
-      ? `❌ <b>لم تتم الموافقة على إثبات المهمة</b>\n━━━━━━━━━━━━\n${htmlLine("المهمة", v.taskTitle)}${v.reason ? `\n${htmlLine("السبب", v.reason)}` : ""}\nيمكنك إعادة التقديم إذا كانت المهمة تسمح بذلك.`
-      : `❌ <b>Your task proof was not approved</b>\n━━━━━━━━━━━━\n${htmlLine("Task", v.taskTitle)}${v.reason ? `\n${htmlLine("Reason", v.reason)}` : ""}\nYou may resubmit if the task allows it.`,
+      ? `❌ <b>لم تتم الموافقة على إثبات المهمة</b>\n${htmlLine("المهمة", v.taskTitle)}${v.reason ? `\n${htmlLine("السبب", v.reason)}` : ""}\nيمكنك إعادة التقديم إذا كانت المهمة تسمح بذلك.`
+      : `❌ <b>Your task proof was not approved</b>\n${htmlLine("Task", v.taskTitle)}${v.reason ? `\n${htmlLine("Reason", v.reason)}` : ""}\nYou may resubmit if the task allows it.`,
   }),
   template({
     id: "generic", category: "admin", image: "sheet1-r5-c2.jpg",
     title: { ar: "إشعار عام", en: "General notification" },
     description: { ar: "قالب عام ثنائي اللغة.", en: "A bilingual general template." },
     render: (lang, v) => lang === "ar"
-      ? `ℹ️ <b>${escapeHtml(valueOr(v.title, "إشعار"))}</b>\n━━━━━━━━━━━━\n${escapeHtml(valueOr(v.message, "تفاصيل الإشعار"))}`
-      : `ℹ️ <b>${escapeHtml(valueOr(v.title, "Notification"))}</b>\n━━━━━━━━━━━━\n${escapeHtml(valueOr(v.message, "Notification details"))}`,
+      ? `ℹ️ <b>${escapeHtml(valueOr(v.title, "إشعار"))}</b>\n${escapeHtml(valueOr(v.message, "تفاصيل الإشعار"))}`
+      : `ℹ️ <b>${escapeHtml(valueOr(v.title, "Notification"))}</b>\n${escapeHtml(valueOr(v.message, "Notification details"))}`,
   }),
   template({
     id: "warning", category: "admin", image: "sheet1-r5-c3.jpg",
     title: { ar: "تحذير أو خطأ", en: "Warning or error" },
     description: { ar: "قالب تحذير؛ لا يُرسل إلا عند وجود حالة يدعمها النظام.", en: "Warning template; sent only for states supported by the system." },
     render: (lang, v) => lang === "ar"
-      ? `⚠️ <b>${escapeHtml(valueOr(v.title, "تنبيه"))}</b>\n━━━━━━━━━━━━\n${escapeHtml(valueOr(v.message, v.reason))}`
-      : `⚠️ <b>${escapeHtml(valueOr(v.title, "Notice"))}</b>\n━━━━━━━━━━━━\n${escapeHtml(valueOr(v.message, v.reason))}`,
+      ? `⚠️ <b>${escapeHtml(valueOr(v.title, "تنبيه"))}</b>\n${escapeHtml(valueOr(v.message, v.reason))}`
+      : `⚠️ <b>${escapeHtml(valueOr(v.title, "Notice"))}</b>\n${escapeHtml(valueOr(v.message, v.reason))}`,
   }),
 ];
 
