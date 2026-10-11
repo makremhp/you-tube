@@ -82,6 +82,21 @@ export function ensureSchema() {
         `CREATE INDEX IF NOT EXISTS vr_completions_user_completed_idx
           ON vr_completions (user_id, completed_at DESC)
           WHERE status = 'completed'`,
+        `CREATE TABLE IF NOT EXISTS vr_publish_proofs (
+          id BIGSERIAL PRIMARY KEY,
+          user_id BIGINT NOT NULL REFERENCES vr_users(id),
+          images JSONB NOT NULL,
+          reward NUMERIC(18,6) NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          day DATE NOT NULL DEFAULT CURRENT_DATE,
+          rejection_reason TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          reviewed_at TIMESTAMPTZ
+        )`,
+        `CREATE UNIQUE INDEX IF NOT EXISTS vr_publish_proofs_one_per_day
+          ON vr_publish_proofs (user_id, day) WHERE status <> 'rejected'`,
+        `CREATE INDEX IF NOT EXISTS vr_publish_proofs_user_idx
+          ON vr_publish_proofs (user_id, created_at DESC)`,
         `CREATE SEQUENCE IF NOT EXISTS vr_memo_seq START 1`,
         `CREATE TABLE IF NOT EXISTS vr_deposits (
           id TEXT PRIMARY KEY,

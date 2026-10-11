@@ -44,6 +44,7 @@ import {
   handleMonetagPostback,
 } from './monetag.js';
 import { getReferrals } from './referrals.js';
+import { listPublishProofs, submitPublishProof } from './publishing.js';
 import { checkTelegramMembershipOnEntry, sweepTelegramMemberships } from './membership.js';
 import { readPositiveInteger, readText } from './validation.js';
 
@@ -142,6 +143,7 @@ export async function dispatch(req, res) {
       return getMonetagSession(req, res, readText(segments[3], 64));
     }
     if (key === 'proofs') return listProofs(req, res);
+    if (key === 'publish/proofs') return listPublishProofs(req, res);
     if (key === 'deposits') return listDeposits(req, res);
     if (key === 'withdrawals') return listWithdrawals(req, res);
     if (key === 'admin/state') return adminState(req, res);
@@ -152,6 +154,7 @@ export async function dispatch(req, res) {
   if (method === 'POST') {
     if (key === 'session/entry') return checkTelegramMembershipOnEntry(req, res);
     if (key === 'admin/notifications/send') return sendAdminNotification(req, res);
+    if (key === 'publish/proof') return submitPublishProof(req, res);
     if (key === 'campaigns') return createCampaign(req, res);
     if (key === 'deposits') return createDeposit(req, res);
     if (key === 'withdrawals') return createWithdrawal(req, res);

@@ -88,6 +88,16 @@ export async function adminState(req, res) {
     ),
     sql.query(`SELECT value::text AS maintenance FROM vr_platform_settings WHERE key = 'maintenance'`),
   ]);
+  // إثباتات نظام النشر تظهر في نفس صفحة «إثباتات المهام» بمعرّف PUB-<id>.
+  const publishProofs = await sql.query(
+    `SELECT 'PUB-' || id::text AS id, '' AS "campaignId", user_id::float8 AS "userId",
+            'PUBLISH-' || id::text AS "taskId", 'نظام النشر' AS "taskType",
+            COALESCE(images->>0, '') AS image, images AS images, reward::float8 AS reward,
+            CASE status WHEN 'approved' THEN 'معتمد' WHEN 'rejected' THEN 'مرفوض' ELSE 'قيد المراجعة' END AS status,
+            COALESCE(rejection_reason, '') AS "rejectionReason"
+     FROM vr_publish_proofs ORDER BY created_at DESC LIMIT 500`,
+  );
+  proofs.push(...publishProofs);
   ok(res, {
     users, deposits, withdrawals, campaigns, proofs, suspicious, adminAudit,
     maintenance: settings[0]?.maintenance === 'true',
@@ -514,6 +524,28 @@ export async function adminAction(req, res, collection, id) {
 
   if (collection === 'proofs') {
     if (!['معتمد', 'مرفوض'].includes(status)) throw new HttpError(400, 'Invalid request');
+    const publishMatch = /^PUB-(\d+)$/.exec(id);
+    if (publishMatch) {
+      const nextPublish = status === 'معتمد' ? 'approved' : 'rejected';
+      const reason = nextPublish === 'rejected' ? (readText(body.rejectionReason, 300) ?? null) : null;
+      const rows = await sql.query(
+        `WITH updated AS (
+           UPDATE vr_publish_proofs SET status = $2, reviewed_at = now(), rejection_reason = $3
+           WHERE id = $1 AND status = 'pending'
+           RETURNING reward, user_id
+         ), credit AS (
+           UPDATE vr_users SET earned_balance = earned_balance + (SELECT reward FROM updated)
+           WHERE $2 = 'approved' AND id = (SELECT user_id FROM updated)
+           RETURNING id
+         )
+         SELECT user_id::float8 AS "userId" FROM updated`,
+        [publishMatch[1], nextPublish, reason],
+      );
+      if (!rows.length) throw new HttpError(409, 'Proof already reviewed');
+      await recordAdminAction(admin.id, collection, id, status);
+      ok(res, { id });
+      return;
+    }
     const match = /^PRF-(\d+)-(\d+)$/.exec(id);
     if (!match) throw new HttpError(400, 'Invalid request');
     const next = status === 'معتمد' ? 'approved' : 'rejected';
