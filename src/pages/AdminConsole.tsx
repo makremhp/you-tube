@@ -1,5 +1,5 @@
 import { Children, cloneElement, isValidElement, useEffect, useRef, useState, type ReactElement } from 'react';
-import { Activity, CircleDollarSign, Copy, Eye, Megaphone, Search, ShieldCheck, Trash2, Users, Wallet, X, Plus, Code2, RefreshCw, Pencil, Check, Monitor, Layers, ImagePlus, BellRing, ArrowLeft, Send, RotateCcw } from 'lucide-react';
+import { Activity, CircleDollarSign, Copy, Eye, Megaphone, Search, ShieldCheck, Trash2, Users, Wallet, X, Plus, Code2, RefreshCw, Pencil, Check, Monitor, Layers, ImagePlus, BellRing, ArrowLeft, Send } from 'lucide-react';
 import { saveLocalPricing, useLocalPricing, type LocalPricing, type PricingPlatform } from '@/legacy/pricing';
 import { getEmbedUrl } from '@/legacy/shared';
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api';
@@ -188,6 +188,19 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
   if (patch.username !== undefined) payload.username = String(patch.username).trim().replace(/^@/, '');
   if (!Object.keys(payload).length) { announce('لا توجد تغييرات للحفظ'); return false; }
   return updateRows('users', id, payload);
+ };
+ const deleteCampaign = async (id:string): Promise<boolean> => {
+  const numericId=Number(String(id).replace(/^CMP-/,''));
+  if(!Number.isSafeInteger(numericId)||numericId<=0){announce('معرّف الحملة غير صالح');return false;}
+  try {
+   await apiDelete(`admin/campaigns/${numericId}`);
+   setData(d=>({...d,campaigns:d.campaigns.filter(c=>c.id!==id)}));
+   void loadRemote(true);
+   return true;
+  } catch (error) {
+   announce(error instanceof ApiError && error.message && error.message!=='Request failed' ? error.message : 'تعذر حذف الحملة');
+   return false;
+  }
  };
  const deleteUser = async (id:number): Promise<boolean> => {
   try {
@@ -448,7 +461,7 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
     <div className="mt-5">{content()}</div>
   </div>
   {toast&&<div role="status" className="fixed bottom-20 right-4 z-[110] rounded-xl bg-[#12234b] px-4 py-3 text-sm font-bold text-white shadow-xl">{toast}</div>}
-  {dialog&&<Dialog dialog={dialog} data={data} userBy={userBy} onClose={()=>setDialog(null)} onConfirmAction={async()=>{const run=pendingAction;const successMessage=pendingSuccessMessage;setPendingAction(null);setDialog(null);try{const result=await run?.();if(result!==false)announce(successMessage)}catch{announce('تعذر تنفيذ الإجراء')}}} onConfirm={async(id,patch,kind)=>{let saved=true;if(kind==='user-edit'||kind==='user'){saved=await saveUserPatch(id as number,patch)}else if(kind==='reject-proof'){saved=await updateRows('proofs',id as string,patch)}else if(kind==='campaign'){saved=await updateRows('campaigns',id as string,patch)}if(saved){setDialog(null);announce('تم حفظ التغيير')}return saved}} onDelete={deleteUser} onAction={(cb,message,successMessage)=>{confirm(message??'تأكيد الإجراء؟',cb,successMessage)}}/>}
+  {dialog&&<Dialog dialog={dialog} data={data} userBy={userBy} onClose={()=>setDialog(null)} onConfirmAction={async()=>{const run=pendingAction;const successMessage=pendingSuccessMessage;setPendingAction(null);setDialog(null);try{const result=await run?.();if(result!==false)announce(successMessage)}catch{announce('تعذر تنفيذ الإجراء')}}} onConfirm={async(id,patch,kind)=>{let saved=true;if(kind==='user-edit'||kind==='user'){saved=await saveUserPatch(id as number,patch)}else if(kind==='reject-proof'){saved=await updateRows('proofs',id as string,patch)}else if(kind==='campaign'){saved=await updateRows('campaigns',id as string,patch)}if(saved){setDialog(null);announce('تم حفظ التغيير')}return saved}} onDelete={deleteUser} onDeleteCampaign={deleteCampaign} onAction={(cb,message,successMessage)=>{confirm(message??'تأكيد الإجراء؟',cb,successMessage)}}/>}
  </main>;
 }
 
@@ -459,71 +472,43 @@ type NotificationCatalogItem = {
  title: Record<Language, string>;
  description: Record<Language, string>;
 };
-type NotificationPreview = {
- type: string;
- text: string;
- imageDataUrl: string | null;
- imageAvailable: boolean;
- buttonUrl: string | null;
-};
 
 function NotificationPreviewPanel({appLanguage,onBack}:{appLanguage:Language;onBack:()=>void}) {
- const [language,setLanguage]=useState<Language>(appLanguage);
- const [catalog,setCatalog]=useState<NotificationCatalogItem[]>([]);
- const [selected,setSelected]=useState('');
- const [preview,setPreview]=useState<NotificationPreview|null>(null);
- const [loading,setLoading]=useState(true);
+ const language:Language=appLanguage;
+ const ar=language==='ar';
  const [sending,setSending]=useState(false);
+ const [progress,setProgress]=useState<{done:number;total:number;failed:number}|null>(null);
  const [error,setError]=useState('');
  const [notice,setNotice]=useState('');
- useEffect(()=>{let active=true;apiGet<NotificationCatalogItem[]>('admin/notifications/catalog').then(items=>{if(!active)return;setCatalog(items);setSelected(items[0]?.id??'');}).catch(()=>{if(active)setError(appLanguage==='ar'?'تعذر تحميل قائمة الإشعارات.':'Could not load notification templates.');}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[appLanguage]);
- useEffect(()=>{if(!selected)return;let active=true;setPreview(null);apiGet<NotificationPreview>(`admin/notifications/catalog?type=${encodeURIComponent(selected)}&language=${language}`).then(item=>{if(active)setPreview(item);}).catch(()=>{if(active)setError(language==='ar'?'تعذر تحميل معاينة القالب.':'Could not load the template preview.');});return()=>{active=false;};},[selected,language]);
- const selectedItem=catalog.find(item=>item.id===selected);
- const testSend=async()=>{
-  const confirmed=window.confirm(language==='ar'
-   ?'سيُرسل هذا القالب التجريبي إلى محادثتك الخاصة مع البوت بصفة المشرف. هل تريد المتابعة؟'
-   :'Send this sample template to your private bot chat as the authenticated admin?');
-  if(!confirmed)return;
-  setSending(true);setError('');setNotice('');
-  try{await apiPost<{sent:boolean}>('admin/notifications/test',{type:selected,language});setNotice(language==='ar'?'أُرسل الاختبار إلى محادثة المشرف.':'Test message sent to the admin chat.');}
-  catch{setError(language==='ar'?'تعذر إرسال الاختبار. تأكد من بدء المحادثة مع البوت.':'Test could not be delivered. Make sure you have started a chat with the bot.');}
-  finally{setSending(false);}
+ const sendAll=async()=>{
+  if(sending)return;
+  setSending(true);setError('');setNotice('');setProgress(null);
+  try{
+   const catalog=await apiGet<NotificationCatalogItem[]>('admin/notifications/catalog');
+   let failed=0;
+   setProgress({done:0,total:catalog.length,failed:0});
+   for(let index=0;index<catalog.length;index+=1){
+    try{await apiPost<{sent:boolean}>('admin/notifications/test',{type:catalog[index].id,language});}
+    catch{failed+=1;}
+    setProgress({done:index+1,total:catalog.length,failed});
+    if(index<catalog.length-1)await new Promise(resolve=>setTimeout(resolve,1200));
+   }
+   if(failed===0)setNotice(ar?'تم إرسال جميع الإشعارات التجريبية إلى محادثتك مع البوت.':'All sample notifications were sent to your bot chat.');
+   else setError(ar?`تعذر إرسال ${failed} إشعار. تأكد من أنك بدأت المحادثة مع البوت (Start).`:`${failed} notification(s) could not be delivered. Make sure you have started the bot chat.`);
+  }catch{
+   setError(ar?'تعذر تحميل قائمة الإشعارات.':'Could not load notification templates.');
+  }finally{setSending(false);}
  };
- const ar=language==='ar';
  return <section dir={ar?'rtl':'ltr'} className="space-y-4 text-slate-800">
   <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-   <div><h2 className="flex items-center gap-2 text-lg font-extrabold"><BellRing size={19} className="text-blue-600"/>{ar?'معاينة قوالب إشعارات البوت':'Bot notification template preview'}</h2><p className="mt-1 text-xs leading-5 text-slate-500">{ar?'المعاينة لا ترسل رسالة. الاختبار منفصل ويرسل بيانات نموذجية إلى محادثة المشرف فقط.':'Preview does not send a message. The separate test sends sample values to the admin chat only.'}</p></div>
-   <div className="flex flex-wrap gap-2">
-    <button type="button" onClick={()=>setLanguage(ar?'en':'ar')} className={soft}>{ar?'English':'العربية'}</button>
-    <button type="button" onClick={onBack} className={soft}><ArrowLeft size={15}/>{ar?'العودة إلى إدارة الإشعارات':'Back to notification sending'}</button>
-   </div>
+   <h2 className="flex items-center gap-2 text-lg font-extrabold"><BellRing size={19} className="text-blue-600"/>{ar?'معاينة إشعارات البوت':'Bot notification preview'}</h2>
+   <button type="button" onClick={onBack} className={soft}><ArrowLeft size={15}/>{ar?'العودة إلى إدارة الإشعارات':'Back to notification sending'}</button>
   </header>
   {error&&<p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</p>}
   {notice&&<p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{notice}</p>}
-  <div className="grid gap-4 xl:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.2fr)]">
-   <aside className="max-h-[72dvh] space-y-2 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3">
-    <h3 className="sticky top-0 bg-white px-2 py-2 text-sm font-extrabold">{ar?'القوالب':'Templates'}{!loading&&<span className="ms-2 text-xs font-medium text-slate-400">{catalog.length}</span>}</h3>
-    {loading?<p className="p-3 text-sm text-slate-500">{ar?'جارٍ التحميل…':'Loading…'}</p>:catalog.map(item=><button key={item.id} type="button" onClick={()=>{setSelected(item.id);setError('');setNotice('');}} className={`w-full rounded-xl border px-3 py-3 text-start transition ${selected===item.id?'border-blue-300 bg-blue-50 text-blue-900':'border-slate-100 bg-white hover:bg-slate-50'}`}>
-      <span className="block text-sm font-bold">{item.title[language]}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{item.description[language]}</span>
-     </button>)}
-   </aside>
-   <article className="min-w-0 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-     <div><h3 className="text-base font-extrabold">{selectedItem?.title[language]??(ar?'اختر قالبًا':'Choose a template')}</h3><p className="mt-1 text-xs text-slate-500">{ar?'معاينة فقط · بيانات المثال ليست معاملة حقيقية':'Preview only · sample values are not real transactions'}</p></div>
-     <button type="button" disabled={!preview||sending} onClick={()=>void testSend()} className={`${primary} min-h-10`}><Send size={15}/>{sending?(ar?'جارٍ الإرسال…':'Sending…'):(ar?'إرسال اختبار للمشرف':'Send admin test')}</button>
-    </div>
-    {preview? <div className="grid gap-4 lg:grid-cols-[minmax(160px,0.8fr)_minmax(0,1.2fr)]">
-      <div className="grid min-h-40 place-items-center overflow-hidden rounded-2xl bg-slate-950 p-3">
-       {preview.imageDataUrl?<img src={preview.imageDataUrl} alt={ar?'الصورة المرفقة في قالب الإشعار':'Notification template attachment'} className="max-h-72 max-w-full object-contain"/>:<p className="text-xs text-slate-300">{ar?'الصورة غير متاحة؛ سيُرسل نص الإشعار فقط.':'Image unavailable; the notification will be text-only.'}</p>}
-      </div>
-      <div className="min-w-0 space-y-3">
-       <div className="rounded-2xl bg-[#ecf4ff] p-4 text-sm leading-7 text-slate-800"><div dangerouslySetInnerHTML={{__html:preview.text}}/></div>
-       {preview.buttonUrl&&<a href={preview.buttonUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#1688e8] px-4 text-sm font-bold text-white">{ar?'فتح VidReward':'Open VidReward'}</a>}
-       {!preview.buttonUrl&&<p className="text-xs leading-5 text-slate-500">{ar?'زر فتح البوت غير ظاهر لأن اسم البوت غير مضبوط في الإعدادات.':'The bot button is hidden because the bot username is not configured.'}</p>}
-      </div>
-     </div>:<div className="grid min-h-56 place-items-center rounded-2xl bg-slate-50 text-sm text-slate-500">{ar?'جارٍ تجهيز المعاينة…':'Preparing preview…'}</div>}
-    <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs leading-5 text-amber-900"><RotateCcw size={15} className="mt-0.5 shrink-0"/>{ar?'معاينة القالب لا تنفّذ إجراءً ولا ترسل رسالة. زر الاختبار يرسل نسخة نموذجية إلى حساب المشرف المسجّل فقط، بعد التأكيد.':'Preview does not perform actions or send. The test button sends a sample to the authenticated admin account only, after confirmation.'}</div>
-   </article>
+  <div className="grid place-items-center gap-3 rounded-2xl border border-slate-200 bg-white p-8">
+   <button type="button" data-testid="button-send-all-notification-previews" disabled={sending} onClick={()=>void sendAll()} className={`${primary} min-h-12 min-w-48`}><Send size={16}/>{sending?(ar?'جارٍ الإرسال…':'Sending…'):(ar?'إرسال':'Send')}</button>
+   {progress&&<p className="text-xs font-semibold text-slate-500" dir="ltr">{progress.done} / {progress.total}</p>}
   </div>
  </section>;
 }
@@ -619,7 +604,7 @@ function NotificationPanel({reports,onSend}:{reports:Row[];onSend:(r:Record<stri
  <div className="flex flex-wrap gap-2"><button type="button" data-testid="button-send-notification" className={`${primary} min-h-11 w-full`} disabled={!title.trim()||!body.trim()||sending||imageBusy} onClick={()=>void send()}><Megaphone size={15}/>{sending?'جارٍ الإرسال…':image?'إرسال النص والصورة عبر البوت':'إرسال عبر البوت'}</button><button type="button" data-testid="button-clear-notification" className={soft} onClick={()=>{reset();setResult(null)}}>مسح المسودة</button></div></div></section><section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-4 font-extrabold">سجل الإشعارات</h2><div className="space-y-3">{reports.length?reports.map(r=><div key={r.id} className="rounded-xl bg-[#f7f9fc] p-3"><div className="flex justify-between gap-2"><b className="text-sm">{r.title}</b><Badge>{r.status}</Badge></div><p className="mt-1 text-xs text-slate-500">{r.body}</p>{r.hasImage&&<p className="mt-2 text-[11px] font-bold text-slate-500">مرفق صورة</p>}{r.buttonTitle&&<p className="mt-2 text-[11px] font-bold text-[#1557ee]">{r.buttonTitle}{r.link?` · ${r.link}`:''}</p>}<div className="mt-2 text-[10px] text-slate-400">{r.createdAt}</div></div>):<p className="rounded-xl bg-[#f7f9fc] p-5 text-center text-sm text-slate-400">لا توجد إشعارات مرسلة بعد</p>}</div></section></div>;
 }
 
-function Dialog({dialog,data,userBy,onClose,onConfirm,onConfirmAction,onDelete,onAction}:{dialog:{kind:string;id?:string|number};data:State;userBy:(id:number|undefined)=>User|undefined;onClose:()=>void;onConfirm:(id:any,patch:any,kind:string)=>Promise<boolean>;onConfirmAction:()=>void;onDelete:(id:number)=>Promise<boolean>;onAction:(cb:()=>Promise<boolean|void>|boolean|void,message?:string,successMessage?:string)=>void}) {
+function Dialog({dialog,data,userBy,onClose,onConfirm,onConfirmAction,onDelete,onDeleteCampaign,onAction}:{dialog:{kind:string;id?:string|number};data:State;userBy:(id:number|undefined)=>User|undefined;onClose:()=>void;onConfirm:(id:any,patch:any,kind:string)=>Promise<boolean>;onConfirmAction:()=>void;onDelete:(id:number)=>Promise<boolean>;onDeleteCampaign:(id:string)=>Promise<boolean>;onAction:(cb:()=>Promise<boolean|void>|boolean|void,message?:string,successMessage?:string)=>void}) {
  const [values,setValues]=useState<Record<string,any>>({}); const user=dialog.kind==='user'||dialog.kind==='user-edit'?userBy(Number(dialog.id)):undefined;
   const campaign=data.campaigns.find(x=>x.id===dialog.id);const proof=data.proofs.find(x=>x.id===dialog.id);
  useEffect(()=>{if(user)setValues({...user})},[dialog.id]);
@@ -629,7 +614,7 @@ function Dialog({dialog,data,userBy,onClose,onConfirm,onConfirmAction,onDelete,o
  const saveUserChanges=async()=>{if(!user||saving)return;const patch:Record<string,any>={};if(String(values.name??'').trim()!==String(user.name??'').trim())patch.name=values.name;if(String(values.username??'').replace(/^@/,'').trim()!==String(user.username??'').replace(/^@/,'').trim())patch.username=values.username;for(const key of ['advertiserBalance','earnedBalance'] as const){const raw=String(values[key]??'').trim();if(raw===''||Number(raw)!==Number(user[key]))patch[key]=raw}setSaving(true);try{await onConfirm(dialog.id,patch,dialog.kind)}finally{setSaving(false)}};
  let content:React.ReactNode=null;let heading='تفاصيل';
  if(dialog.kind==='user'||dialog.kind==='user-edit'){heading='ملف المستخدم';content=user&&<div className="space-y-3"><div className="grid grid-cols-2 gap-3"><div className="rounded-xl bg-slate-50 p-3"><small>معرّف Telegram</small><div className="font-mono font-bold">{user.id}</div></div><div className="rounded-xl bg-slate-50 p-3"><small>الحالة</small><div><Badge>{user.status}</Badge></div></div></div><div className="grid gap-3 sm:grid-cols-2">{field('name','الاسم')}{field('username','اسم المستخدم')}{field('advertiserBalance','رصيد المعلن','number')}{field('earnedBalance','الأرباح','number')}</div><div className="grid grid-cols-2 gap-3 text-xs"><p>تاريخ التسجيل<br/><b>{user.joinedAt}</b></p><p>آخر تسجيل دخول<br/><b>{user.lastLogin}</b></p><p>آخر نشاط<br/><b>{user.lastActive}</b></p><p>دُعي بواسطة<br/><b>{user.invitedBy}</b></p></div><div className="flex flex-wrap gap-2"><button className={primary} disabled={saving} onClick={()=>void saveUserChanges()}>{saving?'جارٍ الحفظ…':'حفظ التعديلات والأرصدة'}</button><button className={soft} onClick={()=>onAction(()=>save({status:user.status==='نشط'?'محظور':'نشط'}))}>{user.status==='نشط'?'حظر':'إلغاء الحظر'}</button><button className={`${btn} bg-rose-50 text-rose-700`} onClick={()=>onAction(()=>onDelete(user.id),'حذف هذا المستخدم نهائيًا مع كل بياناته (أرصدته وحملاته وسجلاته)؟ لا يمكن التراجع. إن أردت منعه فقط فاستخدم «حظر».','تم حذف المستخدم')}><Trash2 size={14}/> حذف المستخدم</button></div></div>}
- else if(dialog.kind==='campaign'){const isYt=campaign?.platform==='YouTube';const isTg=campaign?.platform==='Telegram';const embed=isYt?getEmbedUrl(String(campaign?.videoUrl??'')):'';const infoCell=(label:string,value:unknown)=><span className="rounded-lg bg-slate-50 px-2 py-1.5">{label}: <b className="text-slate-700">{String(value??'—')}</b></span>;heading=isYt?'مراجعة فيديو YouTube':isTg?'مراجعة حملة Telegram':'مراجعة حملة TikTok';content=campaign&&<div className="space-y-3"><div className="aspect-video overflow-hidden rounded-xl bg-slate-900">{isYt?(embed?<iframe title="معاينة فيديو الحملة" className="h-full w-full" src={embed} allow="encrypted-media; picture-in-picture" referrerPolicy="strict-origin-when-cross-origin"/>:<div className="grid h-full place-items-center text-xs text-white/70">لا تتوفر معاينة</div>):campaign.image?<img src={campaign.image} alt={campaign.title} className="h-full w-full object-cover"/>:<div className="grid h-full place-items-center text-xs text-white/70">لا توجد صورة للحملة</div>}</div><h3 className="font-bold">{campaign.title}</h3><div className="grid grid-cols-2 gap-2 text-xs text-slate-500">{infoCell('المنصة',campaign.platform)}{infoCell('الميزانية',`${campaign.budget} USDT`)}{isYt?<>{infoCell('المدة',`${campaign.duration} ثانية`)}{infoCell('CPM',campaign.cpm)}{infoCell('المشاهدات المطلوبة',campaign.requestedViews)}{infoCell('المشاهدات المنفذة',campaign.views)}</>:<>{infoCell(isTg?'المشتركون المستهدفون':'المتابعون المستهدفون',campaign.targetCount)}{infoCell(isTg?'انضموا':'أرسلوا إثباتًا',campaign.joinedCount)}{infoCell(isTg?'اكتملوا':'اعتُمدوا',campaign.completedCount)}</>}</div>{campaign.videoUrl&&<a href={campaign.videoUrl} target="_blank" rel="noreferrer" dir="ltr" className="block break-all rounded-lg bg-slate-50 px-2 py-1.5 text-left text-xs font-bold text-[#1557ee]">{campaign.videoUrl}</a>}<div className="flex flex-wrap gap-2">{['نشطة','مرفوضة','موقوفة'].map(status=><button key={status} className={status==='مرفوضة'?`${btn} bg-rose-50 text-rose-700`:soft} onClick={()=>status==='مرفوضة'?onAction(()=>save({status})):save({status})}>{status==='نشطة'?'اعتماد':status==='مرفوضة'?'رفض':'إيقاف مؤقت'}</button>)}</div></div>}
+ else if(dialog.kind==='campaign'){const isYt=campaign?.platform==='YouTube';const isTg=campaign?.platform==='Telegram';const embed=isYt?getEmbedUrl(String(campaign?.videoUrl??'')):'';const infoCell=(label:string,value:unknown)=><span className="rounded-lg bg-slate-50 px-2 py-1.5">{label}: <b className="text-slate-700">{String(value??'—')}</b></span>;heading=isYt?'مراجعة فيديو YouTube':isTg?'مراجعة حملة Telegram':'مراجعة حملة TikTok';content=campaign&&<div className="space-y-3"><div className="aspect-video overflow-hidden rounded-xl bg-slate-900">{isYt?(embed?<iframe title="معاينة فيديو الحملة" className="h-full w-full" src={embed} allow="encrypted-media; picture-in-picture" referrerPolicy="strict-origin-when-cross-origin"/>:<div className="grid h-full place-items-center text-xs text-white/70">لا تتوفر معاينة</div>):campaign.image?<img src={campaign.image} alt={campaign.title} className="h-full w-full object-cover"/>:<div className="grid h-full place-items-center text-xs text-white/70">لا توجد صورة للحملة</div>}</div><h3 className="font-bold">{campaign.title}</h3><div className="grid grid-cols-2 gap-2 text-xs text-slate-500">{infoCell('المنصة',campaign.platform)}{infoCell('الميزانية',`${campaign.budget} USDT`)}{isYt?<>{infoCell('المدة',`${campaign.duration} ثانية`)}{infoCell('CPM',campaign.cpm)}{infoCell('المشاهدات المطلوبة',campaign.requestedViews)}{infoCell('المشاهدات المنفذة',campaign.views)}</>:<>{infoCell(isTg?'المشتركون المستهدفون':'المتابعون المستهدفون',campaign.targetCount)}{infoCell(isTg?'انضموا':'أرسلوا إثباتًا',campaign.joinedCount)}{infoCell(isTg?'اكتملوا':'اعتُمدوا',campaign.completedCount)}</>}</div>{campaign.videoUrl&&<a href={campaign.videoUrl} target="_blank" rel="noreferrer" dir="ltr" className="block break-all rounded-lg bg-slate-50 px-2 py-1.5 text-left text-xs font-bold text-[#1557ee]">{campaign.videoUrl}</a>}<div className="flex flex-wrap gap-2">{['نشطة','مرفوضة','موقوفة'].map(status=><button key={status} className={status==='مرفوضة'?`${btn} bg-rose-50 text-rose-700`:soft} onClick={()=>status==='مرفوضة'?onAction(()=>save({status})):save({status})}>{status==='نشطة'?'اعتماد':status==='مرفوضة'?'رفض':'إيقاف مؤقت'}</button>)}<button type="button" data-testid="button-delete-campaign-permanently" className={`${btn} bg-rose-600 text-white`} onClick={()=>onAction(()=>onDeleteCampaign(String(campaign.id)),'حذف هذه الحملة نهائيًا مع كل سجلات إنجازها؟ لا يمكن التراجع. إن أردت إخفاءها مؤقتًا فاستخدم «إيقاف مؤقت».','تم حذف الحملة نهائيًا')}><Trash2 size={14}/> حذف الحملة نهائيًا</button></div></div>}
  else if(dialog.kind==='proof'){heading='صورة إثبات المهمة';content=proof&&<div className="max-h-[70vh] space-y-3 overflow-y-auto">{(Array.isArray(proof.images)&&proof.images.length?proof.images as string[]:[proof.image]).map((src,index)=><img key={index} src={src} alt={`صورة الإثبات ${index+1}`} className="max-h-[60vh] w-full rounded-xl object-contain"/>)}<p className="mt-3 text-xs text-slate-500">{userBy(proof.userId)?.name} · {proof.taskId}</p></div>}
  else if(dialog.kind==='reject-proof'){heading='رفض الإثبات';content=<div className="space-y-3"><label className="grid gap-1.5 text-xs font-bold">سبب الرفض<textarea value={values.reason??''} onChange={e=>setValues({...values,reason:e.target.value})} rows={3} className="rounded-xl border border-slate-200 p-3"/></label><button className={`${btn} bg-rose-600 text-white`} onClick={()=>onAction(()=>save({status:'مرفوض',rejectionReason:values.reason||'لم يطابق الإثبات المتطلبات'}))}>رفض الإثبات</button></div>}
   else {heading='تأكيد الإجراء';content=<div className="space-y-4"><p className="text-sm">{dialog.id}</p><div className="flex gap-2"><button className={`${btn} bg-rose-600 text-white`} onClick={onConfirmAction}>تأكيد</button><button className={soft} onClick={onClose}>إلغاء</button></div></div>}

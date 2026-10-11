@@ -604,7 +604,35 @@ export function AdsPage({
       // الإعلان الأول
       setMonetagFlow('first');
       notifyLoading();
-      const first = await showAd({ ymid: `${session.id}_1`, requestVar: `vidreward_${session.id}_1` });
+      // نحمّل الإعلان الثاني مسبقًا أثناء مشاهدة الأول حتى لا يتأخر ظهوره (الفشل هنا لا يوقف التدفق).
+      const secondOptions = { ymid: `${session.id}_2`, requestVar: `vidreward_${session.id}_2` };
+      const preloadSecond = () => {
+        try {
+          const preload = (showAd as unknown as (options: Record<string, string>) => Promise<unknown>)({ ...secondOptions, type: 'preload' });
+          return Promise.resolve(preload).then(() => true, () => false);
+        } catch {
+          return Promise.resolve(false);
+        }
+      };
+      // إن فشل الإعلان بسرعة (تعذّر تحميله وليس أن المستخدم أغلقه) نعيد المحاولة بدل إعلان "لم يكتمل".
+      const showWithRetry = async (options: { ymid: string; requestVar: string }, attempts: number): Promise<MonetagSdkResult> => {
+        let lastError: unknown = new Error('Ad was not valued');
+        for (let attempt = 0; attempt < attempts; attempt += 1) {
+          const startedAt = Date.now();
+          try {
+            const result = await showAd(options);
+            if (result?.reward_event_type === 'valued') return result;
+            lastError = new Error('Ad was not valued');
+          } catch (error) {
+            lastError = error;
+          }
+          if (Date.now() - startedAt > 5000 || attempt === attempts - 1) break;
+          await new Promise((resolve) => window.setTimeout(resolve, 1500));
+        }
+        throw lastError;
+      };
+      void preloadSecond();
+      const first = await showWithRetry({ ymid: `${session.id}_1`, requestVar: `vidreward_${session.id}_1` }, 2);
       if (first?.reward_event_type !== 'valued') throw new Error('First ad was not valued');
       // نُبلغ الخادم بإكمال الأول في الخلفية ونبدأ الثاني فورًا بدون انتظار.
       const firstReport = reportStep(1).then(() => true, () => false);
@@ -612,7 +640,8 @@ export function AdsPage({
       // الإعلان الثاني يبدأ تلقائيًا
       setMonetagFlow('second');
       notifyLoading();
-      const second = await showAd({ ymid: `${session.id}_2`, requestVar: `vidreward_${session.id}_2` });
+      await new Promise((resolve) => window.setTimeout(resolve, 600));
+      const second = await showWithRetry(secondOptions, 3);
       if (second?.reward_event_type !== 'valued') throw new Error('Second ad was not valued');
       bothWatched = true;
       setMonetagFlow('confirming');
