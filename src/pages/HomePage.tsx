@@ -36,6 +36,27 @@ import { AdminConsole } from '@/pages/AdminConsole';
 
 const WATCH_COMPLETION_RATIO = 0.95;
 
+function notificationStartDestination(): { mode: 'creator' | 'viewer'; screen: AppScreen } | null {
+  if (typeof window === 'undefined') return null;
+  const webApp = window.Telegram?.WebApp;
+  const initParams = webApp?.initDataUnsafe as { start_param?: string } | undefined;
+  const search = new URLSearchParams(window.location.search);
+  const payload = initParams?.start_param ?? search.get('tgWebAppStartParam') ?? search.get('startapp') ?? '';
+  if (payload === 'withdrawals') return { mode: 'viewer', screen: 'withdraw-history' };
+  if (payload === 'deposit') return { mode: 'creator', screen: 'deposit' };
+  if (payload === 'deposit-history') return { mode: 'creator', screen: 'deposit-history' };
+  if (payload === 'campaigns') return { mode: 'creator', screen: 'campaigns' };
+  if (payload === 'referrals') return { mode: 'viewer', screen: 'publish' };
+  if (payload === 'tiktok-tasks' || payload === 'proofs') return { mode: 'viewer', screen: 'tiktok-tasks' };
+  if (payload === 'telegram-tasks') return { mode: 'viewer', screen: 'telegram-tasks' };
+  if (payload === 'home') return null;
+  const task = /^task_(telegram|tiktok|youtube)_\d+$/.exec(payload);
+  if (task?.[1] === 'tiktok') return { mode: 'viewer', screen: 'tiktok-tasks' };
+  if (task?.[1] === 'telegram') return { mode: 'viewer', screen: 'telegram-tasks' };
+  if (task?.[1] === 'youtube') return { mode: 'viewer', screen: 'watch' };
+  return null;
+}
+
 type HomePageProps = {
   initialMode: 'creator' | 'viewer';
   initialScreen: 'watch' | 'add' | null;
@@ -44,12 +65,13 @@ type HomePageProps = {
 
 export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageProps) {
   const { t, language } = useLanguage();
+  const [notificationDestination] = useState(notificationStartDestination);
   const [browserEarningPage] = useState(() => new URLSearchParams(window.location.search).get('view') === 'earn');
-  const [mode, setMode] = useState<'creator' | 'viewer' | 'admin'>(() => browserEarningPage ? 'viewer' : initialMode);
+  const [mode, setMode] = useState<'creator' | 'viewer' | 'admin'>(() => browserEarningPage ? 'viewer' : notificationDestination?.mode ?? initialMode);
   const [adminEnabled, setAdminEnabled] = useState(false);
   const [screen, setScreen] = useState<AppScreen>(() => browserEarningPage
     ? 'watch'
-    : initialScreen ?? (initialMode === 'viewer' ? 'watch' : 'overview'));
+    : notificationDestination?.screen ?? initialScreen ?? (initialMode === 'viewer' ? 'watch' : 'overview'));
   const [telegramUser, setTelegramUser] = useState<TelegramUser | null>(() => getTelegramUser() ?? getTelegramUserFromHash());
   const [insideTelegram, setInsideTelegram] = useState(() => !browserEarningPage && Boolean(window.Telegram?.WebApp?.initData));
   const [videos, setVideos] = useState<Video[]>([]);

@@ -1,9 +1,10 @@
 import { Children, cloneElement, isValidElement, useEffect, useRef, useState, type ReactElement } from 'react';
-import { Activity, CircleDollarSign, Copy, Eye, Megaphone, Search, ShieldCheck, Trash2, Users, Wallet, X, Plus, Code2, RefreshCw, Pencil, Check, Monitor, Layers, ImagePlus } from 'lucide-react';
+import { Activity, CircleDollarSign, Copy, Eye, Megaphone, Search, ShieldCheck, Trash2, Users, Wallet, X, Plus, Code2, RefreshCw, Pencil, Check, Monitor, Layers, ImagePlus, BellRing, ArrowLeft, Send, RotateCcw } from 'lucide-react';
 import { saveLocalPricing, useLocalPricing, type LocalPricing, type PricingPlatform } from '@/legacy/pricing';
 import { getEmbedUrl } from '@/legacy/shared';
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api';
 import { buildAdsteraDocument, deleteAdsteraAd, useAdsteraAds, type AdProvider, type AdsteraAd, type AdsteraFormat } from '@/lib/adsteraAds';
+import { useLanguage, type Language } from '@/i18n';
 
 type User = { id: number; name: string; username: string; avatar: string; photoUrl?: string; advertiserBalance: number; earnedBalance: number; status: 'نشط' | 'محظور'; bannedBySystem?: boolean; joinedAt: string; lastLogin: string; lastActive: string; invitedBy: string };
 type Row = { id: string; userId?: number; amount?: number; createdAt?: string; status?: string; [key: string]: any };
@@ -13,7 +14,7 @@ type NotifyResult = { targeted: number; sent: number; failed: number; skipped?: 
 const SETTINGS_KEY = 'vidreward.admin.settings.v1';
 const defaultSettings: Record<string, any> = { binanceWithdrawMin: 1, web3WithdrawMin: 1, starsDepositMin: 1, web3DepositMin: 5, userShare: 20, platformShare: 10, durationMin: 10, durationMax: 80, cpmMin: 1.5, cpmMax: 4, telegramCpm: 2.2, tiktokCpm: 2.8, taskReward: 0.02, telegramTaskReward: 0.003, tiktokTaskReward: 0.01, monetagDailyLimit: 500, monetagReward: 0.0001, adsteraDailyLimit: 100, adsteraReward: 0.0001, web3Address: '', maintenance: false };
 const emptyState: State = { users: [], deposits: [], withdrawals: [], campaigns: [], proofs: [], ads: [], suspicious: [], adminAudit: [], settings: defaultSettings, reports: [] };
-const labels: Record<string, string> = { overview:'نظرة عامة', users:'مستخدمو Telegram', banned:'المستخدمون المحظورون', deposits:'الإيداعات', 'deposit-detail':'تفاصيل المعاملة', withdrawals:'السحوبات', campaigns:'الحملات', proofs:'إثباتات المهام', ads:'مخزون Adstera', 'ad-stats':'إحصائيات الإعلانات', settings:'الإعدادات', maintenance:'الصيانة', notifications:'الإشعارات', suspicious:'مستخدمون مشبوهون', audit:'سجل إجراءات الإدارة' };
+const labels: Record<string, string> = { overview:'نظرة عامة', users:'مستخدمو Telegram', banned:'المستخدمون المحظورون', deposits:'الإيداعات', 'deposit-detail':'تفاصيل المعاملة', withdrawals:'السحوبات', campaigns:'الحملات', proofs:'إثباتات المهام', ads:'مخزون Adstera', 'ad-stats':'إحصائيات الإعلانات', settings:'الإعدادات', maintenance:'الصيانة', notifications:'الإشعارات', 'notification-preview':'معاينة إشعارات البوت', suspicious:'مستخدمون مشبوهون', audit:'سجل إجراءات الإدارة' };
 const cx = (...classes: Array<string | undefined>) => classes.filter(Boolean).join(' ');
 const cell = 'px-4 py-1.5 text-right align-middle';
 const btn = 'inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition hover:-translate-y-px disabled:opacity-40';
@@ -81,6 +82,7 @@ function Field({ label, ...props }: { label: string } & React.InputHTMLAttribute
 function Badge({ children }: { children: React.ReactNode }) { const good = ['نشط','ناجح','معتمد','مفعّل','تمت المراجعة'].includes(String(children)); const bad = ['محظور','فاشل','مرفوض','موقوف'].includes(String(children)); return <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${good?'bg-emerald-50 text-emerald-700':bad?'bg-rose-50 text-rose-700':'bg-amber-50 text-amber-700'}`}>{children}</span>; }
 
 export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: string; onPageChange: (page: string) => void }) {
+ const { language: appLanguage } = useLanguage();
  const [data, setData] = useState<State>(getState);
  const pricing = useLocalPricing();
  const [page, setPage] = useState(() => activeScreen.startsWith('admin-') ? activeScreen.slice(6) : 'overview');
@@ -436,6 +438,7 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
     }} onPricingSave={nextPricing=>{saveLocalPricing(nextPricing);announce('تم تحديث الأسعار')}}/>;
     if(page==='maintenance') return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className={`p-5 sm:p-7 ${data.settings.maintenance?'bg-amber-50':'bg-emerald-50'}`}><span className={`grid h-12 w-12 place-items-center rounded-2xl ${data.settings.maintenance?'bg-amber-100 text-amber-700':'bg-emerald-100 text-emerald-700'}`}><Activity size={22}/></span><h2 className="mt-4 text-xl font-extrabold">{data.settings.maintenance?'الصيانة مفعّلة':'الخدمة تعمل بشكل طبيعي'}</h2><p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">{data.settings.maintenance?'الطلبات الجديدة للمستخدمين متوقفة مؤقتًا. يبقى دخول المشرف متاحًا حتى تنتهي الصيانة.':'فعّل الصيانة لإيقاف واجهات المستخدم مؤقتًا مع الإبقاء على وصول المشرف إلى لوحة الإدارة.'}</p><button className={`${btn} mt-5 min-h-11 ${data.settings.maintenance?'bg-emerald-600 text-white':'bg-amber-500 text-white'}`} onClick={()=>{const enabled=!Boolean(data.settings.maintenance);apiPatch<{maintenance:boolean}>('admin/settings/maintenance',{enabled}).then(result=>{setData(d=>({...d,settings:{...d.settings,maintenance:result.maintenance}}));announce(enabled?'تم تفعيل وضع الصيانة':'تم إنهاء الصيانة')}).catch(()=>announce('تعذر تغيير وضع الصيانة'))}}>{data.settings.maintenance?'إنهاء الصيانة':'بدء الصيانة'}</button></div><div className="p-5 text-xs leading-6 text-slate-500">يُحفظ هذا الخيار على قاعدة البيانات، ويُطبّق من الخادم على طلبات المستخدمين. يستطيع المشرف متابعة الإدارة أثناء الصيانة.</div></section>;
     if(page==='notifications') return <NotificationPanel reports={data.reports} onSend={async r=>{const {image,...reportFields}=r;const result=await apiPost<NotifyResult>('admin/notifications/send',{title:r.title,message:r.message,recipientMode:r.recipientMode,userIds:r.userIds,buttonText:r.buttonText,buttonUrl:r.buttonUrl,image:image??undefined});const report={...reportFields,hasImage:Boolean(image),id:`NTF-${Date.now()}`,createdAt:new Date().toLocaleString('ar'),status:result.sent>0?`أُرسل ${result.sent} من ${result.targeted}${result.failed?` · تعذّر ${result.failed}`:''}`:`فشل الإرسال (${result.failed})`};setData(d=>({...d,reports:[report,...d.reports].slice(0,50)}));announce(result.sent>0?`تم إرسال الإشعار إلى ${result.sent} مستخدم${result.failed?` · تعذّر ${result.failed}`:''}`:'فشل الإرسال إلى جميع المستلمين');return result}}/>;
+    if(page==='notification-preview') return <NotificationPreviewPanel appLanguage={appLanguage} onBack={()=>onPageChange('notifications')}/>;
    if(page==='audit') return <div className="space-y-4">{panel(<p className="text-xs leading-5 text-slate-500">آخر 500 تغيير حالة نفّذه مشرف محفوظة على الخادم، مع المسؤول والقسم والسجل والحالة الجديدة.</p>)}{table(['الوقت','المسؤول','القسم','معرّف السجل','الحالة الجديدة'],data.adminAudit.filter(r=>!query||[r.adminId,r.collection,r.recordId,r.newStatus].some(value=>String(value??'').toLowerCase().includes(query.toLowerCase()))).map(r=><tr key={r.id} className="border-b border-slate-50"><td className={cell}>{r.createdAt}</td><td className={cell}>{userBy(Number(r.adminId))?.name || r.adminId}</td><td className={cell}>{({users:'المستخدمون',deposits:'الإيداعات',withdrawals:'السحوبات',campaigns:'الحملات',proofs:'الإثباتات',suspicious:'الإشارات المشبوهة'} as Record<string,string>)[String(r.collection)] || r.collection}</td><td className={cell}>{r.recordId}</td><td className={cell}><Badge>{r.newStatus}</Badge></td></tr>))}</div>;
   return <div className="space-y-4">{panel(<div className="flex gap-3">{search}{statusSelect(['مفتوح','تمت المراجعة'])}</div>)}{table(['الإشارة','المستخدم','نوع الإشارة','الوقت','الحالة','الإجراء'],rowData('suspicious').map(r=><tr key={r.id} className="border-b border-slate-50"><td className={cell}>{r.id}</td><td className={cell}>{userBy(r.userId)?.name} · {r.userId}</td><td className={cell}>{r.attempt}</td><td className={cell}>{r.createdAt}</td><td className={cell}><Badge>{r.status}</Badge></td><td className={cell}>{action('حظر المستخدم',()=>confirm('حظر هذا المستخدم؟',async()=>{const banned=await updateRows('users',r.userId as number,{status:'محظور'});if(banned)await updateRows('suspicious',r.id,{status:'تمت المراجعة'});return banned},'تم حظر المستخدم'),true)}</td></tr>))}</div>;
  };
@@ -447,6 +450,82 @@ export function AdminConsole({ activeScreen, onPageChange }: { activeScreen: str
   {toast&&<div role="status" className="fixed bottom-20 right-4 z-[110] rounded-xl bg-[#12234b] px-4 py-3 text-sm font-bold text-white shadow-xl">{toast}</div>}
   {dialog&&<Dialog dialog={dialog} data={data} userBy={userBy} onClose={()=>setDialog(null)} onConfirmAction={async()=>{const run=pendingAction;const successMessage=pendingSuccessMessage;setPendingAction(null);setDialog(null);try{const result=await run?.();if(result!==false)announce(successMessage)}catch{announce('تعذر تنفيذ الإجراء')}}} onConfirm={async(id,patch,kind)=>{let saved=true;if(kind==='user-edit'||kind==='user'){saved=await saveUserPatch(id as number,patch)}else if(kind==='reject-proof'){saved=await updateRows('proofs',id as string,patch)}else if(kind==='campaign'){saved=await updateRows('campaigns',id as string,patch)}if(saved){setDialog(null);announce('تم حفظ التغيير')}return saved}} onDelete={deleteUser} onAction={(cb,message,successMessage)=>{confirm(message??'تأكيد الإجراء؟',cb,successMessage)}}/>}
  </main>;
+}
+
+type NotificationCatalogItem = {
+ id: string;
+ category: string;
+ image: string;
+ title: Record<Language, string>;
+ description: Record<Language, string>;
+};
+type NotificationPreview = {
+ type: string;
+ text: string;
+ imageDataUrl: string | null;
+ imageAvailable: boolean;
+ buttonUrl: string | null;
+};
+
+function NotificationPreviewPanel({appLanguage,onBack}:{appLanguage:Language;onBack:()=>void}) {
+ const [language,setLanguage]=useState<Language>(appLanguage);
+ const [catalog,setCatalog]=useState<NotificationCatalogItem[]>([]);
+ const [selected,setSelected]=useState('');
+ const [preview,setPreview]=useState<NotificationPreview|null>(null);
+ const [loading,setLoading]=useState(true);
+ const [sending,setSending]=useState(false);
+ const [error,setError]=useState('');
+ const [notice,setNotice]=useState('');
+ useEffect(()=>{let active=true;apiGet<NotificationCatalogItem[]>('admin/notifications/catalog').then(items=>{if(!active)return;setCatalog(items);setSelected(items[0]?.id??'');}).catch(()=>{if(active)setError(appLanguage==='ar'?'تعذر تحميل قائمة الإشعارات.':'Could not load notification templates.');}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[appLanguage]);
+ useEffect(()=>{if(!selected)return;let active=true;setPreview(null);apiGet<NotificationPreview>(`admin/notifications/catalog?type=${encodeURIComponent(selected)}&language=${language}`).then(item=>{if(active)setPreview(item);}).catch(()=>{if(active)setError(language==='ar'?'تعذر تحميل معاينة القالب.':'Could not load the template preview.');});return()=>{active=false;};},[selected,language]);
+ const selectedItem=catalog.find(item=>item.id===selected);
+ const testSend=async()=>{
+  const confirmed=window.confirm(language==='ar'
+   ?'سيُرسل هذا القالب التجريبي إلى محادثتك الخاصة مع البوت بصفة المشرف. هل تريد المتابعة؟'
+   :'Send this sample template to your private bot chat as the authenticated admin?');
+  if(!confirmed)return;
+  setSending(true);setError('');setNotice('');
+  try{await apiPost<{sent:boolean}>('admin/notifications/test',{type:selected,language});setNotice(language==='ar'?'أُرسل الاختبار إلى محادثة المشرف.':'Test message sent to the admin chat.');}
+  catch{setError(language==='ar'?'تعذر إرسال الاختبار. تأكد من بدء المحادثة مع البوت.':'Test could not be delivered. Make sure you have started a chat with the bot.');}
+  finally{setSending(false);}
+ };
+ const ar=language==='ar';
+ return <section dir={ar?'rtl':'ltr'} className="space-y-4 text-slate-800">
+  <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+   <div><h2 className="flex items-center gap-2 text-lg font-extrabold"><BellRing size={19} className="text-blue-600"/>{ar?'معاينة قوالب إشعارات البوت':'Bot notification template preview'}</h2><p className="mt-1 text-xs leading-5 text-slate-500">{ar?'المعاينة لا ترسل رسالة. الاختبار منفصل ويرسل بيانات نموذجية إلى محادثة المشرف فقط.':'Preview does not send a message. The separate test sends sample values to the admin chat only.'}</p></div>
+   <div className="flex flex-wrap gap-2">
+    <button type="button" onClick={()=>setLanguage(ar?'en':'ar')} className={soft}>{ar?'English':'العربية'}</button>
+    <button type="button" onClick={onBack} className={soft}><ArrowLeft size={15}/>{ar?'العودة إلى إدارة الإشعارات':'Back to notification sending'}</button>
+   </div>
+  </header>
+  {error&&<p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</p>}
+  {notice&&<p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{notice}</p>}
+  <div className="grid gap-4 xl:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.2fr)]">
+   <aside className="max-h-[72dvh] space-y-2 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3">
+    <h3 className="sticky top-0 bg-white px-2 py-2 text-sm font-extrabold">{ar?'القوالب':'Templates'}{!loading&&<span className="ms-2 text-xs font-medium text-slate-400">{catalog.length}</span>}</h3>
+    {loading?<p className="p-3 text-sm text-slate-500">{ar?'جارٍ التحميل…':'Loading…'}</p>:catalog.map(item=><button key={item.id} type="button" onClick={()=>{setSelected(item.id);setError('');setNotice('');}} className={`w-full rounded-xl border px-3 py-3 text-start transition ${selected===item.id?'border-blue-300 bg-blue-50 text-blue-900':'border-slate-100 bg-white hover:bg-slate-50'}`}>
+      <span className="block text-sm font-bold">{item.title[language]}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{item.description[language]}</span>
+     </button>)}
+   </aside>
+   <article className="min-w-0 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+     <div><h3 className="text-base font-extrabold">{selectedItem?.title[language]??(ar?'اختر قالبًا':'Choose a template')}</h3><p className="mt-1 text-xs text-slate-500">{ar?'معاينة فقط · بيانات المثال ليست معاملة حقيقية':'Preview only · sample values are not real transactions'}</p></div>
+     <button type="button" disabled={!preview||sending} onClick={()=>void testSend()} className={`${primary} min-h-10`}><Send size={15}/>{sending?(ar?'جارٍ الإرسال…':'Sending…'):(ar?'إرسال اختبار للمشرف':'Send admin test')}</button>
+    </div>
+    {preview? <div className="grid gap-4 lg:grid-cols-[minmax(160px,0.8fr)_minmax(0,1.2fr)]">
+      <div className="grid min-h-40 place-items-center overflow-hidden rounded-2xl bg-slate-950 p-3">
+       {preview.imageDataUrl?<img src={preview.imageDataUrl} alt={ar?'الصورة المرفقة في قالب الإشعار':'Notification template attachment'} className="max-h-72 max-w-full object-contain"/>:<p className="text-xs text-slate-300">{ar?'الصورة غير متاحة؛ سيُرسل نص الإشعار فقط.':'Image unavailable; the notification will be text-only.'}</p>}
+      </div>
+      <div className="min-w-0 space-y-3">
+       <div className="rounded-2xl bg-[#ecf4ff] p-4 text-sm leading-7 text-slate-800"><div dangerouslySetInnerHTML={{__html:preview.text}}/></div>
+       {preview.buttonUrl&&<a href={preview.buttonUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#1688e8] px-4 text-sm font-bold text-white">{ar?'فتح VidReward':'Open VidReward'}</a>}
+       {!preview.buttonUrl&&<p className="text-xs leading-5 text-slate-500">{ar?'زر فتح البوت غير ظاهر لأن اسم البوت غير مضبوط في الإعدادات.':'The bot button is hidden because the bot username is not configured.'}</p>}
+      </div>
+     </div>:<div className="grid min-h-56 place-items-center rounded-2xl bg-slate-50 text-sm text-slate-500">{ar?'جارٍ تجهيز المعاينة…':'Preparing preview…'}</div>}
+    <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs leading-5 text-amber-900"><RotateCcw size={15} className="mt-0.5 shrink-0"/>{ar?'معاينة القالب لا تنفّذ إجراءً ولا ترسل رسالة. زر الاختبار يرسل نسخة نموذجية إلى حساب المشرف المسجّل فقط، بعد التأكيد.':'Preview does not perform actions or send. The test button sends a sample to the authenticated admin account only, after confirmation.'}</div>
+   </article>
+  </div>
+ </section>;
 }
 
 function SettingsPanel({values,onSave,pricing,onPricingSave}:{values:Record<string,any>;onSave:(v:Record<string,any>)=>Promise<void>;pricing:LocalPricing;onPricingSave:(pricing:LocalPricing)=>void}) {
