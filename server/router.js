@@ -23,6 +23,7 @@ import {
   setTaskRewardSettings,
   adminAdStats,
   deleteUser,
+  deleteCampaignAsAdmin,
 } from './admin.js';
 import { getTaskRewardSettings } from './settings.js';
 import {
@@ -196,6 +197,11 @@ export async function dispatch(req, res) {
       const id = readPositiveInteger(segments[2], Number.MAX_SAFE_INTEGER);
       if (!id) throw new HttpError(400, 'Invalid request');
       return deleteUser(req, res, id);
+    }
+    if (resource === 'admin' && segments[1] === 'campaigns' && segments.length === 3) {
+      const id = readPositiveInteger(segments[2], Number.MAX_SAFE_INTEGER);
+      if (!id) throw new HttpError(400, 'Invalid request');
+      return deleteCampaignAsAdmin(req, res, id);
     }
     if (resource === 'campaigns' && segments.length === 2) {
       const id = readPositiveInteger(segments[1], Number.MAX_SAFE_INTEGER);

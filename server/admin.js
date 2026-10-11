@@ -383,6 +383,21 @@ export async function adminAdStats(req, res) {
   });
 }
 
+export async function deleteCampaignAsAdmin(req, res, campaignId) {
+  const admin = await requireAdmin(req);
+  let rows;
+  try {
+    // completions تُحذف تلقائيًا (ON DELETE CASCADE) وطلبات الحملة يُفصل ارتباطها (SET NULL).
+    rows = await sql.query(`DELETE FROM vr_campaigns WHERE id = $1 RETURNING id::text AS id`, [campaignId]);
+  } catch (error) {
+    console.error('Delete campaign failed:', error instanceof Error ? error.message : 'unknown');
+    throw new HttpError(409, 'تعذر حذف الحملة لوجود سجلات مرتبطة بها. يمكنك إيقافها بدلًا من ذلك.');
+  }
+  if (!rows.length) throw new HttpError(404, 'Not found');
+  await recordAdminAction(admin.id, 'campaigns', `CMP-${campaignId}`, 'deleted');
+  ok(res, { id: rows[0].id });
+}
+
 export async function deleteUser(req, res, userId) {
   const admin = await requireAdmin(req);
   if (isAdmin(userId)) throw new HttpError(400, 'لا يمكن حذف حساب مدير');
@@ -508,7 +523,7 @@ export async function adminAction(req, res, collection, id) {
       transactionId: withdrawal.transactionId,
       reason: stored === 'مرفوض' ? readText(body.reason, 300) : '',
     }, { eventId: `${withdrawal.id}:${stored}` });
-    const proofChannel = process.env.TELEGRAM_PAYMENT_PROOFS_CHAT_ID;
+    const proofChannel = process.env.TELEGRAM_PAYMENT_PROOFS_CHAT_ID || '@VidrewardPayments';
     if (stored === 'تم' && withdrawal.transactionId && proofChannel) {
       await sendAdminChannelNotification('payment_proof_admin', proofChannel, {
         firstName: userInfo.firstName,
