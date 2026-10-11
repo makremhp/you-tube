@@ -50,8 +50,8 @@ export function ViewerView({
         </div>
         <div data-testid="viewer-summary-rewards" className="flex h-10 min-w-0 items-center gap-2 rounded-xl border border-emerald-100 bg-[#f6fcfb] px-2.5 shadow-[var(--shadow-soft)] sm:px-3">
           <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-[#eafbf8] text-[#159b89]"><DollarSign className="h-3.5 w-3.5" /></span>
-          <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-slate-500 sm:text-[11px]">إجمالي المكافآت</span>
-          <strong className="shrink-0 text-[13px] font-bold tabular-nums text-[#159b89]" aria-label={`${formatUsd(totalVideoRewards)} إجمالي المكافآت`}>{formatUsd(totalVideoRewards)}</strong>
+          <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-slate-500 sm:text-[11px]">ربح</span>
+          <strong className="shrink-0 text-[13px] font-bold tabular-nums text-[#159b89]" aria-label={`${formatUsd(totalVideoRewards)} ربح`}>{formatUsd(totalVideoRewards)}</strong>
         </div>
       </section>
       {insideTelegram ? (

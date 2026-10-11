@@ -74,10 +74,10 @@ export function AddPlatformCampaign({
       setBotCheckStatus('verified');
       setBotVerifiedChannel(channelUrl);
       setBotCheckMessage(`تم التحقق من @${result.botUsername ?? 'bot'} كمشرف على ${result.channelTitle || 'القناة'}.`);
-    } catch (error) {
+    } catch {
       if (requestId !== botCheckRequestId.current) return;
       setBotCheckStatus('error');
-      setBotCheckMessage(error instanceof Error ? error.message : 'تعذر التحقق. تأكد من إضافة البوت مشرفًا ثم حاول مجددًا.');
+      setBotCheckMessage('البوت ليس مشرفًا في القناة. أضفه مشرفًا ثم أعد التحقق.');
     }
   };
 
@@ -177,14 +177,14 @@ export function AddPlatformCampaign({
           </div>
 
           {isTelegram ? (
-            <div className={`mt-6 rounded-2xl border p-4 ${botCheckStatus === 'verified' ? 'border-emerald-200 bg-emerald-50' : botCheckStatus === 'error' ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-[#f8faff]'}`}>
+            <div className={`mt-6 h-[92px] overflow-hidden rounded-2xl border p-4 ${botCheckStatus === 'verified' ? 'border-emerald-200 bg-emerald-50' : botCheckStatus === 'error' ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-[#f8faff]'}`}>
               <div className="flex items-start gap-3">
                 <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${botCheckStatus === 'verified' ? 'bg-white text-[#159b89]' : botCheckStatus === 'error' ? 'bg-white text-amber-700' : 'bg-white text-[#229ED9]'}`}>
                   {botCheckStatus === 'checking' ? <LoaderCircle className="h-5 w-5 animate-spin" /> : botCheckStatus === 'verified' ? <CheckCircle2 className="h-5 w-5" /> : botCheckStatus === 'error' ? <AlertCircle className="h-5 w-5" /> : <ShieldCheck className="h-5 w-5" />}
                 </span>
                 <div className="min-w-0 flex-1">
                   <h3 className="text-xs font-bold text-[#12234b]">تحقق تلقائي من البوت</h3>
-                  <p role="status" className="mt-1 text-[10px] leading-5 text-slate-600">{botCheckMessage || 'أدخل رابط القناة؛ سيتحقق الخادم من أن البوت مضبوط ومشرف فيها.'}</p>
+                  <p role="status" title={botCheckMessage || undefined} className="mt-1 line-clamp-2 text-[10px] leading-5 text-slate-600">{botCheckMessage || 'أدخل رابط القناة؛ سيتحقق الخادم من أن البوت مضبوط ومشرف فيها.'}</p>
                 </div>
                 {botCheckStatus === 'error' && validLink && <Button type="button" data-testid="button-retry-telegram-bot-check" onClick={() => void verifyTelegramBot(link)} variant="secondary" size="sm" className="shrink-0 border-slate-200 bg-white text-[10px] font-bold">إعادة التحقق</Button>}
               </div>

@@ -34,6 +34,8 @@ import { WithdrawPage } from '@/pages/WithdrawPage';
 import { AdsPage } from '@/pages/AdsPage';
 import { AdminConsole } from '@/pages/AdminConsole';
 
+const WATCH_COMPLETION_RATIO = 0.95;
+
 type HomePageProps = {
   initialMode: 'creator' | 'viewer';
   initialScreen: 'watch' | 'add' | null;
@@ -138,8 +140,10 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       setViewerBalance(Number(balance?.viewerBalance ?? 0));
       setVideos(ownCampaigns.filter((row) => row.platform === 'youtube').map(toVideo));
       setPlatformCampaigns(ownCampaigns.filter((row) => row.platform !== 'youtube').map(toPromotion));
-      setTaskVideos(tasks.filter((row) => row.platform === 'youtube').map(toVideo));
-      setTaskCampaigns(tasks.filter((row) => row.platform !== 'youtube').map(toPromotion));
+      // الحملات الموقوفة أو غير النشطة لا تظهر للمستخدمين في المهام النشطة.
+      const activeTasks = tasks.filter((row) => row.status === 'نشط');
+      setTaskVideos(activeTasks.filter((row) => row.platform === 'youtube').map(toVideo));
+      setTaskCampaigns(activeTasks.filter((row) => row.platform !== 'youtube').map(toPromotion));
       const completedIds = new Set(tasks.filter((row) => row.platform === 'youtube' && row.completed).map((row) => Number(row.id)));
       creditedVideosRef.current = new Set([...creditedVideosRef.current, ...completedIds]);
       setCompletedVideoIds(completedIds);
@@ -189,6 +193,30 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       window.removeEventListener('focus', tick);
     };
   }, [refreshBalance]);
+
+  // تحديث قائمة المهام النشطة دوريًا: عند إيقاف المعلن لحملة تختفي من شاشة المستخدمين خلال ثوانٍ.
+  const refreshTasks = useCallback(async () => {
+    if (!window.Telegram?.WebApp?.initData) return;
+    try {
+      const tasks = await apiGet<ApiCampaignRow[]>('tasks');
+      const activeTasks = tasks.filter((row) => row.status === 'نشط');
+      setTaskVideos(activeTasks.filter((row) => row.platform === 'youtube').map(toVideo));
+      setTaskCampaigns(activeTasks.filter((row) => row.platform !== 'youtube').map(toPromotion));
+    } catch {
+      // سيُعاد التحديث في الدورة التالية.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (mode !== 'viewer') return;
+    const tick = () => { if (document.visibilityState === 'visible') void refreshTasks(); };
+    const timer = window.setInterval(tick, 15000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [mode, refreshTasks]);
 
   // تحديث حالة الإثباتات قيد المراجعة دوريًا حتى يظهر قبول/رفض الإدارة دون إعادة فتح التطبيق.
   const hasPendingProof = taskProofs.some((proof) => proof.status === 'قيد المراجعة');
@@ -312,12 +340,37 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     return () => { active = false; };
   }, [refreshData, telegramUser?.id, notify]);
 
+  // يُحسب وقت المشاهدة من لحظة الضغط على «فتح الفيديو» (لا من حدث الإخفاء فقط)،
+  // لأن Telegram على بعض الأجهزة لا يُطلق visibilitychange عند فتح رابط خارجي.
+  // نسبة الإكمال نفسها التي يعتمدها الخادم (MIN_WATCH_TOLERANCE) كي لا يختلف قبول العميل عن الخادم.
+  const finishWatchSegment = (video: Video, now = Date.now()) => {
+    const startedAt = watchSegmentStartedRef.current;
+    if (startedAt === null) return;
+    const requiredMs = video.duration * 1000;
+    const segmentElapsed = Math.max(0, now - startedAt);
+    watchSegmentStartedRef.current = null;
+    externalWatchPendingRef.current = false;
+    setIsPlaying(false);
+
+    if (segmentElapsed < requiredMs * WATCH_COMPLETION_RATIO) {
+      watchElapsedRef.current = 0;
+      setProgress(0);
+      saveWatchSession(video, 0, 'paused', now);
+      notify('warning', 'المدة غير مكتملة', 'عد إلى فيديو YouTube وأكمل المدة المطلوبة من البداية؛ تم تصفير عدّاد المشاهدة.');
+      return;
+    }
+
+    watchElapsedRef.current = requiredMs;
+    setProgress(video.duration);
+    saveWatchSession(video, requiredMs, 'completed', now);
+  };
+
   useEffect(() => {
+    if (!selectedVideo) return;
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         if (
           externalWatchPendingRef.current &&
-          selectedVideo &&
           watchSegmentStartedRef.current === null &&
           !creditedVideosRef.current.has(selectedVideo.id)
         ) {
@@ -333,33 +386,11 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
         return;
       }
 
-      if (document.visibilityState === 'visible' && selectedVideo && watchSegmentStartedRef.current !== null) {
-        const returnedAt = Date.now();
-        const segmentElapsed = Math.max(0, returnedAt - watchSegmentStartedRef.current);
-        const requiredMs = selectedVideo.duration * 1000;
-        const elapsed = Math.min(
-          requiredMs,
-          watchElapsedRef.current + segmentElapsed,
-        );
-        watchSegmentStartedRef.current = null;
-        externalWatchPendingRef.current = false;
-        setIsPlaying(false);
-
-        if (segmentElapsed < requiredMs) {
-          watchElapsedRef.current = 0;
-          setProgress(0);
-          saveWatchSession(selectedVideo, 0, 'paused', returnedAt);
-          notify('warning', 'المدة غير مكتملة', 'عد إلى فيديو YouTube وأكمل المدة المطلوبة من البداية؛ تم تصفير عدّاد المشاهدة.');
-          return;
-        }
-
-        watchElapsedRef.current = elapsed;
-        setProgress(Math.floor(elapsed / 1000));
-        saveWatchSession(selectedVideo, elapsed, elapsed >= selectedVideo.duration * 1000 ? 'completed' : 'paused');
-        if (elapsed < requiredMs) {
-          notify('warning', 'الإعلان غير مكتمل', 'تم حفظ تقدم المشاهدة. ارجع وأكمل الوقت المطلوب لاستلام المكافأة.');
-        }
-      }
+      const startedAt = watchSegmentStartedRef.current;
+      if (startedAt === null) return;
+      // أحداث focus/visible الوهمية بعد الضغط مباشرة (نافذة منبثقة مثلًا) لا تُعدّ عودة حقيقية.
+      if (Date.now() - startedAt < 1500) return;
+      finishWatchSegment(selectedVideo);
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleVisibilityChange);
@@ -368,6 +399,22 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       window.removeEventListener('focus', handleVisibilityChange);
     };
   }, [selectedVideo]);
+
+  // أثناء احتساب المشاهدة: حدّث الشريط كل ثانية، وأكمل تلقائيًا عند بلوغ المدة
+  // حتى لو بقيت الصفحة ظاهرة ولم يصل أي حدث عودة من المتصفح.
+  useEffect(() => {
+    if (!selectedVideo || !isPlaying) return;
+    const video = selectedVideo;
+    const timer = window.setInterval(() => {
+      const startedAt = watchSegmentStartedRef.current;
+      if (startedAt === null || document.visibilityState !== 'visible') return;
+      const elapsed = Date.now() - startedAt;
+      const requiredMs = video.duration * 1000;
+      setProgress(Math.min(video.duration, Math.floor(elapsed / 1000)));
+      if (elapsed >= requiredMs * WATCH_COMPLETION_RATIO) finishWatchSegment(video);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [selectedVideo, isPlaying]);
 
   const completed = Boolean(selectedVideo && progress >= selectedVideo.duration);
   const viewerCount = useMemo(() => taskVideos.filter((video) => video.status === 'نشط').length, [taskVideos]);
@@ -484,17 +531,23 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       setSelectedCampaignDetail({ campaign: next });
     }
   };
-  const deleteCampaignDetail = async () => {
-    const targetId = selectedCampaignDetail?.video?.id ?? selectedCampaignDetail?.campaign?.id;
-    if (targetId === undefined) return;
+  const deleteCampaignById = async (targetId: number | string): Promise<boolean> => {
     try {
       await apiDelete(`campaigns/${targetId}`);
       await refreshData();
-      setSelectedCampaignDetail(null);
-      setScreen('campaigns');
       notify('success', 'تم حذف الإعلان', 'تمت إزالة الإعلان من قائمتك.');
+      return true;
     } catch {
       notify('warning', 'تعذر حذف الإعلان', 'لم يحذف الخادم الإعلان. حاول مرة أخرى.');
+      return false;
+    }
+  };
+  const deleteCampaignDetail = async () => {
+    const targetId = selectedCampaignDetail?.video?.id ?? selectedCampaignDetail?.campaign?.id;
+    if (targetId === undefined) return;
+    if (await deleteCampaignById(targetId)) {
+      setSelectedCampaignDetail(null);
+      setScreen('campaigns');
     }
   };
 
@@ -585,8 +638,8 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     notify('warning', 'انتهت صلاحية الفاتورة', 'لم يصل تحويل مؤكد قبل انتهاء مدة الفاتورة.');
   };
 
-  const creditViewer = async (video: Video) => {
-    if (creditedVideosRef.current.has(video.id)) return;
+  const creditViewer = async (video: Video): Promise<boolean> => {
+    if (creditedVideosRef.current.has(video.id)) return true;
     creditedVideosRef.current.add(video.id);
     try {
       const result = await apiPost<{ reward: number }>(`tasks/${video.id}/complete`);
@@ -594,9 +647,14 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       saveWatchSession(video, video.duration * 1000, 'completed');
       notify('success', 'تمت إضافة المكافأة', `أضيفت ${formatUsd(result.reward)} إلى رصيدك بعد إكمال المدة المطلوبة.`);
       void refreshData();
-    } catch {
+      return true;
+    } catch (error) {
       creditedVideosRef.current.delete(video.id);
-      notify('warning', 'تعذر احتساب المكافأة', 'لم يؤكد الخادم اكتمال المشاهدة. أكمل المدة كاملة ثم حاول مرة أخرى.');
+      const detail = error instanceof ApiError && error.status === 409
+        ? 'لم يؤكد الخادم اكتمال المدة بعد. انتظر قليلًا ثم اضغط تحقق مرة أخرى.'
+        : 'تعذر الاتصال بالخادم. اضغط تحقق مرة أخرى.';
+      notify('warning', 'تعذر احتساب المكافأة', detail);
+      return false;
     }
   };
 
@@ -666,13 +724,13 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
                 : screen === 'deposit-history' && mode === 'creator' ? <DepositHistoryPage records={depositHistory} onDeposit={() => setScreen('deposit')} />
                 : screen === 'withdraw' && mode === 'viewer' ? <WithdrawPage viewerBalance={viewerBalance} telegramUser={telegramUser} onWithdraw={withdrawEarnings} />
                   : screen === 'withdraw-history' && mode === 'viewer' ? <WithdrawHistoryPage records={withdrawHistory} onWithdraw={() => setScreen('withdraw')} />
-             : screen === 'campaigns' && mode === 'creator' ? <CampaignsPage videos={videos} platformCampaigns={platformCampaigns} telegramUser={telegramUser} tab={tab} onTab={setTab} onAdd={() => setScreen('add')} onDetails={(item) => { setSelectedCampaignDetail(item); setScreen('campaign-detail'); }} />
+             : screen === 'campaigns' && mode === 'creator' ? <CampaignsPage videos={videos} platformCampaigns={platformCampaigns} telegramUser={telegramUser} tab={tab} onTab={setTab} onAdd={() => setScreen('add')} onDetails={(item) => { setSelectedCampaignDetail(item); setScreen('campaign-detail'); }} onDelete={async (id) => { await deleteCampaignById(id); }} />
                : screen === 'campaign-detail' && mode === 'creator' ? <CampaignDetailsPage video={selectedCampaignDetail?.video} campaign={selectedCampaignDetail?.campaign} onBack={() => setScreen('campaigns')} onSaveVideo={(video) => { saveCampaignDetailVideo(video); setSelectedCampaignDetail({ video }); }} onSaveCampaign={(campaign) => { saveCampaignDetailPlatform(campaign); setSelectedCampaignDetail({ campaign }); }} onDelete={deleteCampaignDetail} onToggle={toggleCampaignDetailStatus} />
                       : screen === 'telegram-tasks' && mode === 'viewer' ? <PlatformTasksPage platform="telegram" campaigns={taskCampaigns} proofs={taskProofs} onTaskCompleted={recordCampaignCompletion} onNotify={notify} telegramUserId={telegramUser?.id ?? null} />
                       : screen === 'tiktok-tasks' && mode === 'viewer' ? <PlatformTasksPage platform="tiktok" campaigns={taskCampaigns} proofs={taskProofs} onTaskCompleted={recordCampaignCompletion} onStartTask={openTikTokTask} onNotify={notify} telegramUserId={telegramUser?.id ?? null} />
                        : screen === 'tiktok-task' && mode === 'viewer' && selectedTikTokTask ? <TikTokTaskPage campaign={selectedTikTokTask} proof={taskProofs.find((item) => item.campaignId === selectedTikTokTask.id && item.userId === telegramUser?.id)} onSubmitProof={submitTaskProof} onBack={() => setScreen('tiktok-tasks')} />
                          : screen === 'ads' && mode === 'viewer' ? <AdsPage key={telegramUser?.id ?? 'guest'} userId={telegramUser?.id ?? null} onReward={creditAdReward} onNotify={notify} />
-                 : screen === 'publish' && mode === 'viewer' ? <PublishingSystemPage telegramUser={telegramUser} />
+                 : screen === 'publish' && mode === 'viewer' ? <PublishingSystemPage telegramUser={telegramUser} onNotify={notify} />
                 : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={taskVideos} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
                     : <CreatorOverview telegramUser={telegramUser} platformCampaigns={platformCampaigns} videos={videos} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
            {!browserEarningPage && mode !== 'admin' && <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 p-2 backdrop-blur lg:hidden">
@@ -698,7 +756,18 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
         </div>
       </div>
       {selectedVideo && <WatchPanel video={selectedVideo} progress={progress} isPlaying={isPlaying} completed={completed} session={watchSession} onOpenVideo={() => {
-        if (!creditedVideosRef.current.has(selectedVideo.id)) externalWatchPendingRef.current = true;
+        if (creditedVideosRef.current.has(selectedVideo.id)) return;
+        externalWatchPendingRef.current = true;
+        if (watchSegmentStartedRef.current === null) {
+          const startedAt = Date.now();
+          watchSegmentStartedRef.current = startedAt;
+          const currentSession = watchSessionRef.current;
+          if (currentSession?.videoId === selectedVideo.id) {
+            watchSessionRef.current = { ...currentSession, status: 'active', lastStartedAt: startedAt };
+          }
+          saveWatchSession(selectedVideo, watchElapsedRef.current, 'active');
+          setIsPlaying(true);
+        }
       }} onComplete={() => creditViewer(selectedVideo)} onClose={() => {
         externalWatchPendingRef.current = false;
         setSelectedVideo(null);

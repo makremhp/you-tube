@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   ArrowDownLeft, BarChart3, CheckCircle2, Clock3, DollarSign, Eye, FileText,
-  Film, MoreHorizontal, Plus, TrendingUp, Users,
+  Film, MoreHorizontal, Plus, Trash2, TrendingUp, Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
@@ -24,6 +24,7 @@ export function CampaignsPage({
   onTab,
   onAdd,
   onDetails,
+  onDelete,
 }: {
   videos: Video[];
   platformCampaigns: PromotionCampaign[];
@@ -32,7 +33,20 @@ export function CampaignsPage({
   onTab: (tab: 'all' | 'active' | 'drafts') => void;
   onAdd: () => void;
   onDetails: (item: { video: Video } | { campaign: PromotionCampaign }) => void;
+  onDelete: (id: number | string) => Promise<void> | void;
 }) {
+  const [pendingDelete, setPendingDelete] = useState<{ id: number | string; title: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const confirmDelete = async () => {
+    if (!pendingDelete || deleting) return;
+    setDeleting(true);
+    try {
+      await onDelete(pendingDelete.id);
+    } finally {
+      setDeleting(false);
+      setPendingDelete(null);
+    }
+  };
   const [campaignView, setCampaignView] = useState<'youtube' | 'telegram' | 'tiktok'>('youtube');
   const { dir, isArabic } = useLanguage();
   const scopedVideos = campaignView === 'youtube' ? videos : [];
@@ -166,6 +180,7 @@ export function CampaignsPage({
                   <div className="text-sm font-bold text-[#12234b]">{video.reward}</div>
                   <div className="mt-1 text-[10px] text-slate-400">لكل إكمال</div>
                 </div>
+                <Button type="button" data-testid={`button-video-delete-${video.id}`} onClick={(event) => { event.stopPropagation(); setPendingDelete({ id: video.id, title: video.title }); }} variant="ghost" size="icon" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-rose-400 transition hover:bg-rose-50 hover:text-rose-600" aria-label="حذف الإعلان"><Trash2 className="h-4 w-4" /></Button>
                 <Button type="button" data-testid={`button-video-menu-${video.id}`} onClick={(event) => { event.stopPropagation(); onDetails({ video }); }} variant="ghost" size="icon" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-400 opacity-60 transition hover:bg-[#edf3ff] hover:text-[#1557ee] group-hover:opacity-100" aria-label="تفاصيل الإعلان"><MoreHorizontal className="h-4 w-4" /></Button>
               </div>
             )).concat(visiblePlatformCampaigns.map((campaign) => (
@@ -192,6 +207,7 @@ export function CampaignsPage({
                   <div className="text-sm font-bold text-[#12234b]">${campaign.price.toFixed(2)}</div>
                   <div className="mt-1 text-[10px] text-slate-400">ميزانية الحملة</div>
                 </div>
+                <button type="button" data-testid={`button-campaign-delete-${campaign.id}`} aria-label="حذف الإعلان" onClick={(event) => { event.stopPropagation(); setPendingDelete({ id: campaign.id, title: campaign.title }); }} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-rose-400 transition hover:bg-rose-50 hover:text-rose-600"><Trash2 aria-hidden="true" className="h-4 w-4" /></button>
                 <button type="button" data-testid={`button-campaign-details-${campaign.id}`} aria-label="تفاصيل الإعلان" onClick={(event) => { event.stopPropagation(); onDetails({ campaign }); }} className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${campaign.platform === 'telegram' ? 'bg-[#eaf8fd] text-[#229ED9]' : 'bg-slate-100 text-[#111111]'}`}>
                   {campaign.platform === 'telegram' ? <SiTelegram aria-hidden="true" className="h-4 w-4" /> : <SiTiktok aria-hidden="true" className="h-4 w-4" />}
                 </button>
@@ -255,6 +271,18 @@ export function CampaignsPage({
           <p className="mt-3 text-[11px] text-slate-400">{scopedTotal ? `${formatCount(scopedTotal - scopedActiveCount)} إعلان غير نشط على ${platformLabel}.` : `لا توجد إعلانات على ${platformLabel} بعد.`}</p>
         </div>
       </section>
+      {pendingDelete && (
+        <div className="fixed inset-0 z-[100] grid place-items-center bg-[#061333]/45 p-4 backdrop-blur-sm">
+          <section role="dialog" aria-modal="true" className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+            <h2 className="font-extrabold text-[#12234b]">حذف الإعلان؟</h2>
+            <p className="mt-2 break-words text-sm leading-6 text-slate-500">سيُحذف «{pendingDelete.title}» من قائمتك ولا يمكن التراجع عن ذلك.</p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <Button type="button" data-testid="button-cancel-list-delete" onClick={() => setPendingDelete(null)} disabled={deleting} variant="secondary" size="lg" className="border-slate-200 font-bold">إلغاء</Button>
+              <Button type="button" data-testid="button-confirm-list-delete" onClick={() => { void confirmDelete(); }} disabled={deleting} variant="primary" size="lg" className="bg-rose-600 font-bold hover:bg-rose-700">{deleting ? 'جارٍ الحذف…' : 'حذف الإعلان'}</Button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

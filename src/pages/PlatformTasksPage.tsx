@@ -183,17 +183,31 @@ export function PlatformTasksPage({
                   )}
                 </div>
                 <span className="shrink-0 rounded-full bg-[#eafbf8] px-2 py-1 text-[9px] font-bold text-[#159b89]">{formatTaskReward(rewards.tiktokTaskReward)}</span>
-                <Button
-                  type="button"
-                  data-testid={`button-start-${task.id}`}
-                  onClick={() => onStartTask?.(task)}
-                  variant="secondary"
-                  size="fit"
-                  className="flex h-9 min-w-[66px] shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg border-[#c9e9f4] bg-white px-2 text-[9px] font-bold text-[#147fa7] transition hover:border-[#229ed9] hover:bg-[#effaff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#229ed9]"
-                >
-                  <ArrowRight className="h-3.5 w-3.5" />
-                  {t('ابدأ')}
-                </Button>
+                {proof?.status === 'معتمد' ? (
+                  <Button
+                    type="button"
+                    data-testid={`button-done-${task.id}`}
+                    disabled
+                    variant="secondary"
+                    size="fit"
+                    className="flex h-9 min-w-[66px] shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg border-emerald-200 bg-[#eafbf8] px-2 text-[9px] font-bold text-[#159b89] opacity-100"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    {t('تمت')}
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    data-testid={`button-start-${task.id}`}
+                    onClick={() => onStartTask?.(task)}
+                    variant="secondary"
+                    size="fit"
+                    className="flex h-9 min-w-[66px] shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg border-[#c9e9f4] bg-white px-2 text-[9px] font-bold text-[#147fa7] transition hover:border-[#229ed9] hover:bg-[#effaff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#229ed9]"
+                  >
+                    <ArrowRight className="h-3.5 w-3.5" />
+                    {t('ابدأ')}
+                  </Button>
+                )}
               </div>
             </article>
           );

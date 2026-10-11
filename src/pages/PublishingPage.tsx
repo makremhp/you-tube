@@ -1,20 +1,67 @@
-import { useEffect, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2, Clipboard, Clock3, Copy, History, Image as ImageIcon, Info,
-  Link2, Share2, Target, Trash2, Upload, Users,
+  Link2, LoaderCircle, Share2, Target, Trash2, Upload, Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
-import { apiGet } from '@/lib/api';
+import { ApiError, apiGet, apiPost } from '@/lib/api';
 import type { TelegramUser } from '@/legacy/shared';
 
-type PublishStatus = 'pending' | 'approved' | 'rejected';
+type PublishStatus = 'idle' | 'pending' | 'approved' | 'rejected';
 
-export function PublishingSystemPage({ telegramUser }: { telegramUser: TelegramUser | null }) {
+type PublishRecord = {
+  id: string;
+  status: 'قيد المراجعة' | 'معتمد' | 'مرفوض';
+  reward: number;
+  imageCount: number;
+  today: boolean;
+  rejectionReason: string;
+  createdAt: string;
+};
+
+const MAX_PROOF_IMAGES = 5;
+
+// تصغير الصورة قبل الرفع حتى يبقى الطلب (حتى 5 صور) ضمن حد جسم الطلب في الخادم.
+function readProofImage(file: File): Promise<string> {
+  const readRaw = () => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => (typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('read')));
+    reader.onerror = () => reject(reader.error ?? new Error('read'));
+    reader.readAsDataURL(file);
+  });
+  return readRaw().then((raw) => new Promise<string>((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      const scale = Math.min(1, 1280 / Math.max(image.width, image.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      const context = canvas.getContext('2d');
+      if (!context) { resolve(raw); return; }
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.72));
+    };
+    image.onerror = () => resolve(raw);
+    image.src = raw;
+  }));
+}
+
+export function PublishingSystemPage({
+  telegramUser,
+  onNotify,
+}: {
+  telegramUser: TelegramUser | null;
+  onNotify?: (tone: 'success' | 'info' | 'warning', title: string, message: string) => void;
+}) {
   const { isArabic, dir } = useLanguage();
   const [copied, setCopied] = useState<'post' | 'link' | ''>('');
-  const [status, setStatus] = useState<PublishStatus>('pending');
   const [proofImages, setProofImages] = useState<string[]>([]);
+  const [records, setRecords] = useState<PublishRecord[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
 
   const referralCode = telegramUser?.id ? String(telegramUser.id) : '00000';
   const promotionalLink = `https://t.me/youTubeVieewBot/ads?startapp=ref_${referralCode}`;
@@ -25,6 +72,32 @@ export function PublishingSystemPage({ telegramUser }: { telegramUser: TelegramU
   useEffect(() => {
     apiGet<{ invited: number }>('referrals').then((result) => setInvitedUsers(Number(result.invited) || 0)).catch(() => undefined);
   }, []);
+
+  const loadRecords = useCallback(async () => {
+    try {
+      setRecords(await apiGet<PublishRecord[]>('publish/proofs'));
+    } catch {
+      // يبقى آخر عرض معروف؛ تُعاد المحاولة في الدورة التالية.
+    }
+  }, []);
+  useEffect(() => { void loadRecords(); }, [loadRecords]);
+
+  // حالة اليوم تأتي من الخادم: آخر طلب اليوم (إن وُجد) هو الحالة الحالية.
+  const todayRecord = records.find((record) => record.today);
+  const status: PublishStatus = !todayRecord ? 'idle'
+    : todayRecord.status === 'معتمد' ? 'approved'
+      : todayRecord.status === 'مرفوض' ? 'rejected' : 'pending';
+  const alreadySubmittedToday = status === 'pending' || status === 'approved';
+
+  // أثناء انتظار المراجعة نُحدّث الحالة دوريًا حتى يظهر الاعتماد/الرفض دون إعادة فتح الصفحة.
+  useEffect(() => {
+    if (status !== 'pending') return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void loadRecords();
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [status, loadRecords]);
+
   const referralEarnings = '$0.00';
   const statusConfig: Record<PublishStatus, {
     title: string;
@@ -34,6 +107,14 @@ export function PublishingSystemPage({ telegramUser }: { telegramUser: TelegramU
     className: string;
     iconClassName: string;
   }> = {
+    idle: {
+      title: 'لم يتم الإرسال بعد',
+      description: 'أرسل إثبات نشر اليوم لاستلام المكافأة',
+      amount: '$0.02',
+      icon: Clock3,
+      className: 'border-slate-200 bg-white',
+      iconClassName: 'bg-slate-100 text-slate-400',
+    },
     pending: {
       title: 'قيد المراجعة',
       description: 'بانتظار مراجعة فريق الإدارة',
@@ -52,7 +133,7 @@ export function PublishingSystemPage({ telegramUser }: { telegramUser: TelegramU
     },
     rejected: {
       title: 'تحتاج إلى تعديل',
-      description: 'راجع الإثبات وأرسله مرة أخرى',
+      description: todayRecord?.rejectionReason || 'راجع الإثبات وأرسله مرة أخرى',
       amount: '$0.02',
       icon: Info,
       className: 'border-rose-100 bg-[#fff5f5]',
@@ -72,14 +153,41 @@ export function PublishingSystemPage({ telegramUser }: { telegramUser: TelegramU
     window.setTimeout(() => setCopied(''), 1600);
   };
 
-  const addProofImage = (file?: File) => {
-    if (!file || proofImages.length >= 5) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== 'string') return;
-      setProofImages((current) => [...current, reader.result as string].slice(0, 5));
-    };
-    reader.readAsDataURL(file);
+  const addProofImage = async (file?: File) => {
+    if (!file || proofImages.length >= MAX_PROOF_IMAGES) return;
+    if (!file.type.startsWith('image/')) {
+      onNotify?.('warning', 'ملف غير صالح', 'اختر صورة (لقطة شاشة) لإثبات النشر.');
+      return;
+    }
+    try {
+      const image = await readProofImage(file);
+      setProofImages((current) => [...current, image].slice(0, MAX_PROOF_IMAGES));
+    } catch {
+      onNotify?.('warning', 'تعذر قراءة الصورة', 'جرّب صورة أخرى.');
+    }
+  };
+
+  const submitProofs = async () => {
+    if (!proofImages.length || submitLockRef.current || alreadySubmittedToday) return;
+    submitLockRef.current = true;
+    setIsSubmitting(true);
+    try {
+      await apiPost('publish/proof', { images: proofImages });
+      setProofImages([]);
+      await loadRecords();
+      onNotify?.('info', 'الإثبات قيد المراجعة', 'تم إرسال صور الإثبات للمراجعة اليدوية.');
+    } catch (error) {
+      const message = error instanceof ApiError && (error.status === 400 || error.status === 409)
+        ? error.message
+        : error instanceof ApiError && error.status === 401
+          ? 'افتح التطبيق من Telegram لإرسال الإثبات.'
+          : 'تعذر إرسال الإثبات. تحقق من الاتصال ثم حاول مرة أخرى.';
+      onNotify?.('warning', 'تعذر إرسال الإثبات', message);
+      if (error instanceof ApiError && error.status === 409) void loadRecords();
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
+    }
   };
 
   const removeProofImage = (index: number) => {
@@ -117,9 +225,9 @@ export function PublishingSystemPage({ telegramUser }: { telegramUser: TelegramU
            <div className="mt-6">
              <div className="flex items-center justify-between gap-3 text-xs">
                <span className="flex items-center gap-2 font-semibold text-slate-600"><span className="grid h-7 w-7 place-items-center rounded-lg bg-[#edf3ff] text-[#1557ee]"><Share2 className="h-3.5 w-3.5" /></span>إثباتات النشر اليوم</span>
-               <strong className="tabular-nums text-[#12234b]">0 / 5</strong>
+               <strong className="tabular-nums text-[#12234b]">{todayRecord ? todayRecord.imageCount : proofImages.length} / 5</strong>
              </div>
-             <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full w-0 rounded-full bg-[#1557ee] transition-all" /></div>
+             <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-[#1557ee] transition-all" style={{ width: `${Math.min(100, ((todayRecord ? todayRecord.imageCount : proofImages.length) / MAX_PROOF_IMAGES) * 100)}%` }} /></div>
              <p className="mt-3 text-[10px] leading-5 text-slate-400">ارفع صورًا من أي منصة نشرت فيها، حتى 5 صور في طلب واحد.</p>
            </div>
         </div>
@@ -184,8 +292,9 @@ export function PublishingSystemPage({ telegramUser }: { telegramUser: TelegramU
                  className="sr-only"
                  disabled={proofImages.length >= 5}
                  onChange={(event) => {
-                   addProofImage(event.currentTarget.files?.[0]);
+                   const file = event.currentTarget.files?.[0];
                    event.currentTarget.value = '';
+                   void addProofImage(file);
                  }}
                />
              </label>
@@ -206,7 +315,7 @@ export function PublishingSystemPage({ telegramUser }: { telegramUser: TelegramU
              <div className="mt-2 rounded-xl bg-white px-3 py-5 text-center text-[10px] text-slate-400">لم تتم إضافة صور بعد — ارفع لقطة شاشة يظهر فيها المنشور بوضوح.</div>
            )}
          </div>
-        <Button type="button" variant="primary" size="lg" onClick={() => setStatus('pending')} className="mt-5 flex w-full items-center justify-center gap-2 text-sm font-bold"><Share2 className="h-4 w-4" /> إرسال للمراجعة</Button>
+        <Button type="button" data-testid="button-submit-publish-proof" variant="primary" size="lg" disabled={!proofImages.length || isSubmitting || alreadySubmittedToday} aria-busy={isSubmitting} onClick={() => { void submitProofs(); }} className="mt-5 flex w-full items-center justify-center gap-2 text-sm font-bold disabled:opacity-50">{isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />} {isSubmitting ? 'جارٍ الإرسال…' : alreadySubmittedToday ? 'تم إرسال إثبات اليوم' : 'إرسال للمراجعة'}</Button>
       </section>
 
       <section className={`mt-5 rounded-[22px] border p-5 shadow-[0_4px_14px_rgba(18,32,77,.05)] md:p-6 ${currentStatus.className}`}>
@@ -218,15 +327,23 @@ export function PublishingSystemPage({ telegramUser }: { telegramUser: TelegramU
       </section>
 
       <section className="mt-5">
-        <div className="flex items-end justify-between"><div><h2 className="font-display text-lg font-bold text-[#12234b]">سجل المهام</h2><p className="mt-1 text-[11px] text-slate-400">آخر عمليات النشر التجريبية</p></div><History className="h-5 w-5 text-slate-400" /></div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          {[['29 Sep', 'قيد المراجعة', 'text-[#c98017] bg-[#fff6e8]'], ['28 Sep', 'تمت الموافقة', 'text-[#159b89] bg-[#eafbf8]'], ['26 Sep', 'قيد المراجعة', 'text-[#c98017] bg-[#fff6e8]']].map(([date, taskStatus, tone]) => (
-            <div key={`${date}-${taskStatus}`} className="flex items-center justify-between rounded-[18px] border border-slate-200 bg-white px-4 py-3.5 shadow-[0_3px_10px_rgba(18,32,77,.04)]">
-              <div><div className="text-xs font-bold text-[#12234b]">{date}</div><div className="mt-1 text-[10px] text-slate-400">نشر تجريبي</div></div>
-              <div className="text-left"><div className="text-sm font-bold text-[#159b89]">$0.02</div><span className={`mt-1 inline-flex rounded-full px-2 py-1 text-[9px] font-bold ${tone}`}>{taskStatus}</span></div>
-            </div>
-          ))}
-        </div>
+        <div className="flex items-end justify-between"><div><h2 className="font-display text-lg font-bold text-[#12234b]">سجل المهام</h2><p className="mt-1 text-[11px] text-slate-400">آخر طلبات النشر التي أرسلتها</p></div><History className="h-5 w-5 text-slate-400" /></div>
+        {records.length === 0 ? (
+          <div className="mt-4 rounded-[18px] border border-slate-200 bg-white px-4 py-6 text-center text-[11px] text-slate-400">لا توجد طلبات نشر بعد.</div>
+        ) : (
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            {records.slice(0, 6).map((record) => {
+              const tone = record.status === 'معتمد' ? 'text-[#159b89] bg-[#eafbf8]' : record.status === 'مرفوض' ? 'text-[#d95757] bg-[#ffe4e4]' : 'text-[#c98017] bg-[#fff6e8]';
+              const date = new Date(record.createdAt);
+              return (
+                <div key={record.id} className="flex items-center justify-between rounded-[18px] border border-slate-200 bg-white px-4 py-3.5 shadow-[0_3px_10px_rgba(18,32,77,.04)]">
+                  <div><div className="text-xs font-bold text-[#12234b]">{Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString(isArabic ? 'ar' : 'en-US', { day: 'numeric', month: 'short' })}</div><div className="mt-1 text-[10px] text-slate-400">{record.imageCount} / 5 صور</div></div>
+                  <div className="text-left"><div className="text-sm font-bold text-[#159b89]">${record.reward.toFixed(2)}</div><span className={`mt-1 inline-flex rounded-full px-2 py-1 text-[9px] font-bold ${tone}`}>{record.status}</span></div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
     </main>
   );
