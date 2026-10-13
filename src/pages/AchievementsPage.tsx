@@ -22,7 +22,7 @@ type AchievementSnapshot = {
   referralsTotal: number;
   referralsToday: number;
   browsingSessions: number;
-  monetagViews: number;
+  monetagSessions: number;
   claimed: string[];
   claimedToday: string[];
 };
@@ -46,7 +46,7 @@ const EMPTY: AchievementSnapshot = {
   referralsTotal: 0,
   referralsToday: 0,
   browsingSessions: 0,
-  monetagViews: 0,
+  monetagSessions: 0,
   claimed: [],
   claimedToday: [],
 };
@@ -144,11 +144,11 @@ export function AchievementsPage({
     },
     {
       id: 'monetag_500',
-      title: text('شاهد 500 إعلان Monetag', 'Watch 500 Monetag ads'),
-      description: text('يُحتسب الإعلان بعد تسجيل مشاهدته والتحقق منه.', 'An ad counts after its view has been recorded and verified.'),
+      title: text('أكمل 500 جلسة Monetag', 'Complete 500 Monetag sessions'),
+      description: text('كل مرة ينجح فيها الإعلانان وتُسجَّل مكافأتهما تُحتسب جلسة واحدة.', 'One session counts only after both ads succeed and their reward is recorded.'),
       reward: 0.02,
       target: 500,
-      value: current.monetagViews,
+      value: current.monetagSessions,
       icon: Clapperboard,
       tone: 'violet',
       action: 'monetag',
