@@ -22,6 +22,52 @@ import {
 const PLATFORMS = ['youtube', 'telegram', 'tiktok'];
 const CAMPAIGN_STATUSES = ['نشط', 'مسودة', 'مكتمل', 'موقوف', 'بانتظار تحقق البوت'];
 
+// حماية النشر من الضغط المتكرر/الأوتو كليك: لا يُنشر أكثر من إعلان واحد لكل معلن خلال هذه الفترة،
+// ولا يُقبل إعلان مطابق لإعلان نُشر قبل لحظات (يمنع الخصم المتكرر).
+const CAMPAIGN_COOLDOWN_SECONDS = 5;
+const CAMPAIGN_DUPLICATE_WINDOW_SECONDS = 120;
+const RATE_LIMIT_MESSAGE = 'يوجد طلب نشر آخر قيد المعالجة. انتظر بضع ثوانٍ وتحقق من قائمة إعلاناتك قبل المحاولة مجددًا.';
+const DUPLICATE_MESSAGE = 'تم نشر إعلان مطابق قبل لحظات ولم يُخصم رصيد إضافي. راجع قائمة إعلاناتك.';
+
+function completionStamp(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(Date.now()) : date.toISOString();
+}
+
+// العمليات التي بعد الحفظ (إشعارات) لا يجوز أن تُفشل الاستجابة ولا أن تؤخرها طويلًا.
+async function bestEffort(promise, ms = 3000) {
+  try {
+    await Promise.race([promise, new Promise((resolve) => setTimeout(resolve, ms))]);
+  } catch (error) {
+    console.error('Post-commit task failed:', error instanceof Error ? error.message : 'unknown');
+  }
+}
+
+// إعادة محاولة واحدة لاستعلام آمن التكرار (idempotent) عند خطأ مؤقت من قاعدة البيانات/Neon.
+async function queryWithRetry(text, params) {
+  try {
+    return await sql.query(text, params);
+  } catch (error) {
+    const code = String(error?.code ?? '');
+    if (/^(22|23|42)/.test(code)) throw error;
+    console.error('Retrying after database error:', code, error instanceof Error ? error.message : 'unknown');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    return sql.query(text, params);
+  }
+}
+
+async function releaseCampaignRequest(userId, requestId) {
+  try {
+    await sql.query(
+      `DELETE FROM vr_campaign_requests
+       WHERE owner_id = $1 AND request_id = $2 AND status IN ('rate_limited', 'duplicate')`,
+      [userId, requestId],
+    );
+  } catch {
+    // محاولة تنظيف فقط.
+  }
+}
+
 const CAMPAIGN_COLUMNS = `
   c.id::text AS id,
   c.platform,
@@ -171,12 +217,26 @@ async function createYoutubeCampaign(req, res, user, body, title, link) {
        VALUES ($1, $2, $3)
        ON CONFLICT (owner_id, request_id) DO NOTHING
        RETURNING owner_id
+     ), cooled AS (
+       INSERT INTO vr_campaign_cooldowns (owner_id, last_at)
+       SELECT $1::bigint, now() WHERE EXISTS (SELECT 1 FROM claimed)
+       ON CONFLICT (owner_id) DO UPDATE SET last_at = now()
+         WHERE vr_campaign_cooldowns.last_at <= now() - make_interval(secs => ${CAMPAIGN_COOLDOWN_SECONDS})
+       RETURNING owner_id
+     ), duplicate AS (
+       SELECT 1 AS found FROM vr_campaigns
+       WHERE owner_id = $1 AND platform = 'youtube' AND link = $8::text AND title = $5::text
+         AND duration = $10::int AND requested_views = $13::int
+         AND created_at > now() - make_interval(secs => ${CAMPAIGN_DUPLICATE_WINDOW_SECONDS})
+         AND EXISTS (SELECT 1 FROM cooled)
+       LIMIT 1
      ), debited AS (
        UPDATE vr_users
        SET advertiser_balance = advertiser_balance - $4::numeric
        WHERE id = $1
          AND advertiser_balance >= $4::numeric
-         AND EXISTS (SELECT 1 FROM claimed)
+         AND EXISTS (SELECT 1 FROM cooled)
+         AND NOT EXISTS (SELECT 1 FROM duplicate)
        RETURNING id
      ), created AS (
        INSERT INTO vr_campaigns (
@@ -196,6 +256,8 @@ async function createYoutubeCampaign(req, res, user, body, title, link) {
        SET campaign_id = (SELECT id FROM created),
            status = CASE
              WHEN EXISTS (SELECT 1 FROM created) THEN 'created'
+             WHEN NOT EXISTS (SELECT 1 FROM cooled) THEN 'rate_limited'
+             WHEN EXISTS (SELECT 1 FROM duplicate) THEN 'duplicate'
              ELSE 'insufficient_balance'
            END
        WHERE owner_id = $1
@@ -242,6 +304,14 @@ async function createYoutubeCampaign(req, res, user, body, title, link) {
     if (prior.status === 'insufficient_balance') {
       throw new HttpError(402, 'رصيد المعلن غير كافٍ لنشر هذه الحملة. أضف رصيدًا ثم أعد المحاولة.');
     }
+    if (prior.status === 'rate_limited') {
+      await releaseCampaignRequest(user.id, requestId);
+      throw new HttpError(429, RATE_LIMIT_MESSAGE);
+    }
+    if (prior.status === 'duplicate') {
+      await releaseCampaignRequest(user.id, requestId);
+      throw new HttpError(409, DUPLICATE_MESSAGE);
+    }
     if (prior.status === 'created' && prior.id) {
       ok(res, { id: prior.id, campaignBudget, replayed: true }, 200);
       return;
@@ -250,6 +320,14 @@ async function createYoutubeCampaign(req, res, user, body, title, link) {
   }
 
   const result = createdRows[0];
+  if (result.status === 'rate_limited') {
+    await releaseCampaignRequest(user.id, requestId);
+    throw new HttpError(429, RATE_LIMIT_MESSAGE);
+  }
+  if (result.status === 'duplicate') {
+    await releaseCampaignRequest(user.id, requestId);
+    throw new HttpError(409, DUPLICATE_MESSAGE);
+  }
   if (result.status === 'insufficient_balance') {
     throw new HttpError(402, 'رصيد المعلن غير كافٍ لنشر هذه الحملة. أضف رصيدًا ثم أعد المحاولة.');
   }
@@ -279,25 +357,48 @@ export async function createCampaign(req, res) {
   if (platform === 'telegram') {
     status = (await botIsChannelAdmin(link)) ? 'نشط' : 'بانتظار تحقق البوت';
   }
-  // خصم ميزانية الحملة من رصيد المعلن وإنشاء الحملة في عملية ذرّية واحدة؛ لا تُنشأ الحملة إن كان الرصيد غير كافٍ.
+  // خصم ميزانية الحملة وإنشاؤها في عملية ذرّية واحدة، مع حماية من الضغط المتكرر (فاصل زمني + منع التكرار المطابق).
   const rows = await sql.query(
-    `WITH debited AS (
+    `WITH cooled AS (
+       INSERT INTO vr_campaign_cooldowns (owner_id, last_at)
+       VALUES ($1::bigint, now())
+       ON CONFLICT (owner_id) DO UPDATE SET last_at = now()
+         WHERE vr_campaign_cooldowns.last_at <= now() - make_interval(secs => ${CAMPAIGN_COOLDOWN_SECONDS})
+       RETURNING owner_id
+     ), duplicate AS (
+       SELECT 1 AS found FROM vr_campaigns
+       WHERE owner_id = $1::bigint AND platform = $2::text AND link = $5::text
+         AND created_at > now() - make_interval(secs => ${CAMPAIGN_DUPLICATE_WINDOW_SECONDS})
+         AND EXISTS (SELECT 1 FROM cooled)
+       LIMIT 1
+     ), debited AS (
        UPDATE vr_users
        SET advertiser_balance = advertiser_balance - $8::numeric
        WHERE id = $1 AND advertiser_balance >= $8::numeric
+         AND EXISTS (SELECT 1 FROM cooled)
+         AND NOT EXISTS (SELECT 1 FROM duplicate)
        RETURNING id
+     ), created AS (
+       INSERT INTO vr_campaigns (owner_id, platform, title, description, link, thumbnail, target_count, price, campaign_budget, reward, status)
+       SELECT $1::bigint, $2::text, $3::text, $4::text, $5::text, $6::text, $7::int, $8::numeric, $8::numeric, $9::numeric, $10::text
+       FROM debited
+       RETURNING id::text AS id, status
      )
-     INSERT INTO vr_campaigns (owner_id, platform, title, description, link, thumbnail, target_count, price, campaign_budget, reward, status)
-     SELECT $1::bigint, $2::text, $3::text, $4::text, $5::text, $6::text, $7::int, $8::numeric, $8::numeric, $9::numeric, $10::text
-     FROM debited
-     RETURNING id::text AS id, status`,
+     SELECT (SELECT id FROM created) AS id,
+            (SELECT status FROM created) AS status,
+            EXISTS (SELECT 1 FROM cooled) AS "cooledOk",
+            EXISTS (SELECT 1 FROM duplicate) AS "isDuplicate"`,
     [
       user.id, platform, title, readText(body.description, 2000), link,
       typeof body.image === 'string' && body.image.length <= 600000 ? body.image : null,
       targetCount, price, taskReward, status,
     ],
   );
-  if (!rows.length) throw new HttpError(402, 'رصيد المعلن غير كافٍ لنشر هذه الحملة. أضف رصيدًا ثم أعد المحاولة.');
+  if (!rows[0]?.id) {
+    if (!rows[0]?.cooledOk) throw new HttpError(429, RATE_LIMIT_MESSAGE);
+    if (rows[0]?.isDuplicate) throw new HttpError(409, DUPLICATE_MESSAGE);
+    throw new HttpError(402, 'رصيد المعلن غير كافٍ لنشر هذه الحملة. أضف رصيدًا ثم أعد المحاولة.');
+  }
   if (rows[0].status === 'نشط') await notifyTaskAvailable(rows[0].id);
   ok(res, { id: rows[0].id, status: rows[0].status }, 201);
 }
@@ -372,20 +473,40 @@ export async function startTask(req, res, id) {
   ok(res, { status: rows[0].status });
 }
 
+async function findCompletedReward(campaignId, userId) {
+  const rows = await sql.query(
+    `SELECT reward::float8 AS reward FROM vr_completions
+     WHERE campaign_id = $1 AND user_id = $2 AND status = 'completed'`,
+    [campaignId, userId],
+  );
+  return rows[0] ? Number(rows[0].reward ?? 0) : null;
+}
+
 export async function completeTask(req, res, id) {
   const user = await requireUser(req);
   const campaigns = await sql.query(
-    `SELECT platform, link, duration, cpm::float8 AS cpm, reward::float8 AS reward
-     FROM vr_campaigns WHERE id = $1 AND status = 'نشط'`,
+    `SELECT platform, link, duration, cpm::float8 AS cpm, reward::float8 AS reward, status
+     FROM vr_campaigns WHERE id = $1`,
     [id],
   );
   const campaign = campaigns[0];
   if (!campaign) throw new HttpError(404, 'Not found');
+  if (campaign.status !== 'نشط') {
+    // أُوقفت الحملة بعد أن احتُسبت المشاهدة (مثلًا إعادة ضغط بعد انقطاع الاستجابة): لا خطأ ولا مكافأة مكررة.
+    if (campaign.platform === 'youtube') {
+      const earlier = await findCompletedReward(id, user.id);
+      if (earlier !== null) {
+        ok(res, { reward: earlier, alreadyCredited: true });
+        return;
+      }
+    }
+    throw new HttpError(404, 'Not found');
+  }
 
   if (campaign.platform === 'youtube') {
     const requiredSeconds = Number(campaign.duration) * MIN_WATCH_TOLERANCE;
     const reward = campaign.reward ?? viewerReward(campaign.cpm);
-    const rows = await sql.query(
+    const rows = await queryWithRetry(
       `WITH candidate AS (
          SELECT id FROM vr_campaigns
          WHERE id = $1 AND status = 'نشط' AND platform = 'youtube'
@@ -410,8 +531,17 @@ export async function completeTask(req, res, id) {
        SELECT done.reward::float8 AS reward, done.completed_at AS "completedAt" FROM done, bump, credit`,
       [id, user.id, reward, requiredSeconds],
     );
-    if (!rows.length) throw new HttpError(409, 'لم تكتمل المشاهدة بعد أو وصلت الحملة إلى عدد المشاهدات المطلوب.');
-    await notifyTaskAdvertiser(id, user.id, `complete_${id}_${user.id}_${new Date(rows[0].completedAt).toISOString()}`);
+    if (!rows.length) {
+      // إن كانت المشاهدة محتسبة سابقًا (إعادة محاولة بعد خطأ مؤقت) نُرجع نجاحًا دون خصم/إضافة جديدة.
+      const earlier = await findCompletedReward(id, user.id);
+      if (earlier !== null) {
+        ok(res, { reward: earlier, alreadyCredited: true });
+        return;
+      }
+      throw new HttpError(409, 'لم تكتمل المشاهدة بعد أو وصلت الحملة إلى عدد المشاهدات المطلوب.');
+    }
+    // المكافأة حُفظت فعلًا؛ الإشعار لا يجوز أن يُفشل الاستجابة أو يؤخرها.
+    await bestEffort(notifyTaskAdvertiser(id, user.id, `complete_${id}_${user.id}_${completionStamp(rows[0].completedAt)}`));
     ok(res, { reward: rows[0].reward });
     return;
   }
@@ -440,7 +570,7 @@ export async function completeTask(req, res, id) {
       [id, user.id, campaign.reward ?? (await getTaskRewardSettings()).telegramTaskReward, campaign.link],
     );
     if (!rows.length) throw new HttpError(409, 'Task already completed');
-    await notifyTaskAdvertiser(id, user.id, `complete_${id}_${user.id}_${new Date(rows[0].completedAt).toISOString()}`);
+    await bestEffort(notifyTaskAdvertiser(id, user.id, `complete_${id}_${user.id}_${completionStamp(rows[0].completedAt)}`));
     ok(res, { reward: rows[0].reward });
     return;
   }

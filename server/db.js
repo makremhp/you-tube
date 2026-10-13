@@ -69,6 +69,10 @@ export function ensureSchema() {
           created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           PRIMARY KEY (owner_id, request_id)
         )`,
+        `CREATE TABLE IF NOT EXISTS vr_campaign_cooldowns (
+          owner_id BIGINT PRIMARY KEY REFERENCES vr_users(id) ON DELETE CASCADE,
+          last_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )`,
         `CREATE TABLE IF NOT EXISTS vr_completions (
           campaign_id BIGINT NOT NULL REFERENCES vr_campaigns(id) ON DELETE CASCADE,
           user_id BIGINT NOT NULL REFERENCES vr_users(id),
