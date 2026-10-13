@@ -9,6 +9,7 @@ import {
   ArrowDownLeft,
   ArrowUpLeft,
   Activity,
+  Award,
   BarChart3,
   BellRing,
   Check,
@@ -200,7 +201,7 @@ type TransactionStatus = 'تم' | 'قيد المعالجة' | 'تم الإلغا
 type PaymentMethod = 'stars' | 'binance' | 'web3';
 type DepositMethod = 'stars' | 'web3';
 type WithdrawMethod = 'binance' | 'web3';
-type AppScreen = 'overview' | 'campaigns' | 'campaign-detail' | 'watch' | 'publish' | 'add' | 'deposit' | 'withdraw' | 'deposit-history' | 'withdraw-history' | 'telegram-tasks' | 'tiktok-tasks' | 'tiktok-task' | 'ads' | 'admin-overview' | 'admin-users' | 'admin-banned' | 'admin-deposits' | 'admin-withdrawals' | 'admin-campaigns' | 'admin-proofs' | 'admin-ads' | 'admin-ad-stats' | 'admin-settings' | 'admin-maintenance' | 'admin-notifications' | 'admin-notification-preview' | 'admin-suspicious' | 'admin-audit';
+type AppScreen = 'overview' | 'campaigns' | 'campaign-detail' | 'watch' | 'publish' | 'achievements' | 'add' | 'deposit' | 'withdraw' | 'deposit-history' | 'withdraw-history' | 'telegram-tasks' | 'tiktok-tasks' | 'tiktok-task' | 'ads' | 'admin-overview' | 'admin-users' | 'admin-banned' | 'admin-deposits' | 'admin-withdrawals' | 'admin-campaigns' | 'admin-proofs' | 'admin-ads' | 'admin-ad-stats' | 'admin-settings' | 'admin-maintenance' | 'admin-notifications' | 'admin-notification-preview' | 'admin-suspicious' | 'admin-audit';
 
 type DepositRecord = {
   id: string;
@@ -440,6 +441,7 @@ function Sidebar({
         { icon: SiTelegram, label: 'مهام Telegram', screen: 'telegram-tasks' as AppScreen },
         { icon: SiTiktok, label: 'مهام TikTok', screen: 'tiktok-tasks' as AppScreen },
         { icon: Megaphone, label: 'Ads', screen: 'ads' as AppScreen },
+        { icon: Award, label: 'الإنجازات', screen: 'achievements' as AppScreen },
         { icon: Share2, label: 'نظام النشر', screen: 'publish' as AppScreen },
         { icon: WalletCards, label: 'سحب الأرباح', screen: 'withdraw' as AppScreen },
         { icon: History, label: 'سجل السحب', screen: 'withdraw-history' as AppScreen },
@@ -615,6 +617,8 @@ function Header({
                     ? 'مهمة TikTok'
                     : screen === 'ads'
                       ? 'Ads'
+                      : screen === 'achievements'
+                        ? 'الإنجازات'
         : screen === 'publish'
           ? 'نظام النشر'
             : mode === 'admin' ? 'الإدارة' : mode === 'creator' ? 'نظرة عامة' : 'شاهد واربح';
