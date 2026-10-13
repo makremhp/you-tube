@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  History, LayoutDashboard, Megaphone, Plus, WalletCards,
+  Award, History, LayoutDashboard, Megaphone, Plus, WalletCards,
 } from 'lucide-react';
 import { SiTelegram, SiTiktok, SiYoutube } from 'react-icons/si';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,7 @@ import { PublishingSystemPage } from '@/pages/PublishingPage';
 import { ViewerView } from '@/pages/ViewerPage';
 import { WithdrawPage } from '@/pages/WithdrawPage';
 import { AdsPage } from '@/pages/AdsPage';
+import { AchievementsPage } from '@/pages/AchievementsPage';
 import { AdminConsole } from '@/pages/AdminConsole';
 
 const WATCH_COMPLETION_RATIO = 0.95;
@@ -753,10 +754,11 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
                        : screen === 'tiktok-task' && mode === 'viewer' && selectedTikTokTask ? <TikTokTaskPage campaign={selectedTikTokTask} proof={taskProofs.find((item) => item.campaignId === selectedTikTokTask.id && item.userId === telegramUser?.id)} onSubmitProof={submitTaskProof} onBack={() => setScreen('tiktok-tasks')} />
                          : screen === 'ads' && mode === 'viewer' ? <AdsPage key={telegramUser?.id ?? 'guest'} userId={telegramUser?.id ?? null} onReward={creditAdReward} onNotify={notify} />
                  : screen === 'publish' && mode === 'viewer' ? <PublishingSystemPage telegramUser={telegramUser} onNotify={notify} />
+                 : screen === 'achievements' && mode === 'viewer' ? <AchievementsPage onNavigate={(next) => setScreen(next)} onNotify={notify} />
                 : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={taskVideos} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
                     : <CreatorOverview telegramUser={telegramUser} platformCampaigns={platformCampaigns} videos={videos} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
            {!browserEarningPage && mode !== 'admin' && <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 p-2 backdrop-blur lg:hidden">
-             <div className={`mx-auto grid max-w-md ${mode === 'viewer' ? 'grid-cols-5' : 'grid-cols-4'} items-end gap-1`}>
+             <div className={`mx-auto grid max-w-md ${mode === 'viewer' ? 'grid-cols-6' : 'grid-cols-4'} items-end gap-1`}>
               {mode === 'creator' ? (
                 <>
                    <Button type="button" data-testid="button-mobile-creator" onClick={() => setScreen('campaigns')} variant="unstyled" size="fit" className={`flex w-full min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center text-[10px] font-bold leading-tight ${screen === 'campaigns' ? 'text-[#1557ee]' : 'text-slate-400'}`}><LayoutDashboard className="h-5 w-5" /> <span className="max-w-full truncate">{t('إعلاناتي')}</span></Button>
@@ -770,6 +772,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
                     <Button type="button" data-testid="button-mobile-telegram-tasks" onClick={() => setScreen('telegram-tasks')} variant="unstyled" size="fit" className={`flex w-full min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center text-[9px] font-bold leading-tight ${screen === 'telegram-tasks' ? 'text-[#1557ee]' : 'text-slate-400'}`}><SiTelegram aria-hidden="true" className="h-5 w-5" /> <span className="max-w-full truncate">Telegram</span></Button>
                     <Button type="button" data-testid="button-mobile-tiktok-tasks" onClick={() => setScreen('tiktok-tasks')} variant="unstyled" size="fit" className={`flex w-full min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center text-[9px] font-bold leading-tight ${screen === 'tiktok-tasks' ? 'text-[#1557ee]' : 'text-slate-400'}`}><SiTiktok aria-hidden="true" className="h-5 w-5" /> <span className="max-w-full truncate">TikTok</span></Button>
                     <Button type="button" data-testid="button-mobile-ads" onClick={() => setScreen('ads')} variant="unstyled" size="fit" className={`flex w-full min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center text-[9px] font-bold leading-tight ${screen === 'ads' ? 'text-[#1557ee]' : 'text-slate-400'}`}><Megaphone className="h-5 w-5" /> <span className="max-w-full truncate">Ads</span></Button>
+                    <Button type="button" data-testid="button-mobile-achievements" onClick={() => setScreen('achievements')} variant="unstyled" size="fit" className={`flex w-full min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center text-[9px] font-bold leading-tight ${screen === 'achievements' ? 'text-[#1557ee]' : 'text-slate-400'}`}><Award className="h-5 w-5" /> <span className="max-w-full truncate">{t('الإنجازات')}</span></Button>
                     <Button type="button" data-testid="button-mobile-earnings" onClick={() => setScreen('withdraw')} variant="unstyled" size="fit" className={`flex w-full min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center text-[9px] font-bold leading-tight ${screen === 'withdraw' ? 'text-[#1557ee]' : 'text-slate-400'}`}><WalletCards className="h-5 w-5" /> <span className="max-w-full truncate">{t('سحب الأرباح')}</span></Button>
                 </>
               )}
