@@ -164,6 +164,14 @@ export function ensureSchema() {
           day DATE NOT NULL,
           created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )`,
+        `CREATE TABLE IF NOT EXISTS vr_achievement_claims (
+          user_id BIGINT NOT NULL REFERENCES vr_users(id),
+          achievement_id TEXT NOT NULL,
+          claim_day DATE NOT NULL,
+          reward NUMERIC(18,6) NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (user_id, achievement_id, claim_day)
+        )`,
         `CREATE TABLE IF NOT EXISTS vr_suspicious_signals (
           id BIGSERIAL PRIMARY KEY,
           user_id BIGINT NOT NULL REFERENCES vr_users(id),

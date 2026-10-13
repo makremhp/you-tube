@@ -45,6 +45,7 @@ import {
   handleMonetagPostback,
 } from './monetag.js';
 import { getReferrals } from './referrals.js';
+import { claimAchievement, getAchievements } from './achievements.js';
 import { listPublishProofs, submitPublishProof } from './publishing.js';
 import { checkTelegramMembershipOnEntry, sweepTelegramMemberships } from './membership.js';
 import { readPositiveInteger, readText } from './validation.js';
@@ -85,6 +86,10 @@ export async function dispatch(req, res) {
       return;
     }
     if (method === 'GET') {
+      if (key === 'achievements') {
+        fail(res, 401, 'Unauthorized');
+        return;
+      }
       ok(res, key in EMPTY_GET_DATA ? EMPTY_GET_DATA[key] : []);
       return;
     }
@@ -139,6 +144,7 @@ export async function dispatch(req, res) {
     if (key === 'user') return getUser(req, res);
     if (key === 'balance') return getBalance(req, res);
     if (key === 'referrals') return getReferrals(req, res);
+    if (key === 'achievements') return getAchievements(req, res);
     if (key === 'ads/progress') return getAdProgress(req, res);
     if (key === 'ads/progress/adstera' || key === 'ads/progress/monetag') return getAdProgress(req, res, segments[2]);
     if (resource === 'ads' && segments[1] === 'monetag' && segments[2] === 'session' && segments.length === 4) {
@@ -159,6 +165,7 @@ export async function dispatch(req, res) {
     if (key === 'admin/notifications/send') return sendAdminNotification(req, res);
     if (key === 'admin/notifications/test') return sendAdminTestNotification(req, res);
     if (key === 'publish/proof') return submitPublishProof(req, res);
+    if (key === 'achievements/claim') return claimAchievement(req, res);
     if (key === 'campaigns') return createCampaign(req, res);
     if (key === 'deposits') return createDeposit(req, res);
     if (key === 'withdrawals') return createWithdrawal(req, res);
