@@ -251,6 +251,7 @@ export function AddVideo({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const requestIdRef = useRef('');
+  const submitLockRef = useRef(false);
   const viewsTouchedRef = useRef(false);
   const durationIndex = Math.max(0, durationOptions.findIndex((option) => option.seconds === duration));
   const serverDurationOptions = durationOptions.map((option) => ({
@@ -296,7 +297,9 @@ export function AddVideo({
   }
 
   const submit = async () => {
-    if (!valid) return;
+    // قفل متزامن: يمنع إرسال أكثر من طلب عند الضغط السريع/الأوتو كليك قبل أن تُحدَّث الواجهة.
+    if (!valid || submitLockRef.current) return;
+    submitLockRef.current = true;
     setIsSubmitting(true);
     setSubmitError('');
     try {
@@ -311,8 +314,11 @@ export function AddVideo({
       setSubmitted(true);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'تعذر نشر الحملة. حاول مرة أخرى.');
-      if (error instanceof ApiError) requestIdRef.current = '';
+      // نُبقي نفس معرّف الطلب عند الأخطاء المؤقتة (شبكة/خادم/قيد المعالجة) كي تكون إعادة المحاولة آمنة بلا خصم مكرر،
+      // ونجدده فقط عند رفض نهائي (بيانات غير صالحة/رصيد غير كافٍ).
+      if (error instanceof ApiError && [400, 402, 403, 404].includes(error.status)) requestIdRef.current = '';
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };

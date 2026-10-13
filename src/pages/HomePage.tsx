@@ -104,6 +104,8 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
   const externalWatchPendingRef = useRef(false);
   const watchSessionRef = useRef<AdvertisementSession | null>(null);
   const creditedVideosRef = useRef(new Set<number>());
+  const ownCampaignsRequestRef = useRef(0);
+  const ownCampaignsMutationRef = useRef(0);
   const toastSequenceRef = useRef(0);
   const auditedInitDataRef = useRef('');
 
@@ -149,7 +151,30 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     window.setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), 6000);
   }, []);
 
+  // يطبّق قائمة إعلانات المعلن القادمة من الخادم ويُزامن صفحة تفاصيل الإعلان المفتوحة معها.
+  const applyOwnCampaigns = useCallback((rows: ApiCampaignRow[]) => {
+    const nextVideos = rows.filter((row) => row.platform === 'youtube').map(toVideo);
+    const nextCampaigns = rows.filter((row) => row.platform !== 'youtube').map(toPromotion);
+    setVideos(nextVideos);
+    setPlatformCampaigns(nextCampaigns);
+    setSelectedCampaignDetail((current) => {
+      if (!current) return current;
+      if (current.video) {
+        const currentId = current.video.id;
+        const fresh = nextVideos.find((item) => item.id === currentId);
+        return fresh ? { video: fresh } : null;
+      }
+      if (current.campaign) {
+        const currentId = current.campaign.id;
+        const fresh = nextCampaigns.find((item) => item.id === currentId);
+        return fresh ? { campaign: fresh } : null;
+      }
+      return current;
+    });
+  }, []);
+
   const refreshData = useCallback(async () => {
+    const campaignsRequest = ++ownCampaignsRequestRef.current;
     try {
       const [balance, ownCampaigns, tasks, proofs, deposits, withdrawals] = await Promise.all([
         apiGet<ApiBalance>('balance'),
@@ -161,8 +186,10 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       ]);
       setAdvertiserBalance(Number(balance?.advertiserBalance ?? 0));
       setViewerBalance(Number(balance?.viewerBalance ?? 0));
-      setVideos(ownCampaigns.filter((row) => row.platform === 'youtube').map(toVideo));
-      setPlatformCampaigns(ownCampaigns.filter((row) => row.platform !== 'youtube').map(toPromotion));
+      // لا نطبّق نتيجة قديمة فوق نتيجة أحدث أو أثناء تنفيذ حذف/إيقاف/نشر.
+      if (campaignsRequest === ownCampaignsRequestRef.current && ownCampaignsMutationRef.current === 0) {
+        applyOwnCampaigns(ownCampaigns);
+      }
       // الحملات الموقوفة أو غير النشطة لا تظهر للمستخدمين في المهام النشطة.
       const activeTasks = tasks.filter((row) => row.status === 'نشط');
       setTaskVideos(activeTasks.filter((row) => row.platform === 'youtube').map(toVideo));
@@ -183,7 +210,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       }
       notify('warning', 'تعذر تحميل البيانات', 'تعذر الاتصال بالخادم. أعد المحاولة بعد قليل.');
     }
-  }, [language, notify]);
+  }, [language, notify, applyOwnCampaigns]);
 
   // تحديث الرصيد دوريًا وعند العودة للتطبيق حتى لا تظهر قيمة قديمة بعد تعديل الإدارة.
   const refreshBalance = useCallback(async () => {
@@ -240,6 +267,42 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       document.removeEventListener('visibilitychange', tick);
     };
   }, [mode, refreshTasks]);
+
+  // تحديث إعلانات المعلن فقط (طلب واحد خفيف) لتنعكس أي إضافة/حذف/إيقاف في «إعلاناتي» فورًا.
+  const refreshOwnCampaigns = useCallback(async () => {
+    if (!window.Telegram?.WebApp?.initData) return;
+    const requestId = ++ownCampaignsRequestRef.current;
+    try {
+      const rows = await apiGet<ApiCampaignRow[]>('campaigns');
+      if (requestId !== ownCampaignsRequestRef.current || ownCampaignsMutationRef.current > 0) return;
+      applyOwnCampaigns(rows);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 403 && error.message === 'Account banned') {
+        bannedRef.current = true;
+        setBanned(true);
+      }
+      // سيُعاد التحديث في الدورة التالية.
+    }
+  }, [applyOwnCampaigns]);
+
+  useEffect(() => {
+    if (mode !== 'creator' || (screen !== 'campaigns' && screen !== 'campaign-detail')) return;
+    const tick = () => { if (document.visibilityState === 'visible') void refreshOwnCampaigns(); };
+    tick();
+    const timer = window.setInterval(tick, 6000);
+    document.addEventListener('visibilitychange', tick);
+    window.addEventListener('focus', tick);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+      window.removeEventListener('focus', tick);
+    };
+  }, [mode, screen, refreshOwnCampaigns]);
+
+  // إن اختفى الإعلان المفتوح (حُذف من جهاز آخر مثلًا) نعود لقائمة إعلاناتي بدل صفحة فارغة.
+  useEffect(() => {
+    if (screen === 'campaign-detail' && !selectedCampaignDetail) setScreen('campaigns');
+  }, [screen, selectedCampaignDetail]);
 
   // تحديث حالة الإثباتات قيد المراجعة دوريًا حتى يظهر قبول/رفض الإدارة دون إعادة فتح التطبيق.
   const hasPendingProof = taskProofs.some((proof) => proof.status === 'قيد المراجعة');
@@ -514,7 +577,8 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
         duration: video.duration,
         requestedViews: video.requestedViews,
       }, requestId);
-      await refreshData();
+      await refreshOwnCampaigns();
+      void refreshData();
       notify('success', 'تم نشر الإعلان', 'أصبح الفيديو نشطًا ويمكن للمشاهدين اكتشافه الآن.');
     } catch (error) {
       const message = error instanceof ApiError
@@ -525,44 +589,73 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     }
   };
 
-  const saveCampaignDetailVideo = async (updated: Video) => {
+  const removeOwnCampaignLocally = (targetId: number | string) => {
+    setVideos((current) => current.filter((item) => String(item.id) !== String(targetId)));
+    setPlatformCampaigns((current) => current.filter((item) => String(item.id) !== String(targetId)));
+  };
+
+  // تعديل/إيقاف/تشغيل: تُحدَّث القائمة محليًا فورًا ثم تُزامَن مع الخادم.
+  const patchOwnCampaign = async (
+    targetId: number | string,
+    patch: { title: string; link: string; status: string },
+  ): Promise<{ id: string; status: string } | null> => {
+    ownCampaignsMutationRef.current += 1;
     try {
-      await apiPatch(`campaigns/${updated.id}`, { title: updated.title, link: updated.link, status: updated.status });
-      await refreshData();
-    } catch {
-      notify('warning', 'تعذر حفظ التعديل', 'لم يحفظ الخادم التعديل. حاول مرة أخرى.');
+      const saved = await apiPatch<{ id: string; status: string }>(`campaigns/${targetId}`, patch);
+      setVideos((current) => current.map((item) => String(item.id) === String(targetId)
+        ? { ...item, title: patch.title, link: patch.link, status: saved.status as Video['status'] }
+        : item));
+      setPlatformCampaigns((current) => current.map((item) => String(item.id) === String(targetId)
+        ? { ...item, title: patch.title, link: patch.link, status: saved.status as PromotionCampaign['status'] }
+        : item));
+      return saved;
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        removeOwnCampaignLocally(targetId);
+        notify('warning', 'الإعلان غير موجود', 'تم حذف هذا الإعلان مسبقًا.');
+      } else {
+        notify('warning', 'تعذر حفظ التعديل', 'لم يحفظ الخادم التعديل. حاول مرة أخرى.');
+      }
+      return null;
+    } finally {
+      ownCampaignsMutationRef.current -= 1;
+      void refreshOwnCampaigns();
     }
   };
-  const saveCampaignDetailPlatform = async (updated: PromotionCampaign) => {
-    try {
-      await apiPatch(`campaigns/${updated.id}`, { title: updated.title, link: updated.link, status: updated.status });
-      await refreshData();
-    } catch {
-      notify('warning', 'تعذر حفظ التعديل', 'لم يحفظ الخادم التعديل. حاول مرة أخرى.');
-    }
-  };
+
+  const saveCampaignDetailVideo = (updated: Video) => patchOwnCampaign(updated.id, { title: updated.title, link: updated.link, status: updated.status });
+  const saveCampaignDetailPlatform = (updated: PromotionCampaign) => patchOwnCampaign(updated.id, { title: updated.title, link: updated.link, status: updated.status });
   const toggleCampaignDetailStatus = async () => {
     if (selectedCampaignDetail?.video) {
       const selected = selectedCampaignDetail.video;
       const next = { ...selected, status: selected.status === 'موقوف' ? 'نشط' as const : 'موقوف' as const };
-      await saveCampaignDetailVideo(next);
-      setSelectedCampaignDetail({ video: next });
+      const saved = await saveCampaignDetailVideo(next);
+      if (saved) setSelectedCampaignDetail({ video: { ...next, status: saved.status as Video['status'] } });
     } else if (selectedCampaignDetail?.campaign) {
       const selected = selectedCampaignDetail.campaign;
       const next = { ...selected, status: selected.status === 'موقوف' ? (selected.platform === 'telegram' ? 'بانتظار تحقق البوت' as const : 'نشط' as const) : 'موقوف' as const };
-      await saveCampaignDetailPlatform(next);
-      setSelectedCampaignDetail({ campaign: next });
+      const saved = await saveCampaignDetailPlatform(next);
+      if (saved) setSelectedCampaignDetail({ campaign: { ...next, status: saved.status as PromotionCampaign['status'] } });
     }
   };
   const deleteCampaignById = async (targetId: number | string): Promise<boolean> => {
+    ownCampaignsMutationRef.current += 1;
     try {
       await apiDelete(`campaigns/${targetId}`);
-      await refreshData();
+      removeOwnCampaignLocally(targetId);
       notify('success', 'تم حذف الإعلان', 'تمت إزالة الإعلان من قائمتك.');
       return true;
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        // حُذف مسبقًا (ضغط مكرر أو من جهاز آخر): تُزال من القائمة دون خطأ.
+        removeOwnCampaignLocally(targetId);
+        return true;
+      }
       notify('warning', 'تعذر حذف الإعلان', 'لم يحذف الخادم الإعلان. حاول مرة أخرى.');
       return false;
+    } finally {
+      ownCampaignsMutationRef.current -= 1;
+      void refreshOwnCampaigns();
     }
   };
   const deleteCampaignDetail = async () => {
@@ -585,7 +678,8 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
         targetCount: campaign.targetCount,
         price: campaign.price,
       });
-      await refreshData();
+      await refreshOwnCampaigns();
+      void refreshData();
       setScreen('campaigns');
       const isLive = saved.status === 'نشط';
       notify(
@@ -596,7 +690,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
           : `أُضيف إعلان ${platformName} إلى القائمة، ولن يظهر حتى يتم التحقق من صلاحيات البوت على القناة.`,
       );
     } catch (error) {
-      const message = error instanceof ApiError && error.status === 402
+      const message = error instanceof ApiError && [402, 409, 429].includes(error.status)
         ? error.message
         : 'لم يحفظ الخادم الإعلان. تحقق من البيانات وحاول مرة أخرى.';
       notify('warning', `تعذر نشر إعلان ${platformName}`, message);
@@ -665,17 +759,30 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     if (creditedVideosRef.current.has(video.id)) return true;
     creditedVideosRef.current.add(video.id);
     try {
-      const result = await apiPost<{ reward: number }>(`tasks/${video.id}/complete`);
+      // الطلب آمن التكرار على الخادم، لذا نعيد المحاولة مرة واحدة عند خطأ شبكة/خادم مؤقت.
+      const completeOnce = () => apiPost<{ reward: number; alreadyCredited?: boolean }>(`tasks/${video.id}/complete`);
+      let result: { reward: number; alreadyCredited?: boolean };
+      try {
+        result = await completeOnce();
+      } catch (firstError) {
+        if (firstError instanceof ApiError && firstError.status < 500) throw firstError;
+        await new Promise((resolve) => window.setTimeout(resolve, 1500));
+        result = await completeOnce();
+      }
       setCompletedVideoIds((current) => new Set(current).add(video.id));
       saveWatchSession(video, video.duration * 1000, 'completed');
-      notify('success', 'تمت إضافة المكافأة', `أضيفت ${formatUsd(result.reward)} إلى رصيدك بعد إكمال المدة المطلوبة.`);
+      notify('success', 'تمت إضافة المكافأة', result.alreadyCredited
+        ? `سبق احتساب ${formatUsd(result.reward)} لهذا الفيديو وهي في رصيدك.`
+        : `أضيفت ${formatUsd(result.reward)} إلى رصيدك بعد إكمال المدة المطلوبة.`);
       void refreshData();
       return true;
     } catch (error) {
       creditedVideosRef.current.delete(video.id);
       const detail = error instanceof ApiError && error.status === 409
         ? 'لم يؤكد الخادم اكتمال المدة بعد. انتظر قليلًا ثم اضغط تحقق مرة أخرى.'
-        : 'تعذر الاتصال بالخادم. اضغط تحقق مرة أخرى.';
+        : error instanceof ApiError && error.status === 404
+          ? 'لم يعد هذا الإعلان متاحًا (أُوقف أو حُذف). اختر فيديو آخر.'
+          : 'تعذر الاتصال بالخادم. اضغط تحقق مرة أخرى.';
       notify('warning', 'تعذر احتساب المكافأة', detail);
       return false;
     }
