@@ -9,7 +9,7 @@ const TASKS = {
   referrals_50: { reward: 0.1, target: 50, metric: 'referralsTotal' },
   referrals_100: { reward: 0.2, target: 100, metric: 'referralsTotal' },
   browse_100: { reward: 0.01, target: 100, metric: 'browsingSessions' },
-  monetag_500: { reward: 0.02, target: 500, metric: 'monetagViews' },
+  monetag_500: { reward: 0.02, target: 500, metric: 'monetagSessions' },
 };
 
 async function readProgress(userId) {
@@ -30,10 +30,8 @@ async function readProgress(userId) {
       [userId],
     ),
     sql.query(
-      `SELECT COALESCE(sum(
-         (first_valued_at IS NOT NULL)::int + (second_valued_at IS NOT NULL)::int
-       ), 0)::int AS total
-       FROM vr_monetag_ad_sessions WHERE user_id = $1`,
+      `SELECT count(*)::int AS total
+       FROM vr_monetag_reward_credits WHERE user_id = $1`,
       [userId],
     ),
     sql.query(
@@ -49,7 +47,7 @@ async function readProgress(userId) {
     referralsTotal: Number(referrals[0]?.total ?? 0),
     referralsToday: Number(referrals[0]?.today ?? 0),
     browsingSessions: Number(browsing[0]?.total ?? 0),
-    monetagViews: Number(monetag[0]?.total ?? 0),
+    monetagSessions: Number(monetag[0]?.total ?? 0),
     claimed: [...new Set(claims
       .filter((row) => row.achievement_id !== 'invite_daily')
       .map((row) => row.achievement_id))],
@@ -79,9 +77,7 @@ export async function claimAchievement(req, res) {
     referrals_100: `(SELECT count(*) FROM vr_users WHERE invited_by = $1) >= 100`,
     browse_100: `(COALESCE((SELECT sum(count) FROM vr_ad_rewards WHERE user_id = $1), 0)
       + COALESCE((SELECT sum(count) FROM vr_monetag_ad_rewards WHERE user_id = $1), 0)) >= 100`,
-    monetag_500: `(SELECT COALESCE(sum(
-      (first_valued_at IS NOT NULL)::int + (second_valued_at IS NOT NULL)::int
-      ), 0) FROM vr_monetag_ad_sessions WHERE user_id = $1) >= 500`,
+    monetag_500: `(SELECT count(*) FROM vr_monetag_reward_credits WHERE user_id = $1) >= 500`,
   }[achievementId];
 
   const rows = await sql.query(
