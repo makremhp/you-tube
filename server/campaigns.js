@@ -56,18 +56,6 @@ async function queryWithRetry(text, params) {
   }
 }
 
-async function releaseCampaignRequest(userId, requestId) {
-  try {
-    await sql.query(
-      `DELETE FROM vr_campaign_requests
-       WHERE owner_id = $1 AND request_id = $2 AND status IN ('rate_limited', 'duplicate')`,
-      [userId, requestId],
-    );
-  } catch {
-    // محاولة تنظيف فقط.
-  }
-}
-
 const CAMPAIGN_COLUMNS = `
   c.id::text AS id,
   c.platform,
@@ -211,15 +199,15 @@ async function createYoutubeCampaign(req, res, user, body, title, link) {
     status,
   };
   const requestHash = makeYoutubeRequestHash(normalizedRequest);
+  // ملاحظة: عبارات WITH المعدِّلة لا ترى صفوف بعضها داخل نفس الاستعلام، لذلك لا نُدخل صف الطلب ثم نحدّثه؛
+  // بل نسجّل الطلب مرة واحدة بقيمته النهائية فقط عند نجاح الإنشاء (هذا كان سبب رسالة «قيد المعالجة» الخاطئة).
   const createdRows = await sql.query(
-    `WITH claimed AS (
-       INSERT INTO vr_campaign_requests (owner_id, request_id, request_hash)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (owner_id, request_id) DO NOTHING
-       RETURNING owner_id
+    `WITH existing AS (
+       SELECT request_hash, campaign_id FROM vr_campaign_requests
+       WHERE owner_id = $1::bigint AND request_id = $2::text
      ), cooled AS (
        INSERT INTO vr_campaign_cooldowns (owner_id, last_at)
-       SELECT $1::bigint, now() WHERE EXISTS (SELECT 1 FROM claimed)
+       SELECT $1::bigint, now() WHERE NOT EXISTS (SELECT 1 FROM existing)
        ON CONFLICT (owner_id) DO UPDATE SET last_at = now()
          WHERE vr_campaign_cooldowns.last_at <= now() - make_interval(secs => ${CAMPAIGN_COOLDOWN_SECONDS})
        RETURNING owner_id
@@ -251,22 +239,18 @@ async function createYoutubeCampaign(req, res, user, body, title, link) {
          $4, $14, $15, $16, $17, $18, $19, $20
        FROM debited
        RETURNING id
-     ), finalized AS (
-       UPDATE vr_campaign_requests
-       SET campaign_id = (SELECT id FROM created),
-           status = CASE
-             WHEN EXISTS (SELECT 1 FROM created) THEN 'created'
-             WHEN NOT EXISTS (SELECT 1 FROM cooled) THEN 'rate_limited'
-             WHEN EXISTS (SELECT 1 FROM duplicate) THEN 'duplicate'
-             ELSE 'insufficient_balance'
-           END
-       WHERE owner_id = $1
-         AND request_id = $2
-         AND EXISTS (SELECT 1 FROM claimed)
-       RETURNING campaign_id, status
+     ), recorded AS (
+       INSERT INTO vr_campaign_requests (owner_id, request_id, request_hash, campaign_id, status)
+       SELECT $1::bigint, $2::text, $3::text, id, 'created' FROM created
+       ON CONFLICT (owner_id, request_id) DO NOTHING
+       RETURNING owner_id
      )
-     SELECT campaign_id::text AS id, status
-     FROM finalized`,
+     SELECT (SELECT id::text FROM created) AS id,
+            EXISTS (SELECT 1 FROM existing) AS "hasExisting",
+            (SELECT request_hash FROM existing) AS "existingHash",
+            (SELECT campaign_id::text FROM existing) AS "existingId",
+            EXISTS (SELECT 1 FROM cooled) AS "cooledOk",
+            EXISTS (SELECT 1 FROM duplicate) AS "isDuplicate"`,
     [
       user.id,
       requestId,
@@ -291,44 +275,19 @@ async function createYoutubeCampaign(req, res, user, body, title, link) {
     ],
   );
 
-  if (!createdRows.length) {
-    const priorRows = await sql.query(
-      `SELECT request_hash AS "requestHash", campaign_id::text AS id, status
-       FROM vr_campaign_requests
-       WHERE owner_id = $1 AND request_id = $2`,
-      [user.id, requestId],
-    );
-    const prior = priorRows[0];
-    if (!prior) throw new HttpError(409, 'تعذر إكمال الطلب. أعد المحاولة باستخدام طلب جديد.');
-    if (prior.requestHash !== requestHash) throw new HttpError(409, 'تم استخدام معرّف الطلب مع بيانات حملة مختلفة.');
-    if (prior.status === 'insufficient_balance') {
-      throw new HttpError(402, 'رصيد المعلن غير كافٍ لنشر هذه الحملة. أضف رصيدًا ثم أعد المحاولة.');
-    }
-    if (prior.status === 'rate_limited') {
-      await releaseCampaignRequest(user.id, requestId);
-      throw new HttpError(429, RATE_LIMIT_MESSAGE);
-    }
-    if (prior.status === 'duplicate') {
-      await releaseCampaignRequest(user.id, requestId);
-      throw new HttpError(409, DUPLICATE_MESSAGE);
-    }
-    if (prior.status === 'created' && prior.id) {
-      ok(res, { id: prior.id, campaignBudget, replayed: true }, 200);
+  const result = createdRows[0];
+  if (result?.hasExisting) {
+    // الطلب نُفّذ سابقًا بنفس المعرّف: نُرجع النتيجة نفسها دون خصم جديد.
+    if (result.existingHash !== requestHash) throw new HttpError(409, 'تم استخدام معرّف الطلب مع بيانات حملة مختلفة.');
+    if (result.existingId) {
+      ok(res, { id: result.existingId, campaignBudget, replayed: true }, 200);
       return;
     }
-    throw new HttpError(409, 'هذا الطلب قيد المعالجة بالفعل.');
+    throw new HttpError(409, 'تم تنفيذ هذا الطلب سابقًا. راجع قائمة إعلاناتك.');
   }
-
-  const result = createdRows[0];
-  if (result.status === 'rate_limited') {
-    await releaseCampaignRequest(user.id, requestId);
-    throw new HttpError(429, RATE_LIMIT_MESSAGE);
-  }
-  if (result.status === 'duplicate') {
-    await releaseCampaignRequest(user.id, requestId);
-    throw new HttpError(409, DUPLICATE_MESSAGE);
-  }
-  if (result.status === 'insufficient_balance') {
+  if (!result?.id) {
+    if (!result?.cooledOk) throw new HttpError(429, RATE_LIMIT_MESSAGE);
+    if (result?.isDuplicate) throw new HttpError(409, DUPLICATE_MESSAGE);
     throw new HttpError(402, 'رصيد المعلن غير كافٍ لنشر هذه الحملة. أضف رصيدًا ثم أعد المحاولة.');
   }
   if (status === 'نشط') await notifyTaskAvailable(result.id);
@@ -505,8 +464,11 @@ export async function completeTask(req, res, id) {
 
   if (campaign.platform === 'youtube') {
     const requiredSeconds = Number(campaign.duration) * MIN_WATCH_TOLERANCE;
-    const reward = campaign.reward ?? viewerReward(campaign.cpm);
-    const rows = await queryWithRetry(
+    const reward = Number(campaign.reward ?? viewerReward(campaign.cpm));
+    if (!Number.isFinite(reward) || reward < 0) throw new HttpError(409, 'تعذر تحديد مكافأة هذا الإعلان.');
+    let rows;
+    try {
+      rows = await queryWithRetry(
       `WITH candidate AS (
          SELECT id FROM vr_campaigns
          WHERE id = $1 AND status = 'نشط' AND platform = 'youtube'
@@ -530,7 +492,13 @@ export async function completeTask(req, res, id) {
        )
        SELECT done.reward::float8 AS reward, done.completed_at AS "completedAt" FROM done, bump, credit`,
       [id, user.id, reward, requiredSeconds],
-    );
+      );
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      const code = String(error?.code ?? 'unknown');
+      console.error('completeTask failed:', code, error instanceof Error ? error.message : 'unknown');
+      throw new HttpError(500, `خطأ في قاعدة البيانات أثناء احتساب المكافأة (${code})`);
+    }
     if (!rows.length) {
       // إن كانت المشاهدة محتسبة سابقًا (إعادة محاولة بعد خطأ مؤقت) نُرجع نجاحًا دون خصم/إضافة جديدة.
       const earlier = await findCompletedReward(id, user.id);
