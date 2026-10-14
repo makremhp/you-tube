@@ -183,6 +183,51 @@ export function ensureSchema() {
           status TEXT NOT NULL DEFAULT 'مفتوح',
           created_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )`,
+        `CREATE TABLE IF NOT EXISTS vr_security_sessions (
+          session_id TEXT PRIMARY KEY,
+          user_id BIGINT NOT NULL,
+          device_hash TEXT NOT NULL,
+          ip_hash TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '24 hours'),
+          UNIQUE (user_id, device_hash)
+        )`,
+        `CREATE INDEX IF NOT EXISTS vr_security_sessions_device_idx
+          ON vr_security_sessions (device_hash, last_seen_at DESC)`,
+        `CREATE TABLE IF NOT EXISTS vr_api_request_nonces (
+          user_id BIGINT NOT NULL,
+          nonce TEXT NOT NULL,
+          expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '24 hours'),
+          PRIMARY KEY (user_id, nonce)
+        )`,
+        `CREATE INDEX IF NOT EXISTS vr_api_request_nonces_expiry_idx
+          ON vr_api_request_nonces (expires_at)`,
+        `CREATE TABLE IF NOT EXISTS vr_api_rate_limits (
+          identity_hash TEXT NOT NULL,
+          scope TEXT NOT NULL,
+          window_start BIGINT NOT NULL,
+          request_count INTEGER NOT NULL DEFAULT 1,
+          PRIMARY KEY (identity_hash, scope, window_start)
+        )`,
+        `CREATE INDEX IF NOT EXISTS vr_api_rate_limits_window_idx
+          ON vr_api_rate_limits (window_start)`,
+        `CREATE TABLE IF NOT EXISTS vr_security_events (
+          id BIGSERIAL PRIMARY KEY,
+          event_key TEXT NOT NULL UNIQUE,
+          user_id BIGINT,
+          event_type TEXT NOT NULL,
+          request_path TEXT NOT NULL,
+          method TEXT NOT NULL,
+          ip_hash TEXT,
+          device_hash TEXT,
+          details JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )`,
+        `CREATE INDEX IF NOT EXISTS vr_security_events_created_idx
+          ON vr_security_events (created_at DESC)`,
+        `CREATE INDEX IF NOT EXISTS vr_security_events_user_idx
+          ON vr_security_events (user_id, created_at DESC)`,
         `CREATE TABLE IF NOT EXISTS vr_admin_audit_log (
           id BIGSERIAL PRIMARY KEY,
           admin_id BIGINT NOT NULL REFERENCES vr_users(id),

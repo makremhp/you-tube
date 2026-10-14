@@ -49,6 +49,7 @@ import { claimAchievement, getAchievements } from './achievements.js';
 import { listPublishProofs, submitPublishProof } from './publishing.js';
 import { checkTelegramMembershipOnEntry, sweepTelegramMemberships } from './membership.js';
 import { readPositiveInteger, readText } from './validation.js';
+import { applyApiSecurity } from './security.js';
 import { handleNotificationPreview, sendAdminTestNotification } from '../api/telegram/bot-messages.js';
 
 function routePath(req) {
@@ -110,6 +111,7 @@ export async function dispatch(req, res) {
   }
 
   const authUser = authenticate(req);
+  await applyApiSecurity(req, res, authUser, key);
   const adminIds = (process.env.ADMIN_TELEGRAM_IDS ?? '').split(',').map((id) => id.trim());
   const adminRequest = Boolean(authUser && adminIds.includes(String(authUser.id)));
   const maintenanceRows = await sql.query(`SELECT value::text AS enabled FROM vr_platform_settings WHERE key = 'maintenance'`);
