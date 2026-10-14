@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowRight, CheckCircle2, Clock3, ExternalLink, ImageIcon, LoaderCircle, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
-import { openExternalLink, type PromotionCampaign, type PromotionPlatform, type TaskProof } from '@/legacy/shared';
+import type { PromotionCampaign, PromotionPlatform, TaskProof } from '@/legacy/shared';
 import { SiTelegram, SiTiktok } from 'react-icons/si';
 import { formatTaskReward, useTaskRewards } from '@/lib/useTaskRewards';
 
@@ -83,7 +83,7 @@ export function PlatformTasksPage({
   };
 
   const openTaskChannel = (task: PromotionCampaign) => {
-    openExternalLink(task.link);
+    window.open(task.link, '_blank', 'noopener,noreferrer');
     setJoiningId(task.id);
     onNotify?.('info', 'تم فتح رابط القناة', 'عُد إلى التطبيق بعد الانضمام للتحقق من اشتراكك.');
   };

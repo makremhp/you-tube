@@ -1,4 +1,4 @@
-import { Clock3, DollarSign, Film, PlaySquare, ShieldCheck, Target } from 'lucide-react';
+import { Clock3, DollarSign, ExternalLink, Film, PlaySquare, ShieldCheck, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
 import { SiYoutube } from 'react-icons/si';
@@ -16,12 +16,14 @@ export function ViewerView({
   videos,
   onSelect,
   insideTelegram,
+  onOpenBrowser,
   completedVideoIds,
   browserMode = false,
 }: {
   videos: Video[];
   onSelect: (video: Video) => void;
   insideTelegram: boolean;
+  onOpenBrowser: (video: Video) => void;
   completedVideoIds: Set<number>;
   browserMode?: boolean;
 }) {
@@ -55,11 +57,11 @@ export function ViewerView({
       {insideTelegram ? (
         <section className="animate-rise mx-auto mt-8 flex min-h-[340px] max-w-3xl flex-col items-center justify-center rounded-[26px] border border-blue-100 bg-white px-6 py-10 text-center shadow-[var(--shadow-soft)] md:px-10">
           <div className="grid h-16 w-16 place-items-center rounded-2xl bg-[#edf3ff] text-[#1557ee]"><PlaySquare className="h-8 w-8" /></div>
-          <h2 className="mt-5 font-display text-2xl font-bold text-[#12234b]">اختر فيديو لفتحه في المتصفح الخارجي</h2>
-          <p className="mt-3 max-w-md text-sm leading-7 text-slate-500">سيبقى حسابك موصولًا بالتطبيق للتحقق من المهمة؛ افتح YouTube في المتصفح الخارجي ثم ارجع إلى هنا لإكمالها.</p>
+          <h2 className="mt-5 font-display text-2xl font-bold text-[#12234b]">شاهد واربح من المتصفح</h2>
+          <p className="mt-3 max-w-md text-sm leading-7 text-slate-500">مشغلات YouTube لا تظهر داخل Telegram. افتح صفحة المشاهدة في المتصفح لمشاهدة الفيديوهات مباشرةً دون قوائم التطبيق.</p>
           {activeVideos[0] ? (
-            <Button type="button" data-testid="button-open-browser-watch" onClick={() => onSelect(activeVideos[0])} variant="primary" size="lg" className="mt-7 flex items-center justify-center gap-2 text-sm font-bold">
-              <PlaySquare className="h-4 w-4" /> ابدأ مشاهدة {activeVideos[0].title}
+            <Button type="button" data-testid="button-open-browser-watch" onClick={() => onOpenBrowser(activeVideos[0])} variant="primary" size="lg" className="mt-7 flex items-center justify-center gap-2 text-sm font-bold">
+              <ExternalLink className="h-4 w-4" /> اذهب للمتصفح للمشاهدة والربح
             </Button>
           ) : (
             <p className="mt-7 rounded-xl bg-slate-50 px-5 py-3 text-sm font-semibold text-slate-500">لا توجد فيديوهات جديدة للمشاهدة حاليًا.</p>
