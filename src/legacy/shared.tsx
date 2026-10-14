@@ -82,30 +82,6 @@ function getTelegramUser(): TelegramUser | null {
   return window.Telegram?.WebApp?.initDataUnsafe?.user ?? null;
 }
 
-export function openExternalLink(value: string) {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return false;
-  }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') return false;
-
-  const webApp = window.Telegram?.WebApp;
-  if (webApp?.openLink) {
-    try {
-      webApp.openLink(url.toString(), { try_instant_view: false });
-      return true;
-    } catch {
-      // Older Telegram clients may not expose openLink; fall through to the browser path.
-    }
-  }
-
-  const opened = window.open(url.toString(), '_blank', 'noopener,noreferrer');
-  if (!opened) window.location.assign(url.toString());
-  return true;
-}
-
 function getTelegramUserFromHash(): TelegramUser | null {
   try {
     const serializedUser = new URLSearchParams(window.location.hash.slice(1)).get('telegram');
@@ -262,13 +238,6 @@ type AdvertisementSession = {
   credited: boolean;
 };
 
-export type TaskHumanChallenge = {
-  challengeId: string;
-  left: number;
-  right: number;
-  choices: number[];
-};
-
 function calculateViewerReward(cpm: number) {
   return cpm / 1000 * 0.2;
 }
@@ -314,6 +283,25 @@ function getYoutubeVideoId(url: string) {
 function getVideoThumbnail(url: string) {
   const videoId = getYoutubeVideoId(url);
   return videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '';
+}
+
+function createBrowserWatchUrl(user: TelegramUser | null) {
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+  const url = new URL(`${basePath}/`, window.location.origin);
+  url.searchParams.set('view', 'earn');
+  if (user) {
+    // The fragment is not sent to the web server; it carries display-only profile context.
+    url.hash = new URLSearchParams({
+      telegram: JSON.stringify({
+        id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        username: user.username,
+        photo_url: user.photo_url,
+      }),
+    }).toString();
+  }
+  return url.toString();
 }
 
 function IconButton({
@@ -732,7 +720,6 @@ function WatchPanel({
   completed,
   session,
   onOpenVideo,
-  onRequestChallenge,
   onComplete,
   onClose,
 }: {
@@ -742,46 +729,23 @@ function WatchPanel({
   completed: boolean;
   session: AdvertisementSession | null;
   onOpenVideo: () => void;
-  onRequestChallenge: () => Promise<TaskHumanChallenge>;
-  onComplete: (challengeId: string, answer: number) => Promise<boolean> | boolean;
+  onComplete: () => Promise<boolean> | boolean | void;
   onClose: () => void;
 }) {
-  const { dir, t } = useLanguage();
+  const { dir } = useLanguage();
   const [hasOpenedVideo, setHasOpenedVideo] = useState(false);
   const [rewardClaimed, setRewardClaimed] = useState(Boolean(session?.credited));
   const [claiming, setClaiming] = useState(false);
-  const [humanChallenge, setHumanChallenge] = useState<TaskHumanChallenge | null>(null);
-  const [challengeAnswer, setChallengeAnswer] = useState<number | null>(null);
-  const [challengeError, setChallengeError] = useState('');
   const claimLockRef = useRef(false);
 
-  // يُصدر الخادم سؤالًا لمرة واحدة بعد اكتمال الوقت؛ لا يظهر النجاح إلا بعد التحقق واحتساب المكافأة.
+  // لا تظهر شاشة النجاح إلا بعد أن يؤكد الخادم المكافأة؛ عند الفشل يبقى الزر متاحًا لإعادة المحاولة.
   const claimReward = async () => {
     if (!completed || isPlaying || claimLockRef.current) return;
     claimLockRef.current = true;
     setClaiming(true);
-    setChallengeError('');
     try {
-      if (!humanChallenge) {
-        const challenge = await onRequestChallenge();
-        setHumanChallenge(challenge);
-        setChallengeAnswer(null);
-        return;
-      }
-      if (challengeAnswer === null) return;
-      const result = await onComplete(humanChallenge.challengeId, challengeAnswer);
-      if (result !== false) {
-        setRewardClaimed(true);
-      } else {
-        setHumanChallenge(null);
-        setChallengeAnswer(null);
-      }
-    } catch (error) {
-      setChallengeError(error instanceof Error ? error.message : t('تعذر التحقق. حاول مرة أخرى.'));
-      if (error && typeof error === 'object' && 'status' in error && Number(error.status) === 410) {
-        setHumanChallenge(null);
-        setChallengeAnswer(null);
-      }
+      const result = await onComplete();
+      if (result !== false) setRewardClaimed(true);
     } finally {
       claimLockRef.current = false;
       setClaiming(false);
@@ -791,7 +755,8 @@ function WatchPanel({
 
   const openVideo = () => {
     onOpenVideo();
-    setHasOpenedVideo(openExternalLink(video.link));
+    window.open(video.link, '_blank', 'noopener,noreferrer');
+    setHasOpenedVideo(true);
   };
 
   return (
@@ -845,38 +810,10 @@ function WatchPanel({
                    <div className="flex items-center justify-between text-xs"><span className="text-slate-500">حالة المشاهدة</span><span className={`font-bold ${isPlaying ? 'text-[#1557ee]' : completed ? 'text-[#159b89]' : hasOpenedVideo ? 'text-amber-600' : 'text-slate-400'}`}>{isPlaying ? 'الفيديو مفتوح — الوقت يُحتسب' : completed ? 'اكتملت المدة — جاهز للتحقق' : hasOpenedVideo ? 'المدة غير مكتملة' : 'افتح الفيديو أولاً'}</span></div>
                 </div>
                  {!completed && hasOpenedVideo && !isPlaying && <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 p-3 text-[10px] leading-5 text-amber-700">لم تكتمل المدة بعد. ارجع إلى الفيديو وأكمل الوقت المطلوب؛ لن تُصرف المكافأة قبل إكماله.</div>}
-                {humanChallenge && (
-                  <section className="mt-5 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm" aria-live="polite">
-                    <div className="flex items-center gap-2 text-xs font-bold text-[#12234b]"><ShieldCheck className="h-4 w-4 text-[#1557ee]" /> {t('تأكيد بشري')}</div>
-                    <p className="mt-2 text-[11px] leading-5 text-slate-500">{t('اختر ناتج الجمع الصحيح لإكمال المهمة.')}</p>
-                    <div className="mt-3 rounded-xl bg-[#eff4ff] px-4 py-3 text-center text-xl font-bold tabular-nums text-[#12234b]" dir="ltr">
-                      {humanChallenge.left} + {humanChallenge.right} = ?
-                    </div>
-                    <div className="mt-3 grid grid-cols-4 gap-2" role="group" aria-label={t('خيارات الإجابة')}>
-                      {humanChallenge.choices.map((choice) => (
-                        <Button
-                          type="button"
-                          key={choice}
-                          data-testid={`button-human-check-${choice}`}
-                          onClick={() => setChallengeAnswer(choice)}
-                          disabled={claiming}
-                          aria-pressed={challengeAnswer === choice}
-                          variant="unstyled"
-                          size="fit"
-                          className={`min-h-10 rounded-lg border text-sm font-bold tabular-nums transition ${challengeAnswer === choice ? 'border-[#1557ee] bg-[#edf3ff] text-[#1557ee]' : 'border-slate-200 bg-white text-slate-600 hover:border-blue-200'}`}
-                        >
-                          {choice}
-                        </Button>
-                      ))}
-                    </div>
-                    {challengeError && <p className="mt-3 text-[10px] leading-5 text-rose-600" role="alert">{challengeError}</p>}
-                  </section>
-                )}
-                {!humanChallenge && challengeError && <p className="mt-3 text-[10px] leading-5 text-rose-600" role="alert">{challengeError}</p>}
-                <Button type="button" data-testid="button-start-watch" onClick={() => { void claimReward(); }} disabled={isPlaying || !hasOpenedVideo || !completed || claiming || (Boolean(humanChallenge) && challengeAnswer === null)} aria-busy={claiming} variant="primary" size="lg" className="mt-7 flex w-full items-center justify-center gap-2 text-sm font-bold">
-                  {claiming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} {claiming ? t('جارٍ التحقق…') : !completed ? t('تحقق بعد إكمال مدة المشاهدة') : humanChallenge ? t('تأكيد الإجابة واستلام المكافأة') : t('ابدأ التحقق واستلم المكافأة')}
+                <Button type="button" data-testid="button-start-watch" onClick={() => { void claimReward(); }} disabled={isPlaying || !hasOpenedVideo || !completed || claiming} aria-busy={claiming} variant="primary" size="lg" className="mt-7 flex w-full items-center justify-center gap-2 text-sm font-bold">
+                  {claiming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} {claiming ? 'جارٍ التحقق…' : completed ? 'تحقق واستلم المكافأة' : 'تحقق بعد إكمال مدة المشاهدة'}
                 </Button>
-                <div className="mt-5 flex items-center gap-2 text-[10px] leading-5 text-slate-400"><ShieldCheck className="h-4 w-4 shrink-0 text-[#159b89]" /> {t('يُحدَّث وقت المشاهدة عند العودة، ويُطلب سؤال تأكيد قبل صرف المكافأة.')}</div>
+                <div className="mt-5 flex items-center gap-2 text-[10px] leading-5 text-slate-400"><ShieldCheck className="h-4 w-4 shrink-0 text-[#159b89]" /> يُحتسب الوقت أثناء وجود التطبيق بالخلفية، وتُصرف المكافأة بعد العودة والتحقق.</div>
               </>
             )}
           </div>
@@ -1158,6 +1095,7 @@ export {
   getEmbedUrl,
   getYoutubeVideoId,
   getVideoThumbnail,
+  createBrowserWatchUrl,
   createUniqueIdentifier,
   formatHistoryDate,
   formatRemaining,
