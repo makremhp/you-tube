@@ -85,21 +85,6 @@ export function ensureSchema() {
           PRIMARY KEY (campaign_id, user_id)
         )`,
         `ALTER TABLE vr_completions ADD COLUMN IF NOT EXISTS campaign_link TEXT`,
-        `CREATE TABLE IF NOT EXISTS vr_task_challenges (
-          id TEXT PRIMARY KEY,
-          campaign_id BIGINT NOT NULL REFERENCES vr_campaigns(id) ON DELETE CASCADE,
-          user_id BIGINT NOT NULL REFERENCES vr_users(id) ON DELETE CASCADE,
-          expected_answer INTEGER NOT NULL,
-          attempts INTEGER NOT NULL DEFAULT 0,
-          verified_at TIMESTAMPTZ,
-          consumed_at TIMESTAMPTZ,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-          expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '3 minutes')
-        )`,
-        `CREATE INDEX IF NOT EXISTS vr_task_challenges_user_task_idx
-          ON vr_task_challenges (user_id, campaign_id, created_at DESC)`,
-        `CREATE INDEX IF NOT EXISTS vr_task_challenges_expiry_idx
-          ON vr_task_challenges (expires_at)`,
         `CREATE INDEX IF NOT EXISTS vr_completions_user_completed_idx
           ON vr_completions (user_id, completed_at DESC)
           WHERE status = 'completed'`,

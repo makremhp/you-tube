@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomInt } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { sql } from './db.js';
 import { HttpError, ok } from './errors.js';
 import { requireUser, botIsChannelAdmin, userIsChannelMember } from './auth.js';
@@ -432,100 +432,6 @@ export async function startTask(req, res, id) {
   ok(res, { status: rows[0].status });
 }
 
-function makeHumanCheck() {
-  const left = randomInt(2, 10);
-  const right = randomInt(2, 10);
-  const answer = left + right;
-  const choices = new Set([answer]);
-  while (choices.size < 4) {
-    const distractor = answer + randomInt(-6, 7);
-    if (distractor > 0 && distractor !== answer) choices.add(distractor);
-  }
-  const shuffledChoices = [...choices];
-  for (let index = shuffledChoices.length - 1; index > 0; index -= 1) {
-    const swapIndex = randomInt(0, index + 1);
-    [shuffledChoices[index], shuffledChoices[swapIndex]] = [shuffledChoices[swapIndex], shuffledChoices[index]];
-  }
-  return { left, right, answer, choices: shuffledChoices };
-}
-
-export async function createTaskChallenge(req, res, id) {
-  const user = await requireUser(req);
-  const rows = await sql.query(
-    `SELECT c.platform,
-            c.duration,
-            (comp.status = 'started'
-              AND comp.started_at <= now() - make_interval(secs => c.duration::float8 * $3::float8)) AS ready
-     FROM vr_campaigns c
-     LEFT JOIN vr_completions comp ON comp.campaign_id = c.id AND comp.user_id = $2
-     WHERE c.id = $1 AND c.status = 'نشط'`,
-    [id, user.id, MIN_WATCH_TOLERANCE],
-  );
-  if (!rows.length || rows[0].platform !== 'youtube') throw new HttpError(404, 'Not found');
-  if (!rows[0].ready) throw new HttpError(409, 'لم تكتمل مدة المشاهدة بعد. أكمل الوقت المطلوب ثم حاول مرة أخرى.');
-
-  const challenge = makeHumanCheck();
-  const challengeId = randomBytes(24).toString('hex');
-  const challengeHash = createHash('sha256').update(challengeId).digest('hex');
-  await sql.query(
-    `INSERT INTO vr_task_challenges (id, campaign_id, user_id, expected_answer)
-     VALUES ($1, $2, $3, $4)`,
-    [challengeHash, id, user.id, challenge.answer],
-  );
-  ok(res, {
-    challengeId,
-    left: challenge.left,
-    right: challenge.right,
-    choices: challenge.choices,
-  });
-}
-
-export async function verifyTaskChallenge(req, res, id) {
-  const user = await requireUser(req);
-  const challengeId = readText(req.body?.challengeId, 64);
-  const answer = readPositiveInteger(req.body?.answer, 30);
-  if (!challengeId || !/^[a-f0-9]{48}$/i.test(challengeId) || answer === null) {
-    throw new HttpError(400, 'Invalid human check');
-  }
-  const challengeHash = createHash('sha256').update(challengeId.toLowerCase()).digest('hex');
-  const rows = await sql.query(
-    `UPDATE vr_task_challenges
-     SET attempts = attempts + 1,
-         verified_at = CASE WHEN expected_answer = $4 THEN now() ELSE NULL END,
-         expires_at = CASE WHEN expected_answer <> $4 AND attempts + 1 >= 3 THEN now() ELSE expires_at END
-     WHERE id = $1
-       AND campaign_id = $2
-       AND user_id = $3
-       AND consumed_at IS NULL
-       AND verified_at IS NULL
-       AND expires_at > now()
-       AND attempts < 3
-     RETURNING expected_answer = $4 AS valid`,
-    [challengeHash, id, user.id, answer],
-  );
-  if (!rows.length) {
-    const previouslyCompleted = await findCompletedReward(id, user.id);
-    if (previouslyCompleted !== null) {
-      ok(res, { verified: true, alreadyCredited: true });
-      return;
-    }
-    const verifiedRows = await sql.query(
-      `SELECT id FROM vr_task_challenges
-       WHERE id = $1 AND campaign_id = $2 AND user_id = $3
-         AND verified_at > now() - interval '3 minutes'
-         AND expires_at > now() AND consumed_at IS NULL`,
-      [challengeHash, id, user.id],
-    );
-    if (verifiedRows.length) {
-      ok(res, { verified: true });
-      return;
-    }
-    throw new HttpError(410, 'انتهى تحقق المهمة. اطلب سؤالًا جديدًا ثم حاول مرة أخرى.');
-  }
-  if (!rows[0].valid) throw new HttpError(422, 'الإجابة غير صحيحة. جرّب السؤال مرة أخرى.');
-  ok(res, { verified: true });
-}
-
 async function findCompletedReward(campaignId, userId) {
   const rows = await sql.query(
     `SELECT reward::float8 AS reward FROM vr_completions
@@ -559,11 +465,6 @@ export async function completeTask(req, res, id) {
   if (campaign.platform === 'youtube') {
     const requiredSeconds = Number(campaign.duration) * MIN_WATCH_TOLERANCE;
     const reward = Number(campaign.reward ?? viewerReward(campaign.cpm));
-    const challengeId = readText(req.body?.challengeId, 64);
-    if (!challengeId || !/^[a-f0-9]{48}$/i.test(challengeId)) {
-      throw new HttpError(400, 'تحقق من المهمة قبل استلام المكافأة.');
-    }
-    const challengeHash = createHash('sha256').update(challengeId.toLowerCase()).digest('hex');
     if (!Number.isFinite(reward) || reward < 0) throw new HttpError(409, 'تعذر تحديد مكافأة هذا الإعلان.');
     let rows;
     try {
@@ -573,29 +474,12 @@ export async function completeTask(req, res, id) {
          WHERE id = $1 AND status = 'نشط' AND platform = 'youtube'
            AND (requested_views IS NULL OR views < requested_views)
          FOR UPDATE
-       ), verified AS (
-         UPDATE vr_task_challenges
-         SET consumed_at = now()
-         WHERE id = $5
-           AND campaign_id = $1
-           AND user_id = $2
-           AND verified_at > now() - interval '3 minutes'
-           AND expires_at > now()
-           AND consumed_at IS NULL
-           AND EXISTS (SELECT 1 FROM candidate)
-           AND EXISTS (
-             SELECT 1 FROM vr_completions c
-             WHERE c.campaign_id = $1 AND c.user_id = $2 AND c.status = 'started'
-               AND c.started_at <= now() - make_interval(secs => $4::float8)
-           )
-         RETURNING id
        ), done AS (
          UPDATE vr_completions
          SET status = 'completed', completed_at = now(), reward = $3
          WHERE campaign_id = $1 AND user_id = $2 AND status = 'started'
            AND started_at <= now() - make_interval(secs => $4::float8)
            AND EXISTS (SELECT 1 FROM candidate)
-           AND EXISTS (SELECT 1 FROM verified)
          RETURNING reward, completed_at
        ), bump AS (
          UPDATE vr_campaigns SET completed_count = completed_count + 1, views = views + 1
@@ -607,7 +491,7 @@ export async function completeTask(req, res, id) {
          RETURNING id
        )
        SELECT done.reward::float8 AS reward, done.completed_at AS "completedAt" FROM done, bump, credit`,
-       [id, user.id, reward, requiredSeconds, challengeHash],
+      [id, user.id, reward, requiredSeconds],
       );
     } catch (error) {
       if (error instanceof HttpError) throw error;
