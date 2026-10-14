@@ -7,13 +7,13 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { useLanguage } from '@/i18n';
 import {
-  createBrowserWatchUrl, createUniqueIdentifier,
+  createUniqueIdentifier,
   formatUsd, getTelegramUser,
   getTelegramUserFromHash, ToastViewport, Sidebar,
   Header, WatchPanel,
   type AdvertisementSession, type AdvertisementSessionStatus, type AppScreen,
   type DepositRecord, type PromotionCampaign, type TaskProof, type TelegramUser,
-  type ToastTone, type ToastMessage, type Video, type WithdrawRecord,
+  type TaskHumanChallenge, type ToastTone, type ToastMessage, type Video, type WithdrawRecord,
 } from '@/legacy/shared';
 import {
   apiDelete, apiGet, apiPatch, apiPost, toDepositRecord, toPromotion, toTaskProof, toVideo, toWithdrawRecord,
@@ -434,15 +434,17 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     if (startedAt === null) return;
     const requiredMs = video.duration * 1000;
     const segmentElapsed = Math.max(0, now - startedAt);
+    const totalElapsed = Math.min(requiredMs, watchElapsedRef.current + segmentElapsed);
     watchSegmentStartedRef.current = null;
     externalWatchPendingRef.current = false;
     setIsPlaying(false);
+    watchElapsedRef.current = totalElapsed;
 
-    if (segmentElapsed < requiredMs * WATCH_COMPLETION_RATIO) {
-      watchElapsedRef.current = 0;
-      setProgress(0);
-      saveWatchSession(video, 0, 'paused', now);
-      notify('warning', 'المدة غير مكتملة', 'عد إلى فيديو YouTube وأكمل المدة المطلوبة من البداية؛ تم تصفير عدّاد المشاهدة.');
+    if (totalElapsed < requiredMs * WATCH_COMPLETION_RATIO) {
+      const remainingSeconds = Math.max(1, Math.ceil((requiredMs * WATCH_COMPLETION_RATIO - totalElapsed) / 1000));
+      setProgress(Math.floor(totalElapsed / 1000));
+      saveWatchSession(video, totalElapsed, 'paused', now);
+      notify('info', 'تم حفظ تقدم المشاهدة', `بقي نحو ${remainingSeconds} ثانية. يمكنك إكمالها عند العودة إلى الفيديو.`);
       return;
     }
 
@@ -472,6 +474,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
         return;
       }
 
+      if (document.visibilityState !== 'visible') return;
       const startedAt = watchSegmentStartedRef.current;
       if (startedAt === null) return;
       // أحداث focus/visible الوهمية بعد الضغط مباشرة (نافذة منبثقة مثلًا) لا تُعدّ عودة حقيقية.
@@ -494,7 +497,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     const timer = window.setInterval(() => {
       const startedAt = watchSegmentStartedRef.current;
       if (startedAt === null || document.visibilityState !== 'visible') return;
-      const elapsed = Date.now() - startedAt;
+      const elapsed = watchElapsedRef.current + Date.now() - startedAt;
       const requiredMs = video.duration * 1000;
       setProgress(Math.min(video.duration, Math.floor(elapsed / 1000)));
       if (elapsed >= requiredMs * WATCH_COMPLETION_RATIO) finishWatchSegment(video);
@@ -559,7 +562,9 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     watchElapsedRef.current = restoredElapsed;
     watchSegmentStartedRef.current = null;
     setSelectedVideo(video);
-    setProgress(Math.floor(restoredElapsed / 1000));
+    setProgress(restoredElapsed >= video.duration * 1000 * WATCH_COMPLETION_RATIO
+      ? video.duration
+      : Math.floor(restoredElapsed / 1000));
     setIsPlaying(false);
   };
 
@@ -755,12 +760,13 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     notify('warning', 'انتهت صلاحية الفاتورة', 'لم يصل تحويل مؤكد قبل انتهاء مدة الفاتورة.');
   };
 
-  const creditViewer = async (video: Video): Promise<boolean> => {
+  const creditViewer = async (video: Video, challengeId: string, answer: number): Promise<boolean> => {
     if (creditedVideosRef.current.has(video.id)) return true;
     creditedVideosRef.current.add(video.id);
     try {
       // الطلب آمن التكرار على الخادم، لذا نعيد المحاولة مرة واحدة عند خطأ شبكة/خادم مؤقت.
-      const completeOnce = () => apiPost<{ reward: number; alreadyCredited?: boolean }>(`tasks/${video.id}/complete`);
+      await apiPost(`tasks/${video.id}/verify`, { challengeId, answer });
+      const completeOnce = () => apiPost<{ reward: number; alreadyCredited?: boolean }>(`tasks/${video.id}/complete`, { challengeId });
       let result: { reward: number; alreadyCredited?: boolean };
       try {
         result = await completeOnce();
@@ -778,30 +784,26 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       return true;
     } catch (error) {
       creditedVideosRef.current.delete(video.id);
-      const detail = error instanceof ApiError && error.status === 409
-        ? 'لم يؤكد الخادم اكتمال المدة بعد. انتظر قليلًا ثم اضغط تحقق مرة أخرى.'
-        : error instanceof ApiError && error.status === 404
-          ? 'لم يعد هذا الإعلان متاحًا (أُوقف أو حُذف). اختر فيديو آخر.'
-          : 'تعذر الاتصال بالخادم. اضغط تحقق مرة أخرى.';
+      const detail = error instanceof ApiError && error.status === 422
+        ? 'الإجابة غير صحيحة؛ سيظهر سؤال جديد عند المحاولة التالية.'
+        : error instanceof ApiError && error.status === 410
+          ? 'انتهت صلاحية سؤال التحقق؛ ابدأ التحقق مرة أخرى.'
+          : error instanceof ApiError && error.status === 409
+            ? 'لم يؤكد الخادم اكتمال المدة بعد. انتظر قليلًا ثم حاول مرة أخرى.'
+            : error instanceof ApiError && error.status === 404
+              ? 'لم يعد هذا الإعلان متاحًا (أُوقف أو حُذف). اختر فيديو آخر.'
+              : 'تعذر الاتصال بالخادم. حاول مرة أخرى.';
       notify('warning', 'تعذر احتساب المكافأة', detail);
       return false;
     }
   };
 
+  const requestViewerChallenge = (video: Video) => apiPost<TaskHumanChallenge>(`tasks/${video.id}/challenge`);
+
   const creditAdReward = async (_amount: number, title: string, message: string) => {
     // المكافأة سُجّلت فعلًا على الخادم من صفحة الإعلانات (ads/reward/<provider>)؛ هنا نحدّث الرصيد فقط.
     await refreshData();
     notify('success', title, message);
-  };
-
-  const openWatchInBrowser = (_video: Video) => {
-    const url = createBrowserWatchUrl(telegramUser);
-    const webApp = window.Telegram?.WebApp;
-    if (webApp?.openLink) {
-      webApp.openLink(url, { try_instant_view: false });
-    } else {
-      window.open(url, '_blank', 'noopener,noreferrer');
-    }
   };
 
   const changeMode = (nextMode: 'creator' | 'viewer' | 'admin') => {
@@ -862,7 +864,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
                          : screen === 'ads' && mode === 'viewer' ? <AdsPage key={telegramUser?.id ?? 'guest'} userId={telegramUser?.id ?? null} onReward={creditAdReward} onNotify={notify} />
                  : screen === 'publish' && mode === 'viewer' ? <PublishingSystemPage telegramUser={telegramUser} onNotify={notify} />
                  : screen === 'achievements' && mode === 'viewer' ? <AchievementsPage onNavigate={(next) => setScreen(next)} onNotify={notify} />
-                : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={taskVideos} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
+                : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={taskVideos} onSelect={selectVideo} insideTelegram={insideTelegram} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
                     : <CreatorOverview telegramUser={telegramUser} platformCampaigns={platformCampaigns} videos={videos} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
            {!browserEarningPage && mode !== 'admin' && <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 p-2 backdrop-blur lg:hidden">
              <div className={`mx-auto grid max-w-md ${mode === 'viewer' ? 'grid-cols-6' : 'grid-cols-4'} items-end gap-1`}>
@@ -900,7 +902,8 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
           saveWatchSession(selectedVideo, watchElapsedRef.current, 'active');
           setIsPlaying(true);
         }
-      }} onComplete={() => creditViewer(selectedVideo)} onClose={() => {
+      }} onRequestChallenge={() => requestViewerChallenge(selectedVideo)} onComplete={(challengeId, answer) => creditViewer(selectedVideo, challengeId, answer)} onClose={() => {
+        if (watchSegmentStartedRef.current !== null) finishWatchSegment(selectedVideo);
         externalWatchPendingRef.current = false;
         setSelectedVideo(null);
         setIsPlaying(false);

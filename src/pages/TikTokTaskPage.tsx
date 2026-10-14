@@ -2,7 +2,7 @@ import { useRef, useState, type ChangeEvent } from 'react';
 import { ArrowRight, ArrowUpRight, CheckCircle2, Clock3, ImageIcon, ImagePlus, LoaderCircle, ShieldCheck, X, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLanguage } from '@/i18n';
-import type { PromotionCampaign, TaskProof } from '@/legacy/shared';
+import { openExternalLink, type PromotionCampaign, type TaskProof } from '@/legacy/shared';
 import { formatTaskReward, useTaskRewards } from '@/lib/useTaskRewards';
 
 export function TikTokTaskPage({
@@ -126,7 +126,7 @@ export function TikTokTaskPage({
                 <Button
                   type="button"
                   data-testid={`button-open-${campaign.id}`}
-                  onClick={() => window.open(campaign.link, '_blank', 'noopener,noreferrer')}
+                  onClick={() => openExternalLink(campaign.link)}
                   variant="secondary"
                   size="sm"
                   className="min-h-12 justify-center gap-2 rounded-xl border-[#1c2228] bg-[#1c2228] text-sm font-bold text-white shadow-[0_4px_10px_rgba(17,24,39,.12)] transition hover:border-[#343c44] hover:bg-[#343c44] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1557ee]"
