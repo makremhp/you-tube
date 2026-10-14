@@ -5,6 +5,7 @@ import { DEFAULT_WITHDRAWAL_SETTINGS, getYoutubeSettings } from './config.js';
 import {
   completeTask,
   createCampaign,
+  createTaskChallenge,
   deleteCampaign,
   listCampaigns,
   listTasks,
@@ -12,6 +13,7 @@ import {
   startTask,
   submitProof,
   updateCampaign,
+  verifyTaskChallenge,
 } from './campaigns.js';
 import {
   adminAction,
@@ -181,6 +183,8 @@ export async function dispatch(req, res) {
       const id = readPositiveInteger(segments[1], Number.MAX_SAFE_INTEGER);
       if (!id) throw new HttpError(400, 'Invalid request');
       if (segments[2] === 'start') return startTask(req, res, id);
+      if (segments[2] === 'challenge') return createTaskChallenge(req, res, id);
+      if (segments[2] === 'verify') return verifyTaskChallenge(req, res, id);
       if (segments[2] === 'complete') return completeTask(req, res, id);
       if (segments[2] === 'proof') return submitProof(req, res, id);
     }
