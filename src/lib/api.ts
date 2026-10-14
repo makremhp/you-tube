@@ -21,10 +21,48 @@ export class ApiError extends Error {
 
 type ApiEnvelope<T> = { success: true; data: T } | { success: false; error: string };
 
+const securityStorageFallback = new Map<string, string>();
+
+function randomHex(byteCount: number) {
+  const bytes = new Uint8Array(byteCount);
+  window.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+function readOrCreateSecurityValue(key: string, byteCount: number) {
+  try {
+    const saved = window.localStorage.getItem(key);
+    if (saved && /^[a-f0-9]{64}$/i.test(saved)) return saved;
+  } catch {
+    const saved = securityStorageFallback.get(key);
+    if (saved) return saved;
+  }
+
+  const created = randomHex(byteCount);
+  try {
+    window.localStorage.setItem(key, created);
+  } catch {
+    securityStorageFallback.set(key, created);
+  }
+  return created;
+}
+
+function readSecurityValue(key: string) {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return securityStorageFallback.get(key) ?? null;
+  }
+}
+
 export async function apiRequest<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown, idempotencyKey?: string): Promise<T> {
   const headers: Record<string, string> = {};
   const initData = window.Telegram?.WebApp?.initData;
   if (initData) headers['x-telegram-init-data'] = initData;
+  headers['x-client-device-id'] = readOrCreateSecurityValue('vr-security-device-id', 32);
+  const securitySessionId = readSecurityValue('vr-security-session-id');
+  if (securitySessionId && /^[a-f0-9]{64}$/i.test(securitySessionId)) headers['x-security-session-id'] = securitySessionId;
+  if (method !== 'GET') headers['x-request-nonce'] = randomHex(16);
   let savedLanguage: string | null = null;
   try {
     savedLanguage = window.localStorage.getItem('vidreward-language');
@@ -43,6 +81,14 @@ export async function apiRequest<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     cache: 'no-store',
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+  const returnedSessionId = response.headers.get('x-security-session-id');
+  if (returnedSessionId && /^[a-f0-9]{64}$/i.test(returnedSessionId)) {
+    try {
+      window.localStorage.setItem('vr-security-session-id', returnedSessionId);
+    } catch {
+      securityStorageFallback.set('vr-security-session-id', returnedSessionId);
+    }
+  }
   let envelope: ApiEnvelope<T> | null = null;
   try {
     envelope = await response.json() as ApiEnvelope<T>;
