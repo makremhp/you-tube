@@ -281,6 +281,27 @@ function getYoutubeVideoId(url: string) {
   return '';
 }
 
+function getBrowserVideoUrl(url: string) {
+  // رابط الفيديو المباشر فقط (بدون صفحات وسيطة). صيغة /embed لا يلتقطها تطبيق YouTube فيبقى المشاهد في المتصفح.
+  const videoId = getYoutubeVideoId(url);
+  return /^[\w-]{11}$/.test(videoId) ? `https://www.youtube.com/embed/${videoId}` : url;
+}
+
+function openVideoInBrowser(url: string) {
+  const target = getBrowserVideoUrl(url);
+  const webApp = window.Telegram?.WebApp;
+  if (webApp?.openLink) {
+    // try_browser يفتح الرابط في متصفح الجهاز الخارجي بدل المتصفح المدمج أو تطبيق YouTube.
+    const platform = String(webApp.platform ?? '').toLowerCase();
+    const preferredBrowser = platform === 'android' ? 'chrome' : platform === 'ios' ? 'safari' : undefined;
+    webApp.openLink(target, preferredBrowser
+      ? { try_instant_view: false, try_browser: preferredBrowser }
+      : { try_instant_view: false });
+    return;
+  }
+  window.open(target, '_blank', 'noopener,noreferrer');
+}
+
 function getVideoThumbnail(url: string) {
   const videoId = getYoutubeVideoId(url);
   return videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '';
@@ -756,7 +777,7 @@ function WatchPanel({
 
   const openVideo = () => {
     onOpenVideo();
-    window.open(video.link, '_blank', 'noopener,noreferrer');
+    openVideoInBrowser(video.link);
     setHasOpenedVideo(true);
   };
 
@@ -775,9 +796,9 @@ function WatchPanel({
               <div className={`h-full w-full ${video.art} flex flex-col items-center justify-center px-6 text-center text-white`}>
                 <div className="grid h-14 w-14 place-items-center rounded-2xl border border-white/30 bg-white/15 backdrop-blur-sm"><PlaySquare className="h-7 w-7" /></div>
                 <div className="mt-4 text-sm font-bold">الفيديو جاهز للمشاهدة</div>
-                <p className="mt-1 max-w-[260px] text-[11px] leading-5 text-white/70">افتح الفيديو على YouTube ثم عد إلى هنا لإكمال التحقق.</p>
+                <p className="mt-1 max-w-[260px] text-[11px] leading-5 text-white/70">سيُفتح الفيديو في المتصفح مباشرةً؛ شاهده ثم عد إلى هنا لإكمال التحقق.</p>
                 <Button type="button" data-testid="button-open-youtube" onClick={openVideo} variant="secondary" size="sm" className="mt-4 flex items-center gap-2 bg-white text-xs font-bold text-[#12234b]">
-                  <ExternalLink className="h-3.5 w-3.5" /> فتح الفيديو على YouTube
+                  <ExternalLink className="h-3.5 w-3.5" /> فتح الفيديو في المتصفح
                 </Button>
               </div>
             </div>
@@ -1097,6 +1118,8 @@ export {
   getYoutubeVideoId,
   getVideoThumbnail,
   createBrowserWatchUrl,
+  openVideoInBrowser,
+  getBrowserVideoUrl,
   createUniqueIdentifier,
   formatHistoryDate,
   formatRemaining,
