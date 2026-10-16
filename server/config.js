@@ -46,6 +46,8 @@ export const AD_REWARD = Number(process.env.AD_REWARD ?? 0.0001);
 export const AD_DAILY_LIMIT = Number(process.env.AD_DAILY_LIMIT ?? 100);
 export const MONETAG_AD_REWARD = 0.0001;
 export const MONETAG_AD_DAILY_LIMIT = 500;
+export const MONETAG_ADS_PER_REWARD = 2;
+export const MONETAG_ADS_PER_REWARD_MAX = 10;
 export const AD_MIN_INTERVAL_SECONDS = Number(process.env.AD_MIN_INTERVAL_SECONDS ?? 30);
 export const DEFAULT_WITHDRAWAL_SETTINGS = Object.freeze({
   binanceWithdrawMin: 1,

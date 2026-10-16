@@ -1,6 +1,7 @@
 import { sql } from './db.js';
 import {
   AD_DAILY_LIMIT, AD_REWARD, MONETAG_AD_DAILY_LIMIT, MONETAG_AD_REWARD,
+  MONETAG_ADS_PER_REWARD, MONETAG_ADS_PER_REWARD_MAX,
   TELEGRAM_TASK_REWARD, TIKTOK_TASK_REWARD,
 } from './config.js';
 
@@ -12,6 +13,7 @@ import {
 export const DEFAULT_AD_SETTINGS = Object.freeze({
   monetagDailyLimit: MONETAG_AD_DAILY_LIMIT,
   monetagReward: MONETAG_AD_REWARD,
+  monetagAdsPerReward: MONETAG_ADS_PER_REWARD,
   adsteraDailyLimit: AD_DAILY_LIMIT,
   adsteraReward: AD_REWARD,
 });
@@ -31,6 +33,11 @@ function readLimit(value, fallback) {
   return Number.isSafeInteger(number) && number >= 0 && number <= 1_000_000 ? number : fallback;
 }
 
+function readAdsPerReward(value, fallback) {
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number >= 1 && number <= MONETAG_ADS_PER_REWARD_MAX ? number : fallback;
+}
+
 function readReward(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0.000001 && number <= 1000 ? Number(number.toFixed(6)) : fallback;
@@ -42,6 +49,7 @@ export function normalizeAdSettings(value) {
   return {
     monetagDailyLimit: readLimit(source.monetagDailyLimit, DEFAULT_AD_SETTINGS.monetagDailyLimit),
     monetagReward: readReward(source.monetagReward, DEFAULT_AD_SETTINGS.monetagReward),
+    monetagAdsPerReward: readAdsPerReward(source.monetagAdsPerReward, DEFAULT_AD_SETTINGS.monetagAdsPerReward),
     adsteraDailyLimit: readLimit(source.adsteraDailyLimit, DEFAULT_AD_SETTINGS.adsteraDailyLimit),
     adsteraReward: readReward(source.adsteraReward, DEFAULT_AD_SETTINGS.adsteraReward),
   };

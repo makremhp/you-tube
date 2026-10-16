@@ -2,7 +2,7 @@ import { sql } from './db.js';
 import { HttpError, ok } from './errors.js';
 import { readMoney, readNonNegativeInteger, readPositiveInteger, readText } from './validation.js';
 import { isAdmin, requireAdmin, telegramRequest } from './auth.js';
-import { normalizeWithdrawalSettings } from './config.js';
+import { MONETAG_ADS_PER_REWARD, MONETAG_ADS_PER_REWARD_MAX, normalizeWithdrawalSettings } from './config.js';
 import { getWithdrawalSettings } from './wallet.js';
 import { getAdSettings, getTaskRewardSettings, normalizeAdSettings, normalizeTaskRewardSettings } from './settings.js';
 import { notifyCampaignStatus, notifyTaskAdvertiser, sendAdminChannelNotification, sendNotification } from '../api/telegram/bot-messages.js';
@@ -288,11 +288,15 @@ export async function setAdSettings(req, res) {
   const monetagDailyLimit = readNonNegativeInteger(body.monetagDailyLimit, 1_000_000);
   const adsteraDailyLimit = readNonNegativeInteger(body.adsteraDailyLimit, 1_000_000);
   const monetagReward = readMoney(body.monetagReward, 0.000001, 1000);
+  const monetagAdsPerReward = readPositiveInteger(body.monetagAdsPerReward ?? MONETAG_ADS_PER_REWARD, MONETAG_ADS_PER_REWARD_MAX);
   const adsteraReward = readMoney(body.adsteraReward, 0.000001, 1000);
   if (monetagDailyLimit === null || adsteraDailyLimit === null || monetagReward === null || adsteraReward === null) {
     throw new HttpError(400, 'الحد اليومي يجب أن يكون عددًا صحيحًا (0 أو أكثر) والسعر رقمًا موجبًا');
   }
-  const adSettings = normalizeAdSettings({ monetagDailyLimit, monetagReward, adsteraDailyLimit, adsteraReward });
+  if (monetagAdsPerReward === null) {
+    throw new HttpError(400, `عدد إعلانات Monetag لكل مكافأة يجب أن يكون عددًا صحيحًا من 1 إلى ${MONETAG_ADS_PER_REWARD_MAX}`);
+  }
+  const adSettings = normalizeAdSettings({ monetagDailyLimit, monetagReward, monetagAdsPerReward, adsteraDailyLimit, adsteraReward });
   await sql.query(
     `INSERT INTO vr_platform_settings (key, value, updated_at)
      VALUES ('ads', $1::jsonb, now())
@@ -335,8 +339,10 @@ export async function adminAdStats(req, res) {
     sql.query(
       `SELECT
          (COUNT(*) FILTER (WHERE (first_valued_at AT TIME ZONE 'UTC')::date = ${today})
-          + COUNT(*) FILTER (WHERE (second_valued_at AT TIME ZONE 'UTC')::date = ${today}))::int AS "viewedToday",
-         (COUNT(first_valued_at) + COUNT(second_valued_at))::int AS "viewedTotal"
+          + COUNT(*) FILTER (WHERE (second_valued_at AT TIME ZONE 'UTC')::date = ${today})
+          + COALESCE(SUM(GREATEST(steps_completed - 2, 0)) FILTER (WHERE day = ${today}), 0))::int AS "viewedToday",
+         (COUNT(first_valued_at) + COUNT(second_valued_at)
+          + COALESCE(SUM(GREATEST(steps_completed - 2, 0)), 0))::int AS "viewedTotal"
        FROM vr_monetag_ad_sessions`,
     ),
     sql.query(
@@ -358,7 +364,8 @@ export async function adminAdStats(req, res) {
        )
        SELECT to_char(days.day, 'YYYY-MM-DD') AS day,
               (SELECT COUNT(*) FROM vr_monetag_ad_sessions s WHERE (s.first_valued_at AT TIME ZONE 'UTC')::date = days.day)::int
-              + (SELECT COUNT(*) FROM vr_monetag_ad_sessions s WHERE (s.second_valued_at AT TIME ZONE 'UTC')::date = days.day)::int AS "monetagAds",
+              + (SELECT COUNT(*) FROM vr_monetag_ad_sessions s WHERE (s.second_valued_at AT TIME ZONE 'UTC')::date = days.day)::int
+              + (SELECT COALESCE(SUM(GREATEST(s.steps_completed - 2, 0)), 0) FROM vr_monetag_ad_sessions s WHERE s.day = days.day)::int AS "monetagAds",
               COALESCE((SELECT SUM(count) FROM vr_monetag_ad_rewards r WHERE r.day = days.day), 0)::int AS "monetagPairs",
               COALESCE((SELECT SUM(count) FROM vr_ad_rewards r WHERE r.day = days.day), 0)::int AS "browseTasks"
        FROM days ORDER BY days.day DESC`,

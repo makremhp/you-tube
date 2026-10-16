@@ -154,6 +154,9 @@ export function ensureSchema() {
           created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '1 hour')
         )`,
+        `ALTER TABLE vr_monetag_ad_sessions ADD COLUMN IF NOT EXISTS required_steps INTEGER NOT NULL DEFAULT 2`,
+        `ALTER TABLE vr_monetag_ad_sessions ADD COLUMN IF NOT EXISTS completed_mask INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE vr_monetag_ad_sessions ADD COLUMN IF NOT EXISTS steps_completed INTEGER NOT NULL DEFAULT 0`,
         `CREATE INDEX IF NOT EXISTS vr_monetag_ad_sessions_user_idx
           ON vr_monetag_ad_sessions (user_id, created_at DESC)`,
         `CREATE TABLE IF NOT EXISTS vr_monetag_reward_claims (
