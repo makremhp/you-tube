@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { useLanguage } from '@/i18n';
 import {
-  createBrowserWatchUrl, createUniqueIdentifier,
+  createUniqueIdentifier,
   formatUsd, getTelegramUser,
   getTelegramUserFromHash, ToastViewport, Sidebar,
   Header, WatchPanel,
@@ -548,8 +548,11 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     if (restoredCredited) {
       creditedVideosRef.current.add(video.id);
     } else {
-      apiPost(`tasks/${video.id}/start`).catch(() => {
-        notify('warning', 'تعذر بدء المهمة', 'لم يسجل الخادم بداية المشاهدة. أغلق الفيديو وافتحه مرة أخرى.');
+      apiPost(`tasks/${video.id}/start`).catch((error) => {
+        const expired = error instanceof ApiError && error.status === 401;
+        notify('warning', 'تعذر بدء المهمة', expired
+          ? 'انتهت جلسة تلغرام. أغلق التطبيق وافتحه من البوت مجددًا.'
+          : 'لم يسجل الخادم بداية المشاهدة. أغلق الفيديو وافتحه مرة أخرى.');
       });
     }
     externalWatchPendingRef.current = false;
@@ -778,7 +781,9 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
       return true;
     } catch (error) {
       creditedVideosRef.current.delete(video.id);
-      const detail = error instanceof ApiError && error.status === 409
+      const detail = error instanceof ApiError && error.status === 401
+        ? 'انتهت جلسة تلغرام. أغلق التطبيق وافتحه من البوت مجددًا ثم اضغط تحقق.'
+        : error instanceof ApiError && error.status === 409
         ? 'لم يؤكد الخادم اكتمال المدة بعد. انتظر قليلًا ثم اضغط تحقق مرة أخرى.'
         : error instanceof ApiError && error.status === 404
           ? 'لم يعد هذا الإعلان متاحًا (أُوقف أو حُذف). اختر فيديو آخر.'
@@ -792,21 +797,6 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     // المكافأة سُجّلت فعلًا على الخادم من صفحة الإعلانات (ads/reward/<provider>)؛ هنا نحدّث الرصيد فقط.
     await refreshData();
     notify('success', title, message);
-  };
-
-  const openWatchInBrowser = (_video: Video) => {
-    const url = createBrowserWatchUrl(telegramUser);
-    const webApp = window.Telegram?.WebApp;
-    if (webApp?.openLink) {
-      // try_browser يطلب من تلغرام فتح الرابط في متصفح الجهاز الخارجي بدل المتصفح المدمج (Bot API 7.6+).
-      const platform = String(webApp.platform ?? '').toLowerCase();
-      const preferredBrowser = platform === 'android' ? 'chrome' : platform === 'ios' ? 'safari' : undefined;
-      webApp.openLink(url, preferredBrowser
-        ? { try_instant_view: false, try_browser: preferredBrowser }
-        : { try_instant_view: false });
-    } else {
-      window.open(url, '_blank', 'noopener,noreferrer');
-    }
   };
 
   const changeMode = (nextMode: 'creator' | 'viewer' | 'admin') => {
@@ -867,7 +857,7 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
                          : screen === 'ads' && mode === 'viewer' ? <AdsPage key={telegramUser?.id ?? 'guest'} userId={telegramUser?.id ?? null} onReward={creditAdReward} onNotify={notify} />
                  : screen === 'publish' && mode === 'viewer' ? <PublishingSystemPage telegramUser={telegramUser} onNotify={notify} />
                  : screen === 'achievements' && mode === 'viewer' ? <AchievementsPage onNavigate={(next) => setScreen(next)} onNotify={notify} />
-                : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={taskVideos} onSelect={selectVideo} insideTelegram={insideTelegram} onOpenBrowser={openWatchInBrowser} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
+                : screen === 'watch' && mode === 'viewer' ? <ViewerView videos={taskVideos} onSelect={selectVideo} completedVideoIds={completedVideoIds} browserMode={browserEarningPage} />
                     : <CreatorOverview telegramUser={telegramUser} platformCampaigns={platformCampaigns} videos={videos} onAdd={() => setScreen('add')} onDeposit={() => setScreen('deposit')} />}
            {!browserEarningPage && mode !== 'admin' && <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 p-2 backdrop-blur lg:hidden">
              <div className={`mx-auto grid max-w-md ${mode === 'viewer' ? 'grid-cols-6' : 'grid-cols-4'} items-end gap-1`}>
