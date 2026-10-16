@@ -395,6 +395,7 @@ type MonetagSession = {
   claimedToday: number;
   dailyLimit: number;
   reward: number;
+  requiredSteps?: number;
 };
 
 type MonetagSessionStatus = {
@@ -532,7 +533,7 @@ export function AdsPage({
     }
   };
 
-  // Monetag: بعد الضغط على «شاهد» يبدأ الإعلان الأول فورًا، وعند انتهائه يبدأ الثاني تلقائيًا، وبعد إكمال الإعلانين تُمنح المكافأة مباشرة.
+  // Monetag: بعد الضغط على «شاهد» يبدأ الإعلان الأول فورًا، وعند انتهائه يبدأ التالي تلقائيًا، وبعد إكمال العدد المطلوب من الإعلانات (تحدده الإدارة) تُمنح المكافأة مباشرة.
   const finishMonetagReward = async (current: MonetagSessionStatus) => {
     setProgress(value => ({
       ...(value.day === getLocalDayKey() ? value : emptyProgress()),
@@ -550,7 +551,7 @@ export function AdsPage({
     }
     if (current.settled && current.claimedToday >= current.dailyLimit) {
       setMonetagFlow('limit');
-      onNotify?.('warning', isArabic ? 'الحد اليومي' : 'Daily limit', isArabic ? 'اكتمل الإعلانان، لكن الحد اليومي استُخدم قبل تسجيل المكافأة.' : 'Both ads completed, but the daily limit was reached before the reward was recorded.');
+      onNotify?.('warning', isArabic ? 'الحد اليومي' : 'Daily limit', isArabic ? 'اكتملت الإعلانات، لكن الحد اليومي استُخدم قبل تسجيل المكافأة.' : 'All ads completed, but the daily limit was reached before the reward was recorded.');
       return;
     }
     setMonetagFlow('idle');
@@ -587,8 +588,10 @@ export function AdsPage({
       }
       monetagSessionRef.current = session.id;
       setConfig(current => ({ ...current, monetagLimit: Number(session.dailyLimit), monetagReward: Number(session.reward) }));
+      // عدد الإعلانات المطلوبة قبل المكافأة يحدده الخادم (من لوحة الإدارة) ويُثبَّت على الجلسة.
+      const totalAds = Math.max(1, Math.min(10, Math.trunc(Number(session.requiredSteps)) || 2));
       // نعيد محاولة إبلاغ الخادم عند انقطاع لحظي حتى لا يضيع إعلان شاهده المستخدم فعلًا.
-      const reportStep = async (step: 1 | 2) => {
+      const reportStep = async (step: number) => {
         let lastError: unknown;
         for (let attempt = 0; attempt < 3; attempt += 1) {
           try {
@@ -601,14 +604,11 @@ export function AdsPage({
         throw lastError;
       };
 
-      // الإعلان الأول
-      setMonetagFlow('first');
-      notifyLoading();
-      // نحمّل الإعلان الثاني مسبقًا أثناء مشاهدة الأول حتى لا يتأخر ظهوره (الفشل هنا لا يوقف التدفق).
-      const secondOptions = { ymid: `${session.id}_2`, requestVar: `vidreward_${session.id}_2` };
-      const preloadSecond = () => {
+      const adOptions = (step: number) => ({ ymid: `${session.id}_${step}`, requestVar: `vidreward_${session.id}_${step}` });
+      // نحمّل الإعلان التالي مسبقًا أثناء مشاهدة الحالي حتى لا يتأخر ظهوره (الفشل هنا لا يوقف التدفق).
+      const preloadAd = (step: number) => {
         try {
-          const preload = (showAd as unknown as (options: Record<string, string>) => Promise<unknown>)({ ...secondOptions, type: 'preload' });
+          const preload = (showAd as unknown as (options: Record<string, string>) => Promise<unknown>)({ ...adOptions(step), type: 'preload' });
           return Promise.resolve(preload).then(() => true, () => false);
         } catch {
           return Promise.resolve(false);
@@ -631,26 +631,28 @@ export function AdsPage({
         }
         throw lastError;
       };
-      void preloadSecond();
-      const first = await showWithRetry({ ymid: `${session.id}_1`, requestVar: `vidreward_${session.id}_1` }, 2);
-      if (first?.reward_event_type !== 'valued') throw new Error('First ad was not valued');
-      // نُبلغ الخادم بإكمال الأول في الخلفية ونبدأ الثاني فورًا بدون انتظار.
-      const firstReport = reportStep(1).then(() => true, () => false);
 
-      // الإعلان الثاني يبدأ تلقائيًا
-      setMonetagFlow('second');
-      notifyLoading();
-      await new Promise((resolve) => window.setTimeout(resolve, 600));
-      const second = await showWithRetry(secondOptions, 3);
-      if (second?.reward_event_type !== 'valued') throw new Error('Second ad was not valued');
+      // الإعلانات تتتابع تلقائيًا؛ نُبلغ الخادم بكل إعلان مكتمل في الخلفية ونبدأ التالي فورًا بدون انتظار.
+      const earlierReports: Array<{ step: number; done: Promise<boolean> }> = [];
+      for (let step = 1; step <= totalAds; step += 1) {
+        setMonetagFlow(step === 1 ? 'first' : 'second');
+        notifyLoading();
+        if (step < totalAds) void preloadAd(step + 1);
+        if (step > 1) await new Promise((resolve) => window.setTimeout(resolve, 600));
+        const result = await showWithRetry(adOptions(step), step === 1 ? 2 : 3);
+        if (result?.reward_event_type !== 'valued') throw new Error(`Ad ${step} was not valued`);
+        if (step < totalAds) earlierReports.push({ step, done: reportStep(step).then(() => true, () => false) });
+      }
       bothWatched = true;
       setMonetagFlow('confirming');
-      if (!(await firstReport)) await reportStep(1);
-      const final = await reportStep(2) as MonetagSessionStatus;
+      for (const report of earlierReports) {
+        if (!(await report.done)) await reportStep(report.step);
+      }
+      const final = await reportStep(totalAds) as MonetagSessionStatus;
       await finishMonetagReward(final);
     } catch {
       if (bothWatched) {
-        // شاهد المستخدم الإعلانين فعلًا؛ المشكلة في الاتصال بالخادم فقط، فلا نقول إنه لم يكمل.
+        // شاهد المستخدم كل الإعلانات فعلًا؛ المشكلة في الاتصال بالخادم فقط، فلا نقول إنه لم يكمل.
         setMonetagFlow('idle');
         return;
       }

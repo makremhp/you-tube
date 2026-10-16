@@ -798,7 +798,12 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     const url = createBrowserWatchUrl(telegramUser);
     const webApp = window.Telegram?.WebApp;
     if (webApp?.openLink) {
-      webApp.openLink(url, { try_instant_view: false });
+      // try_browser يطلب من تلغرام فتح الرابط في متصفح الجهاز الخارجي بدل المتصفح المدمج (Bot API 7.6+).
+      const platform = String(webApp.platform ?? '').toLowerCase();
+      const preferredBrowser = platform === 'android' ? 'chrome' : platform === 'ios' ? 'safari' : undefined;
+      webApp.openLink(url, preferredBrowser
+        ? { try_instant_view: false, try_browser: preferredBrowser }
+        : { try_instant_view: false });
     } else {
       window.open(url, '_blank', 'noopener,noreferrer');
     }
