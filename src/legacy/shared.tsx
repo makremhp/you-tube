@@ -68,7 +68,8 @@ type TelegramWebApp = {
   initDataUnsafe?: { user?: TelegramUser };
   ready: () => void;
   expand: () => void;
-  openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
+  platform?: string;
+  openLink?: (url: string, options?: { try_instant_view?: boolean; try_browser?: string }) => void;
   openInvoice?: (url: string, callback?: (status: 'paid' | 'cancelled' | 'failed' | 'pending') => void) => void;
 };
 
