@@ -12,14 +12,29 @@ import {
 
 export class ApiError extends Error {
   status: number;
+  code?: string;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
-type ApiEnvelope<T> = { success: true; data: T } | { success: false; error: string };
+export const VPN_BLOCKED_EVENT = 'vr:vpn-blocked';
+const REQUEST_TIMEOUT_MS = 30_000;
+
+function isArabicUi() {
+  try {
+    const saved = window.localStorage.getItem('vidreward-language');
+    if (saved === 'ar' || saved === 'en') return saved === 'ar';
+  } catch {
+    // fall through to the browser language
+  }
+  return (navigator.languages?.[0] || navigator.language || '').toLowerCase().startsWith('ar');
+}
+
+type ApiEnvelope<T> = { success: true; data: T } | { success: false; error: string; code?: string };
 
 const securityStorageFallback = new Map<string, string>();
 
@@ -75,12 +90,27 @@ export async function apiRequest<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     : browserLanguage.toLowerCase().startsWith('ar') ? 'ar' : 'en';
   if (body !== undefined) headers['content-type'] = 'application/json';
   if (idempotencyKey) headers['idempotency-key'] = idempotencyKey;
-  const response = await fetch(`${import.meta.env.BASE_URL}api/${path.replace(/^\/+/, '')}`, {
-    method,
-    headers,
-    cache: 'no-store',
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(`${import.meta.env.BASE_URL}api/${path.replace(/^\/+/, '')}`, {
+      method,
+      headers,
+      cache: 'no-store',
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    // انقطاع الاتصال أو انتهاء المهلة: رسالة مفهومة بدل خطأ المتصفح الخام، ولا يُعرض أي نجاح.
+    const timedOut = error instanceof DOMException && error.name === 'AbortError';
+    const arabic = isArabicUi();
+    throw new ApiError(0, timedOut
+      ? (arabic ? 'انتهت مهلة الطلب. تحقق من الاتصال ثم حاول مرة أخرى.' : 'The request timed out. Check your connection and try again.')
+      : (arabic ? 'تعذر الاتصال بالخادم. تحقق من الإنترنت ثم حاول مرة أخرى.' : 'Could not reach the server. Check your internet connection and try again.'));
+  } finally {
+    window.clearTimeout(timer);
+  }
   const returnedSessionId = response.headers.get('x-security-session-id');
   if (returnedSessionId && /^[a-f0-9]{64}$/i.test(returnedSessionId)) {
     try {
@@ -96,7 +126,9 @@ export async function apiRequest<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     envelope = null;
   }
   if (!response.ok || !envelope || !envelope.success) {
-    throw new ApiError(response.status, envelope && !envelope.success ? envelope.error : 'Request failed');
+    const code = envelope && !envelope.success ? envelope.code : undefined;
+    if (code === 'VPN_DETECTED') window.dispatchEvent(new Event(VPN_BLOCKED_EVENT));
+    throw new ApiError(response.status, envelope && !envelope.success ? envelope.error : 'Request failed', code);
   }
   return envelope.data;
 }
