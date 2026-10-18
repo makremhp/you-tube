@@ -12,6 +12,7 @@ import {
 } from '@/legacy/shared';
 import { Router as WouterRouter } from 'wouter';
 import { apiGet } from '@/lib/api';
+import { ProtectionGate } from '@/components/protection-gate';
 
 const queryClient = new QueryClient();
 const LANDING_SEEN_KEY = 'vidreward-landing-seen';
@@ -103,6 +104,7 @@ function ProductExperience() {
 
   return (
     <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+      <ProtectionGate language={language}>
       {maintenanceActive ? (
         <main dir={language === 'ar' ? 'rtl' : 'ltr'} className="relative grid min-h-dvh place-items-center overflow-hidden bg-[#101827] px-5 py-8 text-white">
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_10%,rgba(251,191,36,.16),transparent_60%)]" />
@@ -132,6 +134,7 @@ function ProductExperience() {
           onModeChange={rememberMode}
         />
       )}
+      </ProtectionGate>
     </WouterRouter>
   );
 }
