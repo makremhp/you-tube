@@ -1,4 +1,6 @@
-type InvoiceRequest = { body?: { amountUsd?: unknown; telegramUserId?: unknown } };
+import { authenticate } from "../../../server/auth.js";
+
+type InvoiceRequest = { body?: { amountUsd?: unknown; telegramUserId?: unknown }; headers?: Record<string, string | string[] | undefined> };
 type InvoiceResponse = { status: (code: number) => InvoiceResponse; json: (body: unknown) => void };
 
 const STARS_PER_USD = 100;
@@ -16,8 +18,14 @@ export default async function handler(req: InvoiceRequest, res: InvoiceResponse)
     res.status(503).json({ message: "Telegram Stars غير مفعّلة حاليًا." });
     return;
   }
+  // الهوية تُؤخذ من initData الموقّع فقط؛ أي معرّف يرسله المتصفح في الجسم يُتجاهل.
+  const verifiedUser = authenticate(req as never);
+  if (!verifiedUser) {
+    res.status(401).json({ message: "افتح التطبيق من Telegram ثم أعد المحاولة." });
+    return;
+  }
   const amountUsd = Number(req.body.amountUsd);
-  const telegramUserId = Number.isSafeInteger(req.body.telegramUserId) ? Number(req.body.telegramUserId) : undefined;
+  const telegramUserId = verifiedUser.id;
   if (!Number.isFinite(amountUsd) || amountUsd < 1 || amountUsd > 10000) {
     res.status(400).json({ message: "أدخل مبلغًا بين 1 و10000 دولار." });
     return;
