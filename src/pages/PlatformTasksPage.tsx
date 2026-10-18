@@ -29,7 +29,7 @@ export function PlatformTasksPage({
   campaigns: PromotionCampaign[];
   proofs: TaskProof[];
   onStartTask?: (campaign: PromotionCampaign) => void;
-  onTaskCompleted?: (campaignId: string, userId: number) => void;
+  onTaskCompleted?: (campaignId: string, userId: number) => Promise<boolean> | void;
   onNotify?: (tone: 'success' | 'info' | 'warning', title: string, message: string) => void;
   telegramUserId: number | null;
 }) {
@@ -64,12 +64,17 @@ export function PlatformTasksPage({
       if (!response.ok) throw new Error(result.message || 'تعذر التحقق الآن. حاول مرة أخرى.');
       if (result.member) {
         const message = 'تم التحقق من اشتراكك عبر Telegram.';
-        if (telegramUserId !== null) onTaskCompleted?.(task.id, telegramUserId);
+        // لا نعلن النجاح إلا بعد تأكيد الخادم؛ عند الفشل يعرض المعالج رسالته ونعيد الزر لحالته.
+        const credited = telegramUserId !== null ? await onTaskCompleted?.(task.id, telegramUserId) : undefined;
+        if (credited === false) {
+          setVerification((current) => ({ ...current, [task.id]: { state: 'idle' } }));
+          return;
+        }
         setVerification((current) => ({
           ...current,
           [task.id]: { state: 'member', message },
         }));
-        onNotify?.('success', 'تم إكمال مهمة القناة', 'تم التحقق من اشتراكك عبر Telegram وإكمال المهمة.');
+        if (credited === undefined) onNotify?.('success', 'تم إكمال مهمة القناة', 'تم التحقق من اشتراكك عبر Telegram وإكمال المهمة.');
       } else {
         const message = 'لم يظهر اشتراكك بعد. انضم إلى القناة ثم أعد التحقق.';
         setVerification((current) => ({ ...current, [task.id]: { state: 'idle' } }));

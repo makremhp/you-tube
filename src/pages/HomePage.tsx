@@ -700,13 +700,18 @@ export function HomePage({ initialMode, initialScreen, onModeChange }: HomePageP
     }
   };
 
-  const recordCampaignCompletion = async (campaignId: string) => {
+  const recordCampaignCompletion = async (campaignId: string): Promise<boolean> => {
     try {
       const result = await apiPost<{ reward: number }>(`tasks/${campaignId}/complete`);
       await refreshData();
       notify('success', 'تمت إضافة المكافأة', `أضيفت ${formatUsd(result.reward)} إلى رصيدك بعد التحقق من المهمة.`);
-    } catch {
-      notify('warning', 'تعذر احتساب المهمة', 'لم يؤكد الخادم اكتمال المهمة. تأكد من إتمامها ثم حاول مرة أخرى.');
+      return true;
+    } catch (error) {
+      const full = error instanceof Error && error.message === 'Campaign target reached';
+      notify('warning', 'تعذر احتساب المهمة', full
+        ? 'اكتمل العدد المطلوب لهذه المهمة ولم تعد تقبل مشاركين جددًا.'
+        : 'لم يؤكد الخادم اكتمال المهمة. تأكد من إتمامها ثم حاول مرة أخرى.');
+      return false;
     }
   };
 

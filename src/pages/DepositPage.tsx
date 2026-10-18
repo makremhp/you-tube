@@ -57,8 +57,8 @@ export function DepositPage({
       try {
         const response = await fetch(`${import.meta.env.BASE_URL}api/telegram/stars/invoice`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ amountUsd: numericAmount, telegramUserId: telegramUser?.id }),
+          headers: { 'content-type': 'application/json', 'x-telegram-init-data': window.Telegram?.WebApp?.initData ?? '' },
+          body: JSON.stringify({ amountUsd: numericAmount }),
         });
         const data = await response.json() as { invoiceUrl?: string; amountUsd?: number; stars?: number; payload?: string; message?: string };
         if (!response.ok || !data.invoiceUrl || !data.amountUsd || !data.stars) {

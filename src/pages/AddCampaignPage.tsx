@@ -65,7 +65,7 @@ export function AddPlatformCampaign({
     try {
       const response = await fetch(`${import.meta.env.BASE_URL}api/telegram/verify-bot`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-telegram-init-data': window.Telegram?.WebApp?.initData ?? '' },
         body: JSON.stringify({ action: 'verify-bot', channelUrl }),
       });
       const result = await response.json() as { verified?: boolean; message?: string; botUsername?: string; channelTitle?: string };
