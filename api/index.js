@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     await dispatch(req, res);
   } catch (error) {
     if (error instanceof HttpError) {
-      fail(res, error.status, error.message);
+      fail(res, error.status, error.message, error.code);
       return;
     }
     console.error('API error:', error instanceof Error ? error.message : 'unknown');
