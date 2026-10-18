@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 type VerifyRequest = {
   method?: string;
   body?: unknown;
+  headers?: Record<string, string | string[] | undefined>;
 };
 
 type VerifyBody = {
@@ -135,7 +136,15 @@ export default async function handler(req: VerifyRequest, res: VerifyResponse) {
     return;
   }
 
-  const userId = action === "verify-member" ? verifiedTelegramUserId(body?.initData, botToken) : null;
+  // الواجهة تستدعي هذا المسار دائمًا من داخل Telegram: نطلب جلسة موقّعة لمنع استخدامه وكيلًا مفتوحًا لواجهة البوت.
+  const headerValue = req.headers?.["x-telegram-init-data"];
+  const headerInitData = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  const sessionUserId = verifiedTelegramUserId(headerInitData ?? body?.initData, botToken);
+  if (!sessionUserId) {
+    res.status(401).json({ message: "تعذر التحقق من جلسة Telegram. أعد فتح التطبيق من Telegram ثم حاول مجددًا." });
+    return;
+  }
+  const userId = action === "verify-member" ? sessionUserId : null;
   if (action === "verify-member" && !userId) {
     res.status(401).json({ message: "تعذر التحقق من جلسة Telegram. أعد فتح التطبيق من Telegram ثم حاول مجددًا." });
     return;
