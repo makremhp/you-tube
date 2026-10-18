@@ -98,6 +98,13 @@ export async function listTasks(req, res, query) {
        AND ($2::text IS NULL OR c.platform = $2)
        AND (c.platform <> 'youtube' OR c.requested_views IS NULL OR c.views < c.requested_views)
        AND (c.platform <> 'telegram' OR comp.status IS DISTINCT FROM 'completed')
+       AND (
+         c.platform = 'youtube'
+         OR c.target_count IS NULL
+         OR comp.status IS NOT NULL
+         OR (c.platform = 'telegram' AND c.completed_count < c.target_count)
+         OR (c.platform = 'tiktok' AND c.joined_count < c.target_count)
+       )
      ORDER BY c.created_at DESC
      LIMIT 200`,
     [user.id, platform],
@@ -373,9 +380,13 @@ export async function updateCampaign(req, res, id) {
   if (body.status !== undefined && !status) throw new HttpError(400, 'Invalid request');
 
   const currentRows = await sql.query(
-    `SELECT platform, link, status FROM vr_campaigns WHERE id = $1 AND owner_id = $2`,
+    `SELECT platform, link, status, admin_locked AS "adminLocked" FROM vr_campaigns WHERE id = $1 AND owner_id = $2`,
     [id, user.id],
   );
+  // الحملة التي أوقفتها الإدارة لا يستطيع مالكها إعادة تفعيلها أو تغيير حالتها.
+  if (currentRows[0]?.adminLocked && status) {
+    throw new HttpError(403, 'تم إيقاف هذه الحملة من الإدارة ولا يمكن تغيير حالتها.');
+  }
   let nextStatus = status;
   if (status === 'نشط') {
     if (currentRows[0]?.platform === 'telegram' && !(await botIsChannelAdmin(link ?? currentRows[0].link))) {
@@ -387,7 +398,7 @@ export async function updateCampaign(req, res, id) {
        title = COALESCE($3, title),
        link = COALESCE($4, link),
        status = COALESCE($5, status)
-     WHERE id = $1 AND owner_id = $2
+     WHERE id = $1 AND owner_id = $2 AND (admin_locked = FALSE OR $5::text IS NULL)
      RETURNING id::text AS id, status`,
     [id, user.id, title, link, nextStatus],
   );
@@ -517,9 +528,14 @@ export async function completeTask(req, res, id) {
   if (campaign.platform === 'telegram') {
     if (!(await userIsChannelMember(campaign.link, user.id))) throw new HttpError(409, 'Membership not verified');
     const rows = await sql.query(
-      `WITH done AS (
+      `WITH candidate AS (
+         SELECT id FROM vr_campaigns
+         WHERE id = $1 AND status = 'نشط' AND platform = 'telegram'
+           AND (target_count IS NULL OR completed_count < target_count)
+         FOR UPDATE
+       ), done AS (
          INSERT INTO vr_completions (campaign_id, user_id, status, reward, completed_at, campaign_link)
-         VALUES ($1, $2, 'completed', $3, now(), $4)
+         SELECT $1, $2, 'completed', $3, now(), $4 FROM candidate
          ON CONFLICT (campaign_id, user_id) DO UPDATE
            SET status = 'completed', reward = EXCLUDED.reward, completed_at = now(), campaign_link = EXCLUDED.campaign_link,
                started_at = now(), proof_image = NULL
@@ -537,7 +553,13 @@ export async function completeTask(req, res, id) {
        SELECT reward::float8 AS reward, completed_at AS "completedAt" FROM done`,
       [id, user.id, campaign.reward ?? (await getTaskRewardSettings()).telegramTaskReward, campaign.link],
     );
-    if (!rows.length) throw new HttpError(409, 'Task already completed');
+    if (!rows.length) {
+      const capacity = await sql.query(
+        `SELECT (target_count IS NOT NULL AND completed_count >= target_count) AS full FROM vr_campaigns WHERE id = $1`,
+        [id],
+      );
+      throw new HttpError(409, capacity[0]?.full ? 'Campaign target reached' : 'Task already completed');
+    }
     await bestEffort(notifyTaskAdvertiser(id, user.id, `complete_${id}_${user.id}_${completionStamp(rows[0].completedAt)}`));
     ok(res, { reward: rows[0].reward });
     return;
@@ -554,7 +576,10 @@ export async function submitProof(req, res, id) {
   if (!image) throw new HttpError(400, 'Invalid request');
   const rows = await sql.query(
     `WITH target AS (
-       SELECT id, reward, title FROM vr_campaigns WHERE id = $1 AND status = 'نشط' AND platform = 'tiktok'
+       SELECT id, reward, title FROM vr_campaigns
+       WHERE id = $1 AND status = 'نشط' AND platform = 'tiktok'
+         AND (target_count IS NULL OR joined_count < target_count)
+       FOR UPDATE
      ), proof AS (
        INSERT INTO vr_completions (campaign_id, user_id, status, proof_image, reward)
        SELECT id, $2, 'pending', $3, reward FROM target
@@ -569,7 +594,13 @@ export async function submitProof(req, res, id) {
      JOIN target ON target.id = proof.campaign_id`,
     [id, user.id, image],
   );
-  if (!rows.length) throw new HttpError(409, 'Proof already submitted');
+  if (!rows.length) {
+    const capacity = await sql.query(
+      `SELECT (target_count IS NOT NULL AND joined_count >= target_count) AS full FROM vr_campaigns WHERE id = $1`,
+      [id],
+    );
+    throw new HttpError(409, capacity[0]?.full ? 'Campaign target reached' : 'Proof already submitted');
+  }
   const proofId = `PRF-${rows[0].campaignId}-${user.id}`;
   await sendNotification('proof_received', user.id, {
     taskTitle: rows[0].title,

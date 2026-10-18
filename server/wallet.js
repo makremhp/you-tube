@@ -9,6 +9,8 @@ import { getAdSettings, providerAdConfig } from './settings.js';
 import { newIdentifier, readHttpUrl, readMoney, readPositiveInteger, readText } from './validation.js';
 import { sendNotification } from '../api/telegram/bot-messages.js';
 
+const MAX_PENDING_DEPOSITS = 20;
+
 async function nextMemoTag(userId) {
   const rows = await sql.query(`SELECT nextval('vr_memo_seq')::text AS sequence`);
   return `${userId}#${rows[0].sequence}`;
@@ -115,17 +117,23 @@ export async function createDeposit(req, res) {
     destination = readHttpUrl(body.destination);
     memoTag = readText(body.memoTag, 200);
     if (!destination || !memoTag) throw new HttpError(400, 'Invalid request');
+    // الوجهة يعرضها المشرف في لوحة الإدارة؛ لا نقبل إلا رابط فاتورة Telegram حتى لا تُستخدم لروابط خارجية خادعة.
+    const invoiceHost = new URL(destination).hostname.toLowerCase();
+    if (invoiceHost !== 't.me' && invoiceHost !== 'telegram.me') throw new HttpError(400, 'Invalid request');
   } else {
     destination = process.env.DEPOSIT_WALLET_ADDRESS;
     if (!destination) throw new HttpError(503, 'Service unavailable');
     memoTag = await nextMemoTag(user.id);
   }
+  // سقف للطلبات المعلّقة يمنع إغراق لوحة الإدارة بإيداعات وهمية.
   const rows = await sql.query(
     `INSERT INTO vr_deposits (id, user_id, amount, method, destination, memo_tag)
-     VALUES ($1, $2, $3, $4, $5, $6)
+     SELECT $1::text, $2::bigint, $3::numeric, $4::text, $5::text, $6::text
+     WHERE (SELECT count(*) FROM vr_deposits WHERE user_id = $2::bigint AND status = 'قيد المعالجة') < $7::int
      RETURNING ${HISTORY_COLUMNS}`,
-    [newIdentifier('DEP'), user.id, amount, method, destination, memoTag],
+    [newIdentifier('DEP'), user.id, amount, method, destination, memoTag, MAX_PENDING_DEPOSITS],
   );
+  if (!rows.length) throw new HttpError(429, 'Too many pending deposit requests');
   const deposit = rows[0];
   await sendNotification('deposit_requested', user.id, {
     amount: Number(deposit.amount).toFixed(2),

@@ -266,9 +266,30 @@ export function ensureSchema() {
         `CREATE INDEX IF NOT EXISTS vr_deposits_user_idx ON vr_deposits (user_id, created_at DESC)`,
         `CREATE INDEX IF NOT EXISTS vr_withdrawals_user_idx ON vr_withdrawals (user_id, created_at DESC)`,
         `CREATE INDEX IF NOT EXISTS vr_admin_audit_log_created_idx ON vr_admin_audit_log (created_at DESC)`,
+        // إضافات غير تدميرية: قفل الإدارة على الحملة (يمنع المالك من إعادة تفعيل حملة أوقفتها الإدارة)
+        // وذاكرة مؤقتة لنتائج فحص الشبكة (VPN/Proxy) مخزّنة بصيغة هاش فقط دون عنوان IP خام.
+        `ALTER TABLE vr_campaigns ADD COLUMN IF NOT EXISTS admin_locked BOOLEAN NOT NULL DEFAULT FALSE`,
+        `CREATE TABLE IF NOT EXISTS vr_ip_reputation (
+          ip_hash TEXT PRIMARY KEY,
+          is_proxy BOOLEAN NOT NULL,
+          kind TEXT,
+          provider TEXT NOT NULL,
+          checked_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )`,
       ];
       for (const statement of statements) {
         await sql.query(statement);
+      }
+      // فهرس فريد يمنع اعتماد معرّف معاملة خارجية واحد لأكثر من إيداع. إن وُجدت تكرارات قديمة في البيانات
+      // يفشل إنشاء الفهرس فقط (دون كسر التشغيل) وتبقى الحماية عبر فحص التطبيق في server/admin.js.
+      try {
+        await sql.query(
+          `CREATE UNIQUE INDEX IF NOT EXISTS vr_deposits_credited_tx_unique
+             ON vr_deposits (lower(blockchain_tx_id))
+             WHERE credited = TRUE AND blockchain_tx_id IS NOT NULL`,
+        );
+      } catch (error) {
+        console.error('Unique deposit tx index not created (existing duplicates?):', error instanceof Error ? error.message : 'unknown');
       }
     })().catch((error) => {
       schemaReady = null;

@@ -50,7 +50,12 @@ import { listPublishProofs, submitPublishProof } from './publishing.js';
 import { checkTelegramMembershipOnEntry, sweepTelegramMemberships } from './membership.js';
 import { readPositiveInteger, readText } from './validation.js';
 import { applyApiSecurity } from './security.js';
+import { assertNoVpn, inspectNetwork } from './network.js';
 import { handleNotificationPreview, sendAdminTestNotification } from '../api/telegram/bot-messages.js';
+
+function isProductionEnv() {
+  return process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production';
+}
 
 function routePath(req) {
   const url = new URL(req.url ?? '/', 'http://localhost');
@@ -110,6 +115,12 @@ export async function dispatch(req, res) {
     return;
   }
 
+  // في الإنتاج لا نُرجع بيانات فارغة «ناجحة» عند غياب سر المصادقة؛ هذا خطأ إعداد يجب أن يظهر بوضوح.
+  if (!process.env.TELEGRAM_BOT_TOKEN && isProductionEnv() && key !== 'youtube/settings') {
+    fail(res, 503, 'Service unavailable');
+    return;
+  }
+
   const authUser = authenticate(req);
   await applyApiSecurity(req, res, authUser, key);
   const adminIds = (process.env.ADMIN_TELEGRAM_IDS ?? '').split(',').map((id) => id.trim());
@@ -118,6 +129,12 @@ export async function dispatch(req, res) {
   const maintenance = maintenanceRows[0]?.enabled === 'true';
   if (method === 'GET' && key === 'maintenance') {
     ok(res, { maintenance, isAdmin: Boolean(authUser && isAdmin(authUser.id)) });
+    return;
+  }
+  if (method === 'GET' && key === 'network/check') {
+    // تستخدمه الواجهة لإظهار شاشة الإيقاف عند اكتشاف VPN/Proxy؛ الحماية الفعلية تُطبَّق أدناه على كل عملية كتابة.
+    const network = await inspectNetwork(req);
+    ok(res, { vpn: network.proxy && !(authUser && isAdmin(authUser.id)), enforced: network.enforced, checked: network.checked });
     return;
   }
   if (method === 'GET' && key === 'withdrawal/settings') return getPublicWithdrawalSettings(req, res);
@@ -160,6 +177,10 @@ export async function dispatch(req, res) {
     if (key === 'admin/ad-stats') return adminAdStats(req, res);
     if (key === 'admin/notifications/catalog') return handleNotificationPreview(req, res, query);
     throw new HttpError(404, 'Not found');
+  }
+
+  if (authUser && method !== 'GET' && method !== 'HEAD') {
+    await assertNoVpn(req, authUser);
   }
 
   if (method === 'POST') {

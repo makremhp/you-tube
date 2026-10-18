@@ -154,11 +154,37 @@ export async function createMonetagSession(req, res) {
   ok(res, { id, claimedToday, dailyLimit: monetagDailyLimit, reward: monetagReward, requiredSteps: monetagAdsPerReward }, 201);
 }
 
+// الحد الأدنى لزمن كل إعلان بالثواني (المتصفح هو من يبلّغ بإكمال الخطوة، لذلك نمنع الإكمال الفوري المتتابع).
+function minimumStepSeconds() {
+  const value = Number(process.env.MONETAG_MIN_STEP_SECONDS ?? 6);
+  return Number.isFinite(value) && value >= 0 && value <= 120 ? value : 6;
+}
+
+// عند MONETAG_REQUIRE_POSTBACK=true تُرفض الخطوتان 1 و2 ما لم يصل postback موقّع من Monetag يثبت المشاهدة.
+function postbackRequired() {
+  return String(process.env.MONETAG_REQUIRE_POSTBACK ?? '').toLowerCase() === 'true';
+}
+
 export async function completeMonetagStep(req, res, sessionId) {
   const user = await requireUser(req);
   const body = req.body ?? {};
   const step = Number(body.step);
   if (!Number.isInteger(step) || step < 1 || step > MONETAG_ADS_PER_REWARD_MAX) throw new HttpError(400, 'Invalid ad step');
+  if (SESSION_ID_PATTERN.test(sessionId)) {
+    const gate = await sql.query(
+      `SELECT (now() - created_at) >= make_interval(secs => $3::float8) AS ready,
+              first_valued_at IS NOT NULL AS "firstValued",
+              second_valued_at IS NOT NULL AS "secondValued"
+       FROM vr_monetag_ad_sessions WHERE id = $1 AND user_id = $2`,
+      [sessionId, user.id, minimumStepSeconds() * step],
+    );
+    if (gate[0]) {
+      if (!gate[0].ready) throw new HttpError(429, 'Ad has not finished yet');
+      if (postbackRequired() && ((step === 1 && !gate[0].firstValued) || (step === 2 && !gate[0].secondValued))) {
+        throw new HttpError(409, 'Ad view is not confirmed yet');
+      }
+    }
+  }
   const result = await settlePair(sessionId, step, 'completed', user.id, true);
   if (!result) throw new HttpError(404, 'Ad session not found or expired');
   const session = await readSession(sessionId, user.id);

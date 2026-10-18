@@ -1,36 +1,47 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { sql } from './db.js';
 import { HttpError } from './errors.js';
+import { requestIp } from './ip.js';
 
 const RATE_WINDOW_MS = 5_000;
 const SESSION_TTL_HOURS = 24;
 const NONCE_TTL_HOURS = 24;
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 let lastCleanupAt = 0;
+const FINANCIAL_ROUTE_PATTERN = /^(withdrawals|deposits|ads\/reward|ads\/monetag|achievements\/claim|campaigns|tasks\/\d+\/(complete|proof)|publish\/proof)(\/|$)/;
 
 function readHeader(req, name) {
   const value = req.headers?.[name];
   return Array.isArray(value) ? value[0] : value;
 }
 
-function securityHashSecret() {
-  return process.env.SECURITY_HASH_SECRET || process.env.TELEGRAM_BOT_TOKEN || null;
+function isProduction() {
+  return process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production';
 }
 
-function keyedHash(value) {
+let warnedWeakSecret = false;
+
+// SECURITY_HASH_SECRET هو السر المخصص. يُسمح مؤقتًا بالرجوع إلى TELEGRAM_BOT_TOKEN (HMAC بسر غير معلن).
+// أما التجزئة بلا مفتاح فهي ضعيفة (يمكن تخمين عناوين IP) فلا تُستخدم أبدًا في الإنتاج.
+function securityHashSecret() {
+  const dedicated = process.env.SECURITY_HASH_SECRET;
+  if (dedicated) return dedicated;
+  const fallback = process.env.TELEGRAM_BOT_TOKEN;
+  if (fallback) {
+    if (!warnedWeakSecret && isProduction()) {
+      warnedWeakSecret = true;
+      console.warn('SECURITY_HASH_SECRET is not set; falling back to TELEGRAM_BOT_TOKEN. Set a dedicated secret.');
+    }
+    return fallback;
+  }
+  if (isProduction()) throw new HttpError(503, 'Service unavailable');
+  return null;
+}
+
+export function keyedHash(value) {
   const secret = securityHashSecret();
   if (secret) return createHmac('sha256', secret).update(value).digest('hex');
   return createHash('sha256').update(value).digest('hex');
-}
-
-function requestIp(req) {
-  const direct = readHeader(req, 'x-real-ip')
-    ?? readHeader(req, 'x-vercel-forwarded-for')
-    ?? req.ip
-    ?? readHeader(req, 'x-forwarded-for');
-  if (typeof direct !== 'string') return null;
-  const value = direct.split(',').at(-1)?.trim().slice(0, 128);
-  return value || null;
 }
 
 function requestPath(routeKey) {
@@ -292,6 +303,20 @@ export async function applyApiSecurity(req, res, authUser, routeKey) {
         scope: 'writes',
         limit: configuredLimit('SECURITY_WRITES_PER_WINDOW', 12),
       });
+      // مسارات المال والمكافآت أضيق من الكتابة العامة: النقر المتكرر أو الأتمتة لا يتجاوزان هذا الحد.
+      if (FINANCIAL_ROUTE_PATTERN.test(route)) {
+        await applyRateLimit({
+          identity: identityHash,
+          userId,
+          route,
+          method,
+          ipHash,
+          deviceHash,
+          windowStart,
+          scope: 'financial',
+          limit: configuredLimit('SECURITY_FINANCIAL_PER_WINDOW', 4),
+        });
+      }
     }
   }
 

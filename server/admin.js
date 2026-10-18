@@ -417,7 +417,14 @@ export async function deleteUser(req, res, userId) {
   try {
     // جملة واحدة = عملية ذرّية: تُحذف بيانات المستخدم وحسابه معًا أو لا يُحذف شيء.
     rows = await sql.query(
-      `WITH d_claims AS (DELETE FROM vr_monetag_reward_claims WHERE user_id = $1),
+      `WITH snapshot AS (
+              SELECT advertiser_balance, earned_balance FROM vr_users WHERE id = $1
+            ), d_audit AS (
+              INSERT INTO vr_admin_audit_log (admin_id, collection, record_id, new_status)
+              SELECT $2::bigint, 'users', $1::text,
+                     'deleted;adv:' || advertiser_balance::text || ';earned:' || earned_balance::text
+              FROM snapshot
+            ), d_claims AS (DELETE FROM vr_monetag_reward_claims WHERE user_id = $1),
             d_credits AS (DELETE FROM vr_monetag_reward_credits WHERE user_id = $1),
             d_sessions AS (DELETE FROM vr_monetag_ad_sessions WHERE user_id = $1),
             d_monetag AS (DELETE FROM vr_monetag_ad_rewards WHERE user_id = $1),
@@ -429,14 +436,13 @@ export async function deleteUser(req, res, userId) {
             d_requests AS (DELETE FROM vr_campaign_requests WHERE owner_id = $1),
             d_campaigns AS (DELETE FROM vr_campaigns WHERE owner_id = $1)
        DELETE FROM vr_users WHERE id = $1 RETURNING id::text AS id`,
-      [userId],
+      [userId, admin.id],
     );
   } catch (error) {
     console.error('Delete user failed:', error instanceof Error ? error.message : 'unknown');
     throw new HttpError(409, 'تعذر حذف المستخدم لوجود سجلات مرتبطة به. يمكنك حظره بدلًا من ذلك.');
   }
   if (!rows.length) throw new HttpError(404, 'Not found');
-  await recordAdminAction(admin.id, 'users', userId, 'deleted');
   ok(res, { id: rows[0].id });
 }
 
@@ -474,21 +480,33 @@ export async function adminAction(req, res, collection, id) {
     }
     // لا يُسمح بحظر مدير حتى لا يفقد المشرف وصوله إلى لوحة الإدارة.
     if (hasStatus && status === 'محظور' && isAdmin(userId)) throw new HttpError(400, 'لا يمكن حظر حساب مدير');
+    // السجل يُكتب في نفس العملية الذرّية مع تعديل الرصيد ويحتوي القيم قبل وبعد (تعديل الرصيد يدويًا أخطر عملية إدارية).
     const rows = await sql.query(
-      `UPDATE vr_users SET
-         status = COALESCE($2::text, status),
-         banned_by_system = CASE WHEN $2::text = 'نشط' THEN FALSE ELSE banned_by_system END,
-         advertiser_balance = COALESCE($3::numeric, advertiser_balance),
-         earned_balance = COALESCE($4::numeric, earned_balance),
-         first_name = COALESCE($5::text, first_name),
-         last_name = CASE WHEN $5::text IS NOT NULL THEN $6::text ELSE last_name END,
-         username = COALESCE($7::text, username)
-       WHERE id = $1
-       RETURNING ${ADMIN_USER_COLUMNS}`,
-      [userId, hasStatus ? status : null, advertiserBalance ?? null, earnedBalance ?? null, firstName ?? null, lastName ?? null, username ?? null],
+      `WITH before AS (
+         SELECT id, advertiser_balance, earned_balance FROM vr_users WHERE id = $1 FOR UPDATE
+       ), updated AS (
+         UPDATE vr_users SET
+           status = COALESCE($2::text, status),
+           banned_by_system = CASE WHEN $2::text = 'نشط' THEN FALSE ELSE banned_by_system END,
+           advertiser_balance = COALESCE($3::numeric, advertiser_balance),
+           earned_balance = COALESCE($4::numeric, earned_balance),
+           first_name = COALESCE($5::text, first_name),
+           last_name = CASE WHEN $5::text IS NOT NULL THEN $6::text ELSE last_name END,
+           username = COALESCE($7::text, username)
+         WHERE id = (SELECT id FROM before)
+         RETURNING ${ADMIN_USER_COLUMNS}
+       ), audit AS (
+         INSERT INTO vr_admin_audit_log (admin_id, collection, record_id, new_status)
+         SELECT $8::bigint, 'users', $1::text,
+                COALESCE($2::text, 'updated')
+                  || ';adv:' || before.advertiser_balance::text || '->' || COALESCE($3::numeric, before.advertiser_balance)::numeric(18,6)::text
+                  || ';earned:' || before.earned_balance::text || '->' || COALESCE($4::numeric, before.earned_balance)::numeric(18,6)::text
+         FROM before
+       )
+       SELECT * FROM updated`,
+      [userId, hasStatus ? status : null, advertiserBalance ?? null, earnedBalance ?? null, firstName ?? null, lastName ?? null, username ?? null, admin.id],
     );
     if (!rows.length) throw new HttpError(404, 'Not found');
-    await recordAdminAction(admin.id, collection, id, hasStatus ? status : 'updated');
     ok(res, rows[0]);
     return;
   }
@@ -506,14 +524,16 @@ export async function adminAction(req, res, collection, id) {
          UPDATE vr_users SET earned_balance = earned_balance + (SELECT amount FROM updated)
          WHERE $2 = 'مرفوض' AND id = (SELECT user_id FROM updated)
          RETURNING id
+       ), audit AS (
+         INSERT INTO vr_admin_audit_log (admin_id, collection, record_id, new_status)
+         SELECT $4::bigint, 'withdrawals', $1::text, $5::text FROM updated
        )
        SELECT id, user_id::text AS "userId", amount::float8 AS amount, method,
               destination, blockchain_tx_id AS "transactionId"
        FROM updated`,
-      [id, stored, readText(body.txId, 200)],
+      [id, stored, readText(body.txId, 200), admin.id, status],
     );
     if (!rows.length) throw new HttpError(409, 'Request already processed');
-    await recordAdminAction(admin.id, collection, id, status);
     const withdrawal = rows[0];
     const userRows = await sql.query(
       `SELECT first_name AS "firstName", username FROM vr_users WHERE id = $1`,
@@ -553,20 +573,37 @@ export async function adminAction(req, res, collection, id) {
     if (!['ناجح', 'فاشل'].includes(status)) throw new HttpError(400, 'Invalid request');
     let depositRows;
     if (status === 'ناجح') {
-      depositRows = await sql.query(
-        `WITH updated AS (
-           UPDATE vr_deposits SET status = 'تم', credited = TRUE, blockchain_tx_id = COALESCE($2, blockchain_tx_id)
-           WHERE id = $1 AND credited = FALSE
-           RETURNING id, user_id, amount, method, reason
-         ), credit AS (
-           UPDATE vr_users SET advertiser_balance = advertiser_balance + (SELECT amount FROM updated)
-           WHERE id = (SELECT user_id FROM updated)
-           RETURNING id
-         )
-         SELECT id, user_id::text AS "userId", amount::float8 AS amount, method,
-                reason FROM updated`,
-        [id, readText(body.txId, 200)],
-      );
+      const txId = readText(body.txId, 200);
+      if (txId) {
+        // معرّف المعاملة الخارجية لا يُعتمد إلا مرة واحدة (الفهرس الفريد في db.js شبكة أمان إضافية).
+        const reused = await sql.query(
+          `SELECT 1 FROM vr_deposits WHERE credited = TRUE AND id <> $1 AND lower(blockchain_tx_id) = lower($2) LIMIT 1`,
+          [id, txId],
+        );
+        if (reused.length) throw new HttpError(409, 'Transaction ID already used for another deposit');
+      }
+      try {
+        depositRows = await sql.query(
+          `WITH updated AS (
+             UPDATE vr_deposits SET status = 'تم', credited = TRUE, blockchain_tx_id = COALESCE($2, blockchain_tx_id)
+             WHERE id = $1 AND credited = FALSE
+             RETURNING id, user_id, amount, method, reason
+           ), credit AS (
+             UPDATE vr_users SET advertiser_balance = advertiser_balance + (SELECT amount FROM updated)
+             WHERE id = (SELECT user_id FROM updated)
+             RETURNING id
+           ), audit AS (
+             INSERT INTO vr_admin_audit_log (admin_id, collection, record_id, new_status)
+             SELECT $3::bigint, 'deposits', $1::text, $4::text FROM updated
+           )
+           SELECT id, user_id::text AS "userId", amount::float8 AS amount, method,
+                  reason FROM updated`,
+          [id, txId, admin.id, status],
+        );
+      } catch (error) {
+        if (String(error?.code ?? '') === '23505') throw new HttpError(409, 'Transaction ID already used for another deposit');
+        throw error;
+      }
       if (!depositRows.length) throw new HttpError(409, 'Deposit already processed');
     } else {
       depositRows = await sql.query(
@@ -579,14 +616,16 @@ export async function adminAction(req, res, collection, id) {
            UPDATE vr_users SET advertiser_balance = GREATEST(0, advertiser_balance - (SELECT amount FROM updated))
            WHERE id = (SELECT user_id FROM updated) AND (SELECT was_credited FROM updated)
            RETURNING id
+         ), audit AS (
+           INSERT INTO vr_admin_audit_log (admin_id, collection, record_id, new_status)
+           SELECT $3::bigint, 'deposits', $1::text, $4::text FROM updated
          )
          SELECT id, user_id::text AS "userId", amount::float8 AS amount, method,
                 reason FROM updated`,
-        [id, readText(body.reason, 300)],
+        [id, readText(body.reason, 300), admin.id, status],
       );
       if (!depositRows.length) throw new HttpError(404, 'Not found');
     }
-    await recordAdminAction(admin.id, collection, id, status);
     const deposit = depositRows[0];
     await sendNotification(status === 'ناجح' ? 'deposit_confirmed' : 'deposit_rejected', deposit.userId, {
       amount: moneyLabel(deposit.amount),
@@ -615,12 +654,14 @@ export async function adminAction(req, res, collection, id) {
            UPDATE vr_users SET earned_balance = earned_balance + (SELECT reward FROM updated)
            WHERE $2 = 'approved' AND id = (SELECT user_id FROM updated)
            RETURNING id
+         ), audit AS (
+           INSERT INTO vr_admin_audit_log (admin_id, collection, record_id, new_status)
+           SELECT $4::bigint, 'proofs', $5::text, $6::text FROM updated
          )
          SELECT user_id::text AS "userId", reward::float8 AS reward FROM updated`,
-        [publishMatch[1], nextPublish, reason],
+        [publishMatch[1], nextPublish, reason, admin.id, id, status],
       );
       if (!rows.length) throw new HttpError(409, 'Proof already reviewed');
-      await recordAdminAction(admin.id, collection, id, status);
       await sendNotification(nextPublish === 'approved' ? 'proof_accepted' : 'proof_rejected', rows[0].userId, {
         taskTitle: 'نشر محتوى',
         proofId: id,
@@ -646,13 +687,19 @@ export async function adminAction(req, res, collection, id) {
          UPDATE vr_campaigns SET completed_count = completed_count + 1
          WHERE $3 = 'approved' AND id = $1 AND EXISTS (SELECT 1 FROM updated)
          RETURNING id
+       ), released AS (
+         UPDATE vr_campaigns SET joined_count = GREATEST(0, joined_count - 1)
+         WHERE $3 = 'rejected' AND id = $1 AND EXISTS (SELECT 1 FROM updated)
+         RETURNING id
+       ), audit AS (
+         INSERT INTO vr_admin_audit_log (admin_id, collection, record_id, new_status)
+         SELECT $4::bigint, 'proofs', $5::text, $6::text FROM updated
        )
        SELECT user_id::text AS "userId", campaign_id::text AS "campaignId",
               reward::float8 AS reward, completed_at AS "completedAt" FROM updated`,
-      [match[1], match[2], next],
+      [match[1], match[2], next, admin.id, id, status],
     );
     if (!rows.length) throw new HttpError(409, 'Proof already reviewed');
-    await recordAdminAction(admin.id, collection, id, status);
     const campaignRows = await sql.query(`SELECT title FROM vr_campaigns WHERE id = $1`, [rows[0].campaignId]);
     const completion = rows[0];
     await sendNotification(next === 'approved' ? 'proof_accepted' : 'proof_rejected', completion.userId, {
@@ -680,7 +727,7 @@ export async function adminAction(req, res, collection, id) {
       `WITH before AS (
          SELECT id, status FROM vr_campaigns WHERE id = $1 FOR UPDATE
        ), updated AS (
-         UPDATE vr_campaigns SET status = $2 WHERE id = (SELECT id FROM before)
+         UPDATE vr_campaigns SET status = $2, admin_locked = ($2 = 'موقوف') WHERE id = (SELECT id FROM before)
          RETURNING id, status
        )
        SELECT updated.id::text AS id, before.status AS "previousStatus", updated.status

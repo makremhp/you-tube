@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { sql } from './db.js';
 import { HttpError, ok } from './errors.js';
 import { channelMembershipState, publicChannelHandle, requireUser } from './auth.js';
@@ -110,8 +111,12 @@ const SWEEP_MAX_COMPLETIONS = 3000;
 
 export async function sweepTelegramMemberships(req, res) {
   const secret = process.env.CRON_SECRET;
-  const header = req.headers.authorization ?? '';
-  if (!secret || header !== `Bearer ${secret}`) throw new HttpError(401, 'Unauthorized');
+  const header = String(req.headers.authorization ?? '');
+  const expected = Buffer.from(`Bearer ${secret ?? ''}`);
+  const supplied = Buffer.from(header);
+  if (!secret || supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+    throw new HttpError(401, 'Unauthorized');
+  }
 
   const startedAt = Date.now();
   const completions = await sql.query(
