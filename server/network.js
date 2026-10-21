@@ -13,6 +13,7 @@ import { keyedHash } from './security.js';
  * متغيرات البيئة (كلها اختيارية):
  *  - VPN_PROTECTION=off          تعطيل الحماية بالكامل (الافتراضي: مفعّلة).
  *  - VPN_CHECK_API_KEY           مفتاح proxycheck.io (يعمل بدونه بحد يومي صغير جدًا).
+ *  - VPN_BLOCK_DATACENTER=false   السماح بعناوين مراكز البيانات (الافتراضي: تُحجب لأنها غالبًا VPN/خوادم).
  *  - VPN_FAIL_CLOSED=true        حظر المستخدم عند تعذّر الفحص (الافتراضي: السماح لتفادي تعطيل المنصة).
  *  - VPN_CACHE_HOURS             مدة حفظ النتيجة (الافتراضي 12 ساعة).
  *  - VPN_CHECK_TIMEOUT_MS        مهلة مزوّد الفحص (الافتراضي 3500).
@@ -35,28 +36,53 @@ function timeoutMs() {
   return Number.isSafeInteger(value) && value >= 500 && value <= 10000 ? value : 3500;
 }
 
-async function queryProvider(ip) {
-  const key = process.env.VPN_CHECK_API_KEY;
-  const url = new URL(`https://proxycheck.io/v2/${encodeURIComponent(ip)}`);
-  url.searchParams.set('vpn', '1');
-  url.searchParams.set('risk', '0');
-  if (key) url.searchParams.set('key', key);
+async function fetchJson(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs());
   try {
     const response = await fetch(url, { signal: controller.signal, headers: { accept: 'application/json' } });
     if (!response.ok) return null;
-    const data = await response.json();
-    if (!data || (data.status !== 'ok' && data.status !== 'warning')) return null;
-    const entry = data[ip];
-    if (!entry || typeof entry !== 'object') return null;
-    const proxy = String(entry.proxy ?? '').toLowerCase() === 'yes';
-    return { proxy, kind: proxy ? String(entry.type ?? 'Proxy').slice(0, 40) : null };
+    return await response.json();
   } catch {
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function queryProxycheck(ip) {
+  const key = process.env.VPN_CHECK_API_KEY;
+  const url = new URL(`https://proxycheck.io/v2/${encodeURIComponent(ip)}`);
+  url.searchParams.set('vpn', '1');
+  url.searchParams.set('risk', '0');
+  if (key) url.searchParams.set('key', key);
+  const data = await fetchJson(url);
+  if (!data || (data.status !== 'ok' && data.status !== 'warning')) return null;
+  const entry = data[ip];
+  if (!entry || typeof entry !== 'object') return null;
+  const proxy = String(entry.proxy ?? '').toLowerCase() === 'yes';
+  return { proxy, kind: proxy ? String(entry.type ?? 'Proxy').slice(0, 40) : null };
+}
+
+// ipapi.is: مجاني بدون مفتاح (حد يومي 1000 طلب). يضيف تغطية لنطاقات مراكز البيانات وخوادم VPN الذاتية.
+async function queryIpapi(ip) {
+  const url = new URL('https://api.ipapi.is/');
+  url.searchParams.set('q', ip);
+  const data = await fetchJson(url);
+  if (!data || typeof data !== 'object' || typeof data.is_vpn !== 'boolean') return null;
+  const blockDatacenter = String(process.env.VPN_BLOCK_DATACENTER ?? 'true').toLowerCase() !== 'false';
+  if (data.is_vpn) return { proxy: true, kind: 'VPN' };
+  if (data.is_tor) return { proxy: true, kind: 'TOR' };
+  if (data.is_proxy) return { proxy: true, kind: 'Proxy' };
+  if (blockDatacenter && data.is_datacenter) return { proxy: true, kind: 'Datacenter' };
+  return { proxy: false, kind: null };
+}
+
+// نستعلم مزوّدين بالتوازي؛ يُحجب العنوان إذا أشار أي منهما إلى VPN/Proxy. إن فشل أحدهما نعتمد الآخر.
+async function queryProvider(ip) {
+  const results = (await Promise.all([queryProxycheck(ip), queryIpapi(ip)])).filter(Boolean);
+  if (!results.length) return null;
+  return results.find((result) => result.proxy) ?? { proxy: false, kind: null };
 }
 
 async function readCached(ipHash) {
