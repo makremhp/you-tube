@@ -21,11 +21,27 @@ const providerResponse = (url) => {
   });
 };
 
+let secondMode = 'clean';
+const secondProviderResponse = (url) => {
+  if (secondMode === 'down') throw new Error('unreachable');
+  const ip = new URL(url).searchParams.get('q');
+  const flags = { is_vpn: false, is_tor: false, is_proxy: false, is_datacenter: false };
+  if (secondMode === 'datacenter' || ip === '198.51.100.55') flags.is_datacenter = true;
+  if (secondMode === 'vpn' || ip === '198.51.100.56') flags.is_vpn = true;
+  return new Response(JSON.stringify({ ip, ...flags }), { status: 200, headers: { 'content-type': 'application/json' } });
+};
+
 before(async () => {
   for (const key of ['VPN_PROTECTION', 'VPN_FAIL_CLOSED', 'VPN_CHECK_API_KEY']) saved[key] = process.env[key];
   process.env.VPN_PROTECTION = 'on';
   process.env.VPN_CHECK_API_KEY = 'test-key-not-real';
-  stub = installFetchStub({ custom: async (url) => (url.startsWith('https://proxycheck.io/') ? providerResponse(url) : null) });
+  stub = installFetchStub({
+    custom: async (url) => {
+      if (url.startsWith('https://proxycheck.io/')) return providerResponse(url);
+      if (url.startsWith('https://api.ipapi.is/')) return secondProviderResponse(url);
+      return null;
+    },
+  });
   await call({ path: 'maintenance' });
 });
 
@@ -40,8 +56,32 @@ beforeEach(() => {
   resetNetworkCacheForTests();
   providerCalls = 0;
   providerMode = 'normal';
+  secondMode = 'clean';
   delete process.env.VPN_FAIL_CLOSED;
   process.env.VPN_PROTECTION = 'on';
+});
+
+describe('المزوّد الثاني (ipapi.is) يغطي ما يفوت المزوّد الأول', () => {
+  test('VPN أو مركز بيانات يُحجب حتى لو قال proxycheck إنه نظيف', async () => {
+    const vpn = await call({ path: 'network/check', ip: '198.51.100.56' });
+    assert.equal(vpn.body.data.vpn, true);
+    const datacenter = await call({ path: 'network/check', ip: '198.51.100.55' });
+    assert.equal(datacenter.body.data.vpn, true);
+    process.env.VPN_BLOCK_DATACENTER = 'false';
+    resetNetworkCacheForTests();
+    const allowed = await call({ path: 'network/check', ip: '198.51.100.57' });
+    delete process.env.VPN_BLOCK_DATACENTER;
+    assert.equal(allowed.body.data.vpn, false);
+  });
+
+  test('سقوط أحد المزوّدين لا يعطّل الآخر', async () => {
+    secondMode = 'down';
+    const viaFirst = await call({ path: 'network/check', ip: VPN_IP });
+    assert.equal(viaFirst.body.data.vpn, true);
+    const clean = await call({ path: 'network/check', ip: '198.51.100.60' });
+    assert.equal(clean.body.data.vpn, false);
+    assert.equal(clean.body.data.checked, true);
+  });
 });
 
 describe('الحماية ضد VPN / Proxy', () => {
@@ -83,6 +123,7 @@ describe('الحماية ضد VPN / Proxy', () => {
 
   test('تعذّر المزوّد: السماح افتراضيًا، والحظر عند VPN_FAIL_CLOSED=true', async () => {
     providerMode = 'down';
+    secondMode = 'down';
     const open = await call({ path: 'network/check', ip: '198.51.100.20' });
     assert.equal(open.body.data.vpn, false);
     assert.equal(open.body.data.checked, false);
