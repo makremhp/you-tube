@@ -269,6 +269,18 @@ export function ensureSchema() {
         // إضافات غير تدميرية: قفل الإدارة على الحملة (يمنع المالك من إعادة تفعيل حملة أوقفتها الإدارة)
         // وذاكرة مؤقتة لنتائج فحص الشبكة (VPN/Proxy) مخزّنة بصيغة هاش فقط دون عنوان IP خام.
         `ALTER TABLE vr_campaigns ADD COLUMN IF NOT EXISTS admin_locked BOOLEAN NOT NULL DEFAULT FALSE`,
+        // جلسة تصفح الإعلانات: يعدّ الخادم زمن التصفح الفعلي من نبضات الواجهة (لا من ساعة المتصفح).
+        `CREATE TABLE IF NOT EXISTS vr_ad_browse_sessions (
+          id TEXT PRIMARY KEY,
+          user_id BIGINT NOT NULL REFERENCES vr_users(id) ON DELETE CASCADE,
+          provider TEXT NOT NULL,
+          required_ms INTEGER NOT NULL,
+          active_ms INTEGER NOT NULL DEFAULT 0,
+          last_beat_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          claimed BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )`,
+        `CREATE INDEX IF NOT EXISTS vr_ad_browse_sessions_user_idx ON vr_ad_browse_sessions (user_id, created_at DESC)`,
         `CREATE TABLE IF NOT EXISTS vr_ip_reputation (
           ip_hash TEXT PRIMARY KEY,
           is_proxy BOOLEAN NOT NULL,

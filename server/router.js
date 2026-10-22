@@ -28,6 +28,8 @@ import {
 import { getTaskRewardSettings } from './settings.js';
 import {
   claimAdReward,
+  startAdBrowse,
+  beatAdBrowse,
   createDeposit,
   createWithdrawal,
   getBalance,
@@ -195,6 +197,10 @@ export async function dispatch(req, res) {
     if (key === 'ads/reward') return claimAdReward(req, res);
     if (key === 'ads/reward/adstera') return claimAdReward(req, res, 'adstera');
     if (key === 'ads/monetag/session') return createMonetagSession(req, res);
+    if (key === 'ads/browse/start') return startAdBrowse(req, res);
+    if (resource === 'ads' && segments[1] === 'browse' && segments[3] === 'beat' && segments.length === 4) {
+      return beatAdBrowse(req, res, readText(segments[2], 64));
+    }
     if (resource === 'ads' && segments[1] === 'monetag' && segments[2] === 'session' && segments[4] === 'complete' && segments.length === 5) {
       return completeMonetagStep(req, res, readText(segments[3], 64));
     }

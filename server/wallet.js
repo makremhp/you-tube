@@ -16,28 +16,90 @@ async function nextMemoTag(userId) {
   return `${userId}#${rows[0].sequence}`;
 }
 
+// مدة التصفح المطلوبة بالثواني، ويُسمح بتسامح 10% لاختلاف توقيت النبضات.
+const AD_BROWSE_SECONDS = Number(process.env.AD_BROWSE_SECONDS ?? 30);
+const AD_BROWSE_TOLERANCE = 0.9;
+// أقصى زمن يُحتسب لنبضة واحدة: النبضات المتأخرة (تبويب مخفي/إغلاق مؤقت) لا تُحتسب إلا بهذا السقف.
+const AD_BEAT_MAX_MS = 3500;
+
+function browseSessionRequired() {
+  return String(process.env.AD_BROWSE_SESSION_REQUIRED ?? 'true').toLowerCase() !== 'false';
+}
+
+export async function startAdBrowse(req, res) {
+  const user = await requireUser(req);
+  const provider = readText(req.body?.provider ?? 'adstera', 20);
+  if (provider !== 'adstera') throw new HttpError(400, 'Invalid request');
+  const id = newIdentifier('BRW');
+  // جلسة جديدة عند كل فتح للصفحة: إغلاق الصفحة وإعادة فتحها يصفّر التقدم، وتُحذف الجلسات القديمة غير المستلمة.
+  await sql.query(
+    `WITH cleanup AS (
+       DELETE FROM vr_ad_browse_sessions WHERE user_id = $2 AND (claimed = FALSE OR created_at < now() - interval '1 day')
+     )
+     INSERT INTO vr_ad_browse_sessions (id, user_id, provider, required_ms) VALUES ($1, $2, $3, $4)`,
+    [id, user.id, provider, AD_BROWSE_SECONDS * 1000],
+  );
+  ok(res, { id, requiredSeconds: AD_BROWSE_SECONDS }, 201);
+}
+
+export async function beatAdBrowse(req, res, sessionId) {
+  const user = await requireUser(req);
+  // يضيف الزمن الحقيقي المنقضي منذ آخر نبضة فقط (بسقف)، فلا يمكن تسريع العدّاد بإرسال نبضات كثيرة.
+  const rows = await sql.query(
+    `UPDATE vr_ad_browse_sessions SET
+       active_ms = LEAST(required_ms, active_ms + LEAST($3::int, GREATEST(0, (extract(epoch FROM (now() - last_beat_at)) * 1000)::int))),
+       last_beat_at = now()
+     WHERE id = $1 AND user_id = $2 AND claimed = FALSE
+     RETURNING active_ms::int AS "activeMs", required_ms::int AS "requiredMs"`,
+    [sessionId, user.id, AD_BEAT_MAX_MS],
+  );
+  if (!rows.length) throw new HttpError(404, 'Browsing session not found');
+  ok(res, { activeMs: rows[0].activeMs, requiredMs: rows[0].requiredMs });
+}
+
 export async function claimAdReward(req, res, provider = 'adstera') {
   const user = await requireUser(req);
   const rewardsTable = provider === 'monetag' ? 'vr_monetag_ad_rewards' : 'vr_ad_rewards';
   const { limit, reward } = providerAdConfig(await getAdSettings(), provider);
+  const requireSession = provider === 'adstera' && browseSessionRequired();
+  const sessionId = requireSession ? readText(req.body?.sessionId, 64) : null;
+  if (requireSession && !sessionId) throw new HttpError(409, 'Browsing not completed');
+  // عند اشتراط الجلسة: تُقفل وتُستهلك داخل نفس الاستعلام الذرّي مع المكافأة، فلا تُصرف جلسة مرتين.
   const rows = await sql.query(
-    `WITH bump AS (
+    `WITH sess AS (
+       SELECT id FROM vr_ad_browse_sessions
+       WHERE $5::boolean = TRUE
+         AND id = $6::text AND user_id = $1 AND claimed = FALSE AND active_ms >= required_ms * $7::float8
+       FOR UPDATE
+     ), bump AS (
        INSERT INTO ${rewardsTable} (user_id, day, count, last_at)
-       VALUES ($1, (now() AT TIME ZONE 'UTC')::date, 1, now())
+       SELECT $1, (now() AT TIME ZONE 'UTC')::date, 1, now() WHERE $5::boolean = FALSE OR EXISTS (SELECT 1 FROM sess)
        ON CONFLICT (user_id, day) DO UPDATE
          SET count = ${rewardsTable}.count + 1, last_at = now()
          WHERE ${rewardsTable}.count < $2
            AND ${rewardsTable}.last_at <= now() - make_interval(secs => $4::float8)
        RETURNING count
+     ), mark AS (
+       UPDATE vr_ad_browse_sessions SET claimed = TRUE
+       WHERE $5::boolean = TRUE AND id = $6::text AND user_id = $1 AND EXISTS (SELECT 1 FROM bump)
      ), credit AS (
         UPDATE vr_users SET earned_balance = earned_balance + $3
        WHERE id = $1 AND EXISTS (SELECT 1 FROM bump)
        RETURNING id
      )
      SELECT count FROM bump`,
-    [user.id, limit, reward, AD_MIN_INTERVAL_SECONDS],
+    [user.id, limit, reward, AD_MIN_INTERVAL_SECONDS, requireSession, sessionId, AD_BROWSE_TOLERANCE],
   );
-  if (!rows.length) throw new HttpError(429, 'Reward not available');
+  if (!rows.length) {
+    if (requireSession) {
+      const valid = await sql.query(
+        `SELECT 1 FROM vr_ad_browse_sessions WHERE id = $1 AND user_id = $2 AND claimed = FALSE AND active_ms >= required_ms * $3::float8`,
+        [sessionId, user.id, AD_BROWSE_TOLERANCE],
+      );
+      if (!valid.length) throw new HttpError(409, 'Browsing not completed');
+    }
+    throw new HttpError(429, 'Reward not available');
+  }
   ok(res, { reward, claimedToday: Number(rows[0].count), provider });
 }
 
