@@ -185,7 +185,7 @@ function AdsterraExperience({
   isArabic: boolean;
   provider: AdProvider;
   reward: number;
-  onClaim: () => void;
+  onClaim: (sessionId: string) => void;
   claiming: boolean;
   claimError: string;
   banners: AdsteraAd[];
@@ -193,19 +193,65 @@ function AdsterraExperience({
 }) {
   const [remaining, setRemaining] = useState(ADSTERRA_COUNTDOWN_SECONDS);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [sessionId, setSessionId] = useState('');
+  const [sessionError, setSessionError] = useState('');
+  const [visible, setVisible] = useState(() => document.visibilityState === 'visible');
   const active = remaining > 0;
+  const sessionIdRef = useRef('');
+
+  // الجلسة تُنشأ على الخادم عند فتح الصفحة؛ إغلاقها وإعادة فتحها تبدأ جلسة جديدة بعدّاد من الصفر.
+  useEffect(() => {
+    let cancelled = false;
+    apiPost<{ id: string; requiredSeconds: number }>('ads/browse/start', { provider })
+      .then((session) => {
+        if (cancelled) return;
+        sessionIdRef.current = session.id;
+        setSessionId(session.id);
+        if (session.requiredSeconds > 0) setRemaining(session.requiredSeconds);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setSessionError(error instanceof Error ? error.message : 'Could not start the browsing session.');
+      });
+    return () => { cancelled = true; };
+  }, [provider]);
 
   useEffect(() => {
-    if (!active) return;
+    const update = () => setVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', update);
+    return () => document.removeEventListener('visibilitychange', update);
+  }, []);
+
+  // العدّاد يعمل فقط والصفحة ظاهرة ومعه جلسة خادم؛ الإخفاء أو التبديل لتطبيق آخر يوقفه.
+  const counting = active && visible && Boolean(sessionId);
+
+  useEffect(() => {
+    if (!counting) return;
     const timer = window.setTimeout(() => setRemaining((value) => Math.max(value - 1, 0)), 1000);
     return () => window.clearTimeout(timer);
-  }, [active, remaining]);
+  }, [counting, remaining]);
 
+  // نبضة للخادم كل ثانيتين أثناء العدّ: الخادم هو من يحسب الزمن الفعلي ويرفض المكافأة إن لم يكتمل.
+  useEffect(() => {
+    if (!counting) return;
+    const beat = () => { void apiPost(`ads/browse/${encodeURIComponent(sessionIdRef.current)}/beat`, {}).catch(() => undefined); };
+    beat();
+    const timer = window.setInterval(beat, 2000);
+    return () => window.clearInterval(timer);
+  }, [counting]);
+
+  // تحذير عند محاولة إغلاق الصفحة أثناء العدّ (بعض متصفحات الجوال تتجاهله، والخادم يصفّر التقدم على أي حال).
   useEffect(() => {
     if (!active) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [active]);
+
+  useEffect(() => {
+    if (!counting) return;
     const refreshTimer = window.setInterval(() => setRefreshKey((value) => value + 1), 5000);
     return () => window.clearInterval(refreshTimer);
-  }, [active]);
+  }, [counting]);
 
   const networkName = provider === 'monetag' ? 'Monetag' : 'Adsterra';
   const copy = isArabic
@@ -243,6 +289,16 @@ function AdsterraExperience({
         </div>
         <h1 className="mt-2 text-center text-base font-bold">{copy.title}</h1>
         <p className="mt-1 text-center text-xs leading-5 text-blue-100/65">{copy.description}</p>
+        {active && !visible && (
+          <p role="status" className="mt-2 rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-center text-xs text-amber-200">
+            {isArabic ? 'توقّف العدّاد لأنك غادرت الصفحة. عد إليها ليكتمل الوقت.' : 'The countdown is paused because you left the page. Come back to finish.'}
+          </p>
+        )}
+        {sessionError && (
+          <p role="alert" className="mt-2 text-center text-xs text-rose-200">
+            {isArabic ? 'تعذر بدء جلسة التصفح. أغلق الصفحة وحاول مرة أخرى.' : 'Could not start the browsing session. Close the page and try again.'}
+          </p>
+        )}
         <div data-testid="container-adsterra-banners" className="mt-6 flex w-full flex-col items-center gap-3">
           {banners.map((ad, index) => (
             <AdsterraBannerSlot
@@ -280,8 +336,8 @@ function AdsterraExperience({
             <button
               type="button"
               data-testid="button-claim-adstera"
-              onClick={onClaim}
-              disabled={claiming}
+              onClick={() => onClaim(sessionId)}
+              disabled={claiming || !sessionId}
               className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#f6c453] text-sm font-bold text-[#17213a] transition hover:bg-[#ffdc7e] disabled:cursor-wait disabled:opacity-60"
             >
               <Gift size={17} />
@@ -510,7 +566,7 @@ export function AdsPage({
         rewardMessage: (reward: string) => `${reward} was added to your balance.`,
       };
 
-  const completeAd = async (provider: AdProvider | null) => {
+  const completeAd = async (provider: AdProvider | null, sessionId = '') => {
     if (provider !== 'adstera' || !hasActiveExperienceAds) {
       setActiveProvider(null);
       return;
@@ -519,7 +575,7 @@ export function AdsPage({
     setClaiming(true);
     setClaimError('');
     try {
-      const result = await apiPost<{ reward: number; claimedToday: number }>('ads/reward/adstera', {});
+      const result = await apiPost<{ reward: number; claimedToday: number }>('ads/reward/adstera', { sessionId });
       setProgress(current => ({
         ...(current.day === getLocalDayKey() ? current : emptyProgress()),
         [provider]: result.claimedToday,
@@ -715,7 +771,7 @@ export function AdsPage({
           reward={config.adsteraReward}
           banners={activeBannerAds}
           socialAds={activeSocialAds}
-          onClaim={() => { void completeAd(activeProvider); }}
+          onClaim={(sessionId) => { void completeAd(activeProvider, sessionId); }}
           claiming={claiming}
           claimError={claimError}
         />
