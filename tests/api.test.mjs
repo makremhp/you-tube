@@ -346,14 +346,46 @@ describe('المهام والمكافآت', () => {
     assert.equal((await call({ method: 'POST', path: 'achievements/claim', user, body: { id: 'does_not_exist' } })).statusCode, 400);
   });
 
-  test('مكافأة إعلان Adsterra: فاصل زمني يمنع التكرار الفوري', async () => {
+  test('مكافأة التصفح (Adsterra): لا مكافأة بدون جلسة مكتملة على الخادم ولا تُصرف الجلسة مرتين', async () => {
+    const user = newUser(); const other = newUser();
+    await ensureUser(user); await ensureUser(other);
+
+    const noSession = await call({ method: 'POST', path: 'ads/reward/adstera', user, body: {} });
+    assert.equal(noSession.statusCode, 409);
+    assert.equal((await balanceOf(user.id)).earned, 0);
+
+    const started = await call({ method: 'POST', path: 'ads/browse/start', user, body: { provider: 'adstera' } });
+    assert.equal(started.statusCode, 201);
+    const id = started.body.data.id;
+
+    // إغلاق الصفحة مبكرًا: المطالبة قبل اكتمال الزمن الفعلي مرفوضة حتى لو أُرسلت نبضات كثيرة.
+    for (let i = 0; i < 6; i += 1) await call({ method: 'POST', path: `ads/browse/${id}/beat`, user, body: {} });
+    const early = await call({ method: 'POST', path: 'ads/reward/adstera', user, body: { sessionId: id } });
+    assert.equal(early.statusCode, 409);
+
+    // جلسة مستخدم آخر لا تُستخدم ولا يمكنه إرسال نبضات لها.
+    assert.equal((await call({ method: 'POST', path: `ads/browse/${id}/beat`, user: other, body: {} })).statusCode, 404);
+    assert.equal((await call({ method: 'POST', path: 'ads/reward/adstera', user: other, body: { sessionId: id } })).statusCode, 409);
+
+    // محاكاة مرور 31 ثانية فعلية من التصفح النشط على الخادم.
+    await sqlRows(`UPDATE vr_ad_browse_sessions SET active_ms = 31000 WHERE id = $1`, [id]);
+    await resetLimits();
+    const first = await call({ method: 'POST', path: 'ads/reward/adstera', user, body: { sessionId: id } });
+    assert.equal(first.statusCode, 200, JSON.stringify(first.body));
+    const earned = (await balanceOf(user.id)).earned;
+    assert.ok(Math.abs(earned - first.body.data.reward) < 1e-9);
+    const replay = await call({ method: 'POST', path: 'ads/reward/adstera', user, body: { sessionId: id } });
+    assert.equal(replay.statusCode, 409, 'نفس الجلسة لا تُصرف مرتين');
+    assert.equal((await balanceOf(user.id)).earned, earned);
+  });
+
+  test('نبضات الجلسة لا تتجاوز الزمن الحقيقي (لا تسريع بالإغراق)', async () => {
     const user = newUser();
     await ensureUser(user);
-    const first = await call({ method: 'POST', path: 'ads/reward/adstera', user });
-    assert.equal(first.statusCode, 200);
-    const second = await call({ method: 'POST', path: 'ads/reward/adstera', user });
-    assert.equal(second.statusCode, 429);
-    assert.ok(Math.abs((await balanceOf(user.id)).earned - first.body.data.reward) < 1e-9);
+    const id = (await call({ method: 'POST', path: 'ads/browse/start', user, body: {} })).body.data.id;
+    for (let i = 0; i < 8; i += 1) await call({ method: 'POST', path: `ads/browse/${id}/beat`, user, body: {} });
+    const row = (await sqlRows('SELECT active_ms::int AS ms FROM vr_ad_browse_sessions WHERE id = $1', [id]))[0];
+    assert.ok(row.ms < 3000, `الزمن المحتسب ${row.ms}ms يجب أن يقارب الزمن الحقيقي المنقضي`);
   });
 
   test('جلسة Monetag: مرتبطة بصاحبها، لا إكمال فوري، ولا مكافأة مكررة', async () => {
