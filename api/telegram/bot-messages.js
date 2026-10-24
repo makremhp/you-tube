@@ -42,6 +42,97 @@ function htmlLine(label, value, code = false) {
   return `<b>${escapeHtml(label)}:</b> ${code ? `<code>${safeValue}</code>` : safeValue}`;
 }
 
+// ---------------------------------------------------------------------------
+// Notification card layout (Telegram HTML only: <b>, <i>, <code>, <a>)
+//
+//   {icon} <b>Title</b>
+//   Short reason for the notification
+//
+//   <b>Label:</b> value          <- details (important values in <code>)
+//
+//   <b>Status:</b> value         <- status / outcome
+//
+//   <i>Short closing note</i>    <- only when it adds something
+//
+// Every dynamic value goes through escapeHtml(); titles, intros and footers are escaped here too.
+// ---------------------------------------------------------------------------
+const STATUS_EN = Object.freeze({
+  "قيد المعالجة": "Processing", "تم": "Completed", "تم التأكيد": "Confirmed",
+  "مرفوض": "Declined", "مرفوضة": "Rejected", "موقوف": "Paused", "نشط": "Active",
+  "مكتمل": "Completed", "قيد المراجعة": "Under review", "معتمد": "Approved",
+  "تم الإلغاء": "Cancelled", "بانتظار تحقق البوت": "Waiting for bot verification",
+});
+const STATUS_TONES = Object.freeze({
+  pending: ["قيد المعالجة", "قيد المراجعة", "بانتظار تحقق البوت", "Processing", "Under review", "Waiting for bot verification"],
+  success: ["تم", "تم التأكيد", "نشط", "مكتمل", "معتمد", "Completed", "Confirmed", "Active", "Approved"],
+  failure: ["مرفوض", "مرفوضة", "تم الإلغاء", "Declined", "Rejected", "Cancelled"],
+  attention: ["موقوف", "Paused"],
+});
+
+function statusTone(value, fallback = "info") {
+  const text = String(value ?? "").trim();
+  for (const [tone, names] of Object.entries(STATUS_TONES)) {
+    if (names.includes(text)) return tone;
+  }
+  return fallback;
+}
+
+// `tone` is kept for call-site compatibility; the card has no coloured indicator.
+function statusLine(tone, label, value) {
+  return `<b>${escapeHtml(label)}:</b> ${escapeHtml(valueOr(value))}`;
+}
+
+// Status coming from the database/caller: localise known Arabic values for English users
+// and pick the indicator colour from the actual status text.
+function dynamicStatus(lang, label, value, fallbackTone = "info") {
+  const text = valueOr(value);
+  return statusLine(statusTone(text, fallbackTone), label, lang === "en" ? STATUS_EN[text] ?? text : text);
+}
+
+function amountText(amount, currency) {
+  if (amount === undefined || amount === null || amount === "") return "";
+  return `${amount} ${String(currency ?? "")}`.trim();
+}
+
+// Plain "YYYY-MM-DDTHH:MM:SS.sssZ" timestamps become "YYYY-MM-DD HH:MM UTC"; anything else is left as is.
+function formatDate(value) {
+  const raw = String(value ?? "").trim();
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?Z$/.exec(raw);
+  return match ? `${match[1]} ${match[2]} UTC` : raw;
+}
+
+function safeHttpsUrl(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw || raw.length > 500 || /\s/.test(raw)) return null;
+  try {
+    const url = new URL(raw);
+    return url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+// Optional clickable line; renders nothing unless the caller supplies a valid https URL.
+function linkLine(label, url, text) {
+  const safeUrl = safeHttpsUrl(url);
+  return safeUrl ? `<b>${escapeHtml(label)}:</b> <a href="${escapeHtml(safeUrl)}">${escapeHtml(text)}</a>` : null;
+}
+
+// fields: a flat array of lines, or an array of groups (arrays) separated by a blank line.
+// Falsy entries are skipped so optional lines can be written inline.
+function card({ icon, title, intro, fields = [], status, footer }) {
+  const groups = (Array.isArray(fields[0]) ? fields : [fields])
+    .map((group) => group.filter(Boolean).join("\n"))
+    .filter(Boolean);
+  const blocks = [];
+  if (intro) blocks.push(escapeHtml(intro));
+  blocks.push(...groups);
+  if (status) blocks.push(status);
+  let text = `${icon} <b>${escapeHtml(title)}</b>\n${blocks.join("\n\n")}`;
+  if (footer) text += `\n\n<i>${escapeHtml(footer)}</i>`;
+  return text;
+}
+
 async function resolveBotUsername() {
   const configured = String(process.env.TELEGRAM_BOT_USERNAME ?? "").replace(/^@/, "");
   if (/^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(configured)) return configured;
@@ -86,8 +177,30 @@ const templates = [
     description: { ar: "بعد إنشاء طلب السحب وحفظه بحالة قيد المعالجة.", en: "After a withdrawal request is saved as processing." },
     sample: { status: "قيد المعالجة" }, buttonPayload: "withdrawals",
     render: (lang, v) => lang === "ar"
-      ? `📥 <b>تم استلام طلب السحب</b>\n${htmlLine("المحفظة / الشبكة", v.method)}\n${htmlLine("العنوان", v.address, true)}\n${htmlLine("المبلغ", `${v.amount} ${v.currency}`)}\n${htmlLine("الحالة", v.status)}\n${htmlLine("رقم الطلب", v.requestId)}`
-      : `📥 <b>Withdrawal request received</b>\n${htmlLine("Wallet / network", v.method)}\n${htmlLine("Address", v.address, true)}\n${htmlLine("Amount", `${v.amount} ${v.currency}`)}\n${htmlLine("Status", v.status)}\n${htmlLine("Request ID", v.requestId)}`,
+      ? card({
+        icon: "💸", title: "تم استلام طلب السحب",
+        intro: "سُجّل طلب السحب الخاص بك بنجاح.",
+        fields: [
+          htmlLine("المبلغ", amountText(v.amount, v.currency), true),
+          htmlLine("الطريقة", v.method),
+          htmlLine("العنوان", v.address, true),
+          htmlLine("رقم الطلب", v.requestId, true),
+        ],
+        status: dynamicStatus("ar", "الحالة", v.status, "pending"),
+        footer: "سنُعلمك عند تغيّر حالة الطلب.",
+      })
+      : card({
+        icon: "💸", title: "Withdrawal request received",
+        intro: "Your withdrawal request has been recorded.",
+        fields: [
+          htmlLine("Amount", amountText(v.amount, v.currency), true),
+          htmlLine("Method", v.method),
+          htmlLine("Address", v.address, true),
+          htmlLine("Request ID", v.requestId, true),
+        ],
+        status: dynamicStatus("en", "Status", v.status, "pending"),
+        footer: "We'll notify you when the status changes.",
+      }),
   }),
   template({
     id: "withdrawal_approved", category: "users", image: "sheet1-r3-c2.jpg",
@@ -95,8 +208,30 @@ const templates = [
     description: { ar: "بعد تغيير حالة الطلب في قاعدة البيانات؛ لا يدّعي الدفع عند غياب مرجع معاملة.", en: "After the database status changes; no payment claim is made without a transaction reference." },
     buttonPayload: "withdrawals",
     render: (lang, v) => lang === "ar"
-      ? `✅ <b>تم تحديث طلب السحب</b>\n${htmlLine("المبلغ", `${v.amount} ${v.currency}`)}\n${htmlLine("الطريقة", v.method)}\n${htmlLine("الحالة", v.status)}${v.transactionId ? `\n${htmlLine("مرجع المعاملة", v.transactionId, true)}` : "\nلم يُسجّل مرجع معاملة؛ لا يعني هذا الإشعار أن الدفع تم."}`
-      : `✅ <b>Withdrawal status updated</b>\n${htmlLine("Amount", `${v.amount} ${v.currency}`)}\n${htmlLine("Method", v.method)}\n${htmlLine("Status", v.status)}${v.transactionId ? `\n${htmlLine("Transaction reference", v.transactionId, true)}` : "\nNo transaction reference is recorded; this does not confirm payment."}`,
+      ? card({
+        icon: "💸", title: "تحديث حالة السحب",
+        intro: "تم تحديث حالة طلب السحب الخاص بك.",
+        fields: [
+          htmlLine("المبلغ", amountText(v.amount, v.currency), true),
+          htmlLine("الطريقة", v.method),
+          v.transactionId ? htmlLine("مرجع المعاملة", v.transactionId, true) : null,
+          linkLine("رابط المعاملة", v.transactionUrl, "عرض المعاملة"),
+        ],
+        status: dynamicStatus("ar", "الحالة", v.status, "success"),
+        footer: v.transactionId ? "" : "لم يُسجَّل مرجع معاملة بعد؛ هذا الإشعار لا يؤكد إتمام الدفع.",
+      })
+      : card({
+        icon: "💸", title: "Withdrawal status update",
+        intro: "The status of your withdrawal request has been updated.",
+        fields: [
+          htmlLine("Amount", amountText(v.amount, v.currency), true),
+          htmlLine("Method", v.method),
+          v.transactionId ? htmlLine("Transaction reference", v.transactionId, true) : null,
+          linkLine("Transaction link", v.transactionUrl, "View transaction"),
+        ],
+        status: dynamicStatus("en", "Status", v.status, "success"),
+        footer: v.transactionId ? "" : "No transaction reference is recorded yet; this notice does not confirm payment.",
+      }),
   }),
   template({
     id: "withdrawal_rejected", category: "users", image: "sheet1-r3-c1.jpg",
@@ -104,16 +239,80 @@ const templates = [
     description: { ar: "بعد رفض طلب السحب وإرجاع المبلغ إلى رصيد المستخدم.", en: "After a withdrawal is declined and the amount is returned to the user's balance." },
     buttonPayload: "withdrawals",
     render: (lang, v) => lang === "ar"
-      ? `❌ <b>تم رفض طلب السحب</b>\n${htmlLine("المبلغ المُعاد إلى رصيدك", `${v.amount} ${v.currency}`)}\n${htmlLine("رقم الطلب", v.requestId)}${v.reason ? `\n${htmlLine("السبب", v.reason)}` : ""}`
-      : `❌ <b>Withdrawal request declined</b>\n${htmlLine("Amount returned to your balance", `${v.amount} ${v.currency}`)}\n${htmlLine("Request ID", v.requestId)}${v.reason ? `\n${htmlLine("Reason", v.reason)}` : ""}`,
+      ? card({
+        icon: "💸", title: "تم رفض طلب السحب",
+        intro: "تعذّر تنفيذ طلب السحب، وأُعيد المبلغ إلى رصيدك.",
+        fields: [
+          htmlLine("المبلغ المُعاد", amountText(v.amount, v.currency), true),
+          htmlLine("رقم الطلب", v.requestId, true),
+          v.reason ? htmlLine("السبب", v.reason) : null,
+        ],
+        status: statusLine("failure", "الحالة", "مرفوض"),
+      })
+      : card({
+        icon: "💸", title: "Withdrawal request declined",
+        intro: "We couldn't process your withdrawal, and the amount was returned to your balance.",
+        fields: [
+          htmlLine("Amount returned", amountText(v.amount, v.currency), true),
+          htmlLine("Request ID", v.requestId, true),
+          v.reason ? htmlLine("Reason", v.reason) : null,
+        ],
+        status: statusLine("failure", "Status", "Declined"),
+      }),
   }),
   template({
     id: "payment_proof_admin", category: "admin", image: "sheet1-r1-c3.jpg",
     title: { ar: "تقرير مرجع السحب", en: "Withdrawal reference report" },
     description: { ar: "يُرسل إلى قناة الإدارة فقط عند تسجيل مرجع معاملة في قاعدة البيانات.", en: "Sent only to the admin channel when a transaction reference is stored." },
     render: (lang, v) => lang === "ar"
-      ? `🧾 <b>مرجع سحب مسجل</b>\n${htmlLine("المستخدم", v.firstName)}\n${htmlLine("Telegram", v.username)}\n${htmlLine("Telegram ID", v.telegramId)}\n${htmlLine("المبلغ", `${v.amount} ${v.currency}`)}\n${htmlLine("المحفظة / الشبكة", v.method)}\n${htmlLine("العنوان", v.address, true)}\n${htmlLine("رقم الطلب", v.requestId)}\n${htmlLine("مرجع المعاملة", v.transactionId, true)}\n${htmlLine("وقت التسجيل", v.date)}\nهذا المرجع أُدخل في النظام؛ لا يتضمن تحققًا مستقلاً من الشبكة.`
-      : `🧾 <b>Withdrawal reference recorded</b>\n${htmlLine("User", v.firstName)}\n${htmlLine("Telegram", v.username)}\n${htmlLine("Telegram ID", v.telegramId)}\n${htmlLine("Amount", `${v.amount} ${v.currency}`)}\n${htmlLine("Wallet / network", v.method)}\n${htmlLine("Address", v.address, true)}\n${htmlLine("Request ID", v.requestId)}\n${htmlLine("Transaction reference", v.transactionId, true)}\n${htmlLine("Recorded at", v.date)}\nThis reference was entered in the system; it has not been independently verified on-chain.`,
+      ? card({
+        icon: "🧾", title: "مرجع سحب مسجّل",
+        intro: "سُجّل مرجع معاملة لطلب سحب.",
+        fields: [
+          [
+            htmlLine("المستخدم", v.firstName),
+            htmlLine("Telegram", v.username),
+            htmlLine("Telegram ID", v.telegramId, true),
+          ],
+          [
+            htmlLine("المبلغ", amountText(v.amount, v.currency), true),
+            htmlLine("الطريقة", v.method),
+            htmlLine("العنوان", v.address, true),
+            htmlLine("رقم الطلب", v.requestId, true),
+          ],
+          [
+            htmlLine("مرجع المعاملة", v.transactionId, true),
+            linkLine("رابط المعاملة", v.transactionUrl, "عرض المعاملة"),
+            htmlLine("وقت التسجيل", formatDate(v.date)),
+          ],
+        ],
+        status: statusLine("info", "الحالة", "مرجع مسجّل"),
+        footer: "أُدخل هذا المرجع في النظام ولم يتم التحقق منه بشكل مستقل على الشبكة.",
+      })
+      : card({
+        icon: "🧾", title: "Withdrawal reference recorded",
+        intro: "A transaction reference was recorded for a withdrawal.",
+        fields: [
+          [
+            htmlLine("User", v.firstName),
+            htmlLine("Telegram", v.username),
+            htmlLine("Telegram ID", v.telegramId, true),
+          ],
+          [
+            htmlLine("Amount", amountText(v.amount, v.currency), true),
+            htmlLine("Method", v.method),
+            htmlLine("Address", v.address, true),
+            htmlLine("Request ID", v.requestId, true),
+          ],
+          [
+            htmlLine("Transaction reference", v.transactionId, true),
+            linkLine("Transaction link", v.transactionUrl, "View transaction"),
+            htmlLine("Recorded at", formatDate(v.date)),
+          ],
+        ],
+        status: statusLine("info", "Status", "Reference recorded"),
+        footer: "This reference was entered in the system; it has not been independently verified on-chain.",
+      }),
   }),
   template({
     id: "deposit_requested", category: "advertisers", image: "sheet2-r1-c1.jpg",
@@ -121,8 +320,28 @@ const templates = [
     description: { ar: "بعد حفظ طلب الإيداع، قبل تأكيده.", en: "After the deposit request is saved, before it is confirmed." },
     sample: { requestId: "DEP-2026-001", status: "قيد المعالجة" }, buttonPayload: "deposit",
     render: (lang, v) => lang === "ar"
-      ? `📥 <b>تم استلام طلب الإيداع</b>\n${htmlLine("المبلغ", `${v.amount} ${v.currency}`)}\n${htmlLine("الطريقة", v.method)}\n${htmlLine("الحالة", v.status)}\n${htmlLine("رقم الطلب", v.requestId)}`
-      : `📥 <b>Deposit request received</b>\n${htmlLine("Amount", `${v.amount} ${v.currency}`)}\n${htmlLine("Method", v.method)}\n${htmlLine("Status", v.status)}\n${htmlLine("Request ID", v.requestId)}`,
+      ? card({
+        icon: "💳", title: "تم استلام طلب الإيداع",
+        intro: "سُجّل طلب الإيداع الخاص بك، وسيُضاف الرصيد بعد التأكيد.",
+        fields: [
+          htmlLine("المبلغ", amountText(v.amount, v.currency), true),
+          htmlLine("الطريقة", v.method),
+          htmlLine("رقم الطلب", v.requestId, true),
+        ],
+        status: dynamicStatus("ar", "الحالة", v.status, "pending"),
+        footer: "سنُشعرك فور تأكيد الإيداع.",
+      })
+      : card({
+        icon: "💳", title: "Deposit request received",
+        intro: "Your deposit request has been recorded. The balance is added once it's confirmed.",
+        fields: [
+          htmlLine("Amount", amountText(v.amount, v.currency), true),
+          htmlLine("Method", v.method),
+          htmlLine("Request ID", v.requestId, true),
+        ],
+        status: dynamicStatus("en", "Status", v.status, "pending"),
+        footer: "We'll notify you as soon as the deposit is confirmed.",
+      }),
   }),
   template({
     id: "deposit_confirmed", category: "advertisers", image: "sheet2-r1-c2.jpg",
@@ -130,8 +349,28 @@ const templates = [
     description: { ar: "بعد تأكيد الإيداع وإضافة الرصيد في قاعدة البيانات.", en: "After the deposit is confirmed and credited in the database." },
     sample: { status: "تم التأكيد" }, buttonPayload: "deposit",
     render: (lang, v) => lang === "ar"
-      ? `✅ <b>تم تأكيد الإيداع</b>\n${htmlLine("المبلغ المضاف", `${v.amount} ${v.currency}`)}\n${htmlLine("الطريقة", v.method)}\n${htmlLine("رقم الطلب", v.requestId)}\nأصبح الرصيد متاحًا وفق سجل المنصة.`
-      : `✅ <b>Deposit confirmed</b>\n${htmlLine("Amount credited", `${v.amount} ${v.currency}`)}\n${htmlLine("Method", v.method)}\n${htmlLine("Request ID", v.requestId)}\nThe balance is available according to the platform ledger.`,
+      ? card({
+        icon: "💳", title: "تم تأكيد الإيداع",
+        intro: "تم تأكيد طلب الإيداع الخاص بك.",
+        fields: [
+          htmlLine("المبلغ المضاف", amountText(v.amount, v.currency), true),
+          htmlLine("الطريقة", v.method),
+          htmlLine("رقم الطلب", v.requestId, true),
+        ],
+        status: statusLine("success", "الحالة", "تم التأكيد"),
+        footer: "الرصيد متاح وفق سجل المنصة.",
+      })
+      : card({
+        icon: "💳", title: "Deposit confirmed",
+        intro: "Your deposit request has been confirmed.",
+        fields: [
+          htmlLine("Amount credited", amountText(v.amount, v.currency), true),
+          htmlLine("Method", v.method),
+          htmlLine("Request ID", v.requestId, true),
+        ],
+        status: statusLine("success", "Status", "Confirmed"),
+        footer: "The balance is available according to the platform ledger.",
+      }),
   }),
   template({
     id: "deposit_rejected", category: "advertisers", image: "sheet2-r3-c5.jpg",
@@ -139,8 +378,26 @@ const templates = [
     description: { ar: "بعد حفظ حالة الإيداع المرفوضة وسببها إن وُجد.", en: "After a deposit is marked declined, with a reason when available." },
     sample: { status: "مرفوض" }, buttonPayload: "deposit-history",
     render: (lang, v) => lang === "ar"
-      ? `⚠️ <b>تعذر تأكيد الإيداع</b>\n${htmlLine("المبلغ", `${v.amount} ${v.currency}`)}\n${htmlLine("رقم الطلب", v.requestId)}${v.reason ? `\n${htmlLine("السبب", v.reason)}` : ""}`
-      : `⚠️ <b>Deposit could not be confirmed</b>\n${htmlLine("Amount", `${v.amount} ${v.currency}`)}\n${htmlLine("Request ID", v.requestId)}${v.reason ? `\n${htmlLine("Reason", v.reason)}` : ""}`,
+      ? card({
+        icon: "💳", title: "تعذّر تأكيد الإيداع",
+        intro: "لم نتمكن من تأكيد طلب الإيداع.",
+        fields: [
+          htmlLine("المبلغ", amountText(v.amount, v.currency), true),
+          htmlLine("رقم الطلب", v.requestId, true),
+          v.reason ? htmlLine("السبب", v.reason) : null,
+        ],
+        status: statusLine("failure", "الحالة", "مرفوض"),
+      })
+      : card({
+        icon: "💳", title: "Deposit could not be confirmed",
+        intro: "We couldn't confirm your deposit request.",
+        fields: [
+          htmlLine("Amount", amountText(v.amount, v.currency), true),
+          htmlLine("Request ID", v.requestId, true),
+          v.reason ? htmlLine("Reason", v.reason) : null,
+        ],
+        status: statusLine("failure", "Status", "Declined"),
+      }),
   }),
   template({
     id: "task_available", category: "users", image: "sheet1-r2-c4.jpg",
@@ -148,8 +405,28 @@ const templates = [
     description: { ar: "عند نشر حملة نشطة ومؤهلة للمستخدمين.", en: "When an active campaign becomes available to users." },
     sample: { taskTitle: "تابع قناة VidReward", platform: "Telegram", reward: "0.003" }, buttonPayload: "task_204",
     render: (lang, v) => lang === "ar"
-      ? `🆕 <b>مهمة جديدة متاحة</b>\n${htmlLine("المهمة", v.taskTitle)}\n${htmlLine("المنصة", v.platform)}\n${htmlLine("المكافأة", `${v.reward} USDT`)}${v.description ? `\n${htmlLine("الشروط", v.description)}` : ""}`
-      : `🆕 <b>A new task is available</b>\n${htmlLine("Task", v.taskTitle)}\n${htmlLine("Platform", v.platform)}\n${htmlLine("Reward", `${v.reward} USDT`)}${v.description ? `\n${htmlLine("Requirements", v.description)}` : ""}`,
+      ? card({
+        icon: "🎯", title: "مهمة جديدة متاحة",
+        intro: "تتوفر مهمة جديدة يمكنك تنفيذها الآن.",
+        fields: [
+          htmlLine("المهمة", v.taskTitle),
+          htmlLine("المنصة", v.platform),
+          htmlLine("المكافأة", amountText(v.reward, "USDT"), true),
+          v.description ? htmlLine("الشروط", v.description) : null,
+        ],
+        status: statusLine("success", "الحالة", "متاحة"),
+      })
+      : card({
+        icon: "🎯", title: "A new task is available",
+        intro: "A new task is ready for you to complete.",
+        fields: [
+          htmlLine("Task", v.taskTitle),
+          htmlLine("Platform", v.platform),
+          htmlLine("Reward", amountText(v.reward, "USDT"), true),
+          v.description ? htmlLine("Requirements", v.description) : null,
+        ],
+        status: statusLine("success", "Status", "Available"),
+      }),
   }),
   template({
     id: "referral_joined", category: "users", image: "sheet1-r2-c1.jpg",
@@ -157,8 +434,24 @@ const templates = [
     description: { ar: "عند إنشاء مستخدم جديد برابط إحالة موثّق.", en: "When a new user is created from a verified referral link." },
     sample: { referralUsername: "@new_member" }, buttonPayload: "referrals",
     render: (lang, v) => lang === "ar"
-      ? `👥 <b>انضم مستخدم جديد عبر رابط الإحالة الخاص بك</b>\n${htmlLine("المستخدم", v.referralUsername)}\n${htmlLine("تاريخ الانضمام", v.date)}\nيمكنك متابعة الإحالات من حسابك.`
-      : `👥 <b>A new user joined through your referral link</b>\n${htmlLine("User", v.referralUsername)}\n${htmlLine("Joined", v.date)}\nYou can review your referrals in your account.`,
+      ? card({
+        icon: "👥", title: "انضمام إحالة جديدة",
+        intro: "انضم مستخدم جديد عبر رابط الإحالة الخاص بك.",
+        fields: [
+          htmlLine("المستخدم", v.referralUsername),
+          htmlLine("تاريخ الانضمام", formatDate(v.date)),
+        ],
+        footer: "يمكنك متابعة إحالاتك من حسابك.",
+      })
+      : card({
+        icon: "👥", title: "New referral joined",
+        intro: "A new user joined through your referral link.",
+        fields: [
+          htmlLine("User", v.referralUsername),
+          htmlLine("Joined", formatDate(v.date)),
+        ],
+        footer: "You can review your referrals in your account.",
+      }),
   }),
   template({
     id: "advertiser_telegram_task", category: "advertisers", image: "sheet2-r1-c4.jpg",
@@ -166,8 +459,26 @@ const templates = [
     description: { ar: "بعد التحقق الفعلي من عضوية المستخدم وإضافة المكافأة.", en: "After the user's channel membership is verified and the reward is recorded." },
     sample: { platform: "Telegram" }, buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `🎉 <b>انضم مستخدم جديد إلى قناتك عبر المهمة</b>\n${htmlLine("المستخدم", v.username || v.firstName)}\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("وقت الحدث", v.date)}`
-      : `🎉 <b>A new user joined your channel through the task</b>\n${htmlLine("User", v.username || v.firstName)}\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Event time", v.date)}`,
+      ? card({
+        icon: "📣", title: "انضمام جديد عبر مهمة Telegram",
+        intro: "انضم مستخدم جديد إلى قناتك عبر المهمة.",
+        fields: [
+          htmlLine("المستخدم", v.username || v.firstName),
+          htmlLine("الحملة", v.campaignTitle),
+          htmlLine("وقت الحدث", formatDate(v.date)),
+        ],
+        status: statusLine("success", "الحالة", "تم التحقق من الانضمام"),
+      })
+      : card({
+        icon: "📣", title: "New join via Telegram task",
+        intro: "A new user joined your channel through the task.",
+        fields: [
+          htmlLine("User", v.username || v.firstName),
+          htmlLine("Campaign", v.campaignTitle),
+          htmlLine("Event time", formatDate(v.date)),
+        ],
+        status: statusLine("success", "Status", "Join verified"),
+      }),
   }),
   template({
     id: "advertiser_tiktok_task", category: "advertisers", image: "sheet2-r2-c1.jpg",
@@ -175,8 +486,28 @@ const templates = [
     description: { ar: "بعد اعتماد إثبات المهمة فقط؛ لا يدّعي تحقق المتابعة عبر TikTok.", en: "Only after task proof approval; it does not claim TikTok independently verified a follow." },
     buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `✅ <b>تم اعتماد إثبات مهمة TikTok</b>\n${htmlLine("المستخدم", v.username || v.firstName)}\n${htmlLine("المهمة", v.campaignTitle)}\n${htmlLine("وقت الاعتماد", v.date)}`
-      : `✅ <b>TikTok task proof approved</b>\n${htmlLine("User", v.username || v.firstName)}\n${htmlLine("Task", v.campaignTitle)}\n${htmlLine("Approved at", v.date)}`,
+      ? card({
+        icon: "📣", title: "اعتماد إثبات مهمة TikTok",
+        intro: "تم اعتماد إثبات أحد المستخدمين لمهمتك.",
+        fields: [
+          htmlLine("المستخدم", v.username || v.firstName),
+          htmlLine("المهمة", v.campaignTitle),
+          htmlLine("وقت الاعتماد", formatDate(v.date)),
+        ],
+        status: statusLine("success", "الحالة", "معتمد"),
+        footer: "الاعتماد مبني على إثبات المهمة المقدَّم من المستخدم.",
+      })
+      : card({
+        icon: "📣", title: "TikTok task proof approved",
+        intro: "A user's proof for your task has been approved.",
+        fields: [
+          htmlLine("User", v.username || v.firstName),
+          htmlLine("Task", v.campaignTitle),
+          htmlLine("Approved at", formatDate(v.date)),
+        ],
+        status: statusLine("success", "Status", "Approved"),
+        footer: "Approval is based on the proof the user submitted.",
+      }),
   }),
   template({
     id: "advertiser_youtube_task", category: "advertisers", image: "sheet2-r2-c2.jpg",
@@ -184,8 +515,28 @@ const templates = [
     description: { ar: "بعد تحقق النظام من اكتمال مشاهدة المهمة؛ ليس تحققًا من الاشتراك.", en: "After the system validates task watch completion; not a subscription check." },
     buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `🎬 <b>أكمل مستخدم مهمة YouTube على منصتنا</b>\n${htmlLine("المستخدم", v.username || v.firstName)}\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الإجراء المتحقق", "إكمال مدة المشاهدة المطلوبة")}\n${htmlLine("وقت الحدث", v.date)}`
-      : `🎬 <b>A user completed a YouTube task on our platform</b>\n${htmlLine("User", v.username || v.firstName)}\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Verified action", "Required watch duration completed")}\n${htmlLine("Event time", v.date)}`,
+      ? card({
+        icon: "📣", title: "إكمال مهمة YouTube",
+        intro: "أكمل مستخدم مهمة المشاهدة على منصتنا.",
+        fields: [
+          htmlLine("المستخدم", v.username || v.firstName),
+          htmlLine("الحملة", v.campaignTitle),
+          htmlLine("الإجراء المتحقق", "إكمال مدة المشاهدة المطلوبة"),
+          htmlLine("وقت الحدث", formatDate(v.date)),
+        ],
+        status: statusLine("success", "الحالة", "مكتمل"),
+      })
+      : card({
+        icon: "📣", title: "YouTube task completed",
+        intro: "A user completed a YouTube watch task on our platform.",
+        fields: [
+          htmlLine("User", v.username || v.firstName),
+          htmlLine("Campaign", v.campaignTitle),
+          htmlLine("Verified action", "Required watch duration completed"),
+          htmlLine("Event time", formatDate(v.date)),
+        ],
+        status: statusLine("success", "Status", "Completed"),
+      }),
   }),
   template({
     id: "campaign_accepted", category: "advertisers", image: "sheet1-r1-c4.jpg",
@@ -193,8 +544,18 @@ const templates = [
     description: { ar: "عند انتقال الحملة فعليًا إلى الحالة النشطة.", en: "When the campaign actually enters the active state." },
     buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `✅ <b>حملتك أصبحت نشطة</b>\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الحالة", v.status)}`
-      : `✅ <b>Your campaign is active</b>\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Status", v.status)}`,
+      ? card({
+        icon: "📢", title: "تم قبول الحملة",
+        intro: "تم قبول حملتك وأصبحت نشطة.",
+        fields: [htmlLine("الحملة", v.campaignTitle)],
+        status: dynamicStatus("ar", "الحالة", v.status, "success"),
+      })
+      : card({
+        icon: "📢", title: "Campaign accepted",
+        intro: "Your campaign has been accepted and is now active.",
+        fields: [htmlLine("Campaign", v.campaignTitle)],
+        status: dynamicStatus("en", "Status", v.status, "success"),
+      }),
   }),
   template({
     id: "campaign_activated", category: "advertisers", image: "sheet2-r4-c4.jpg",
@@ -202,8 +563,18 @@ const templates = [
     description: { ar: "عند تفعيل الحملة من حالة غير نشطة.", en: "When a campaign is activated from an inactive state." },
     buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `▶️ <b>تم تفعيل الحملة</b>\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الحالة", v.status)}`
-      : `▶️ <b>Campaign activated</b>\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Status", v.status)}`,
+      ? card({
+        icon: "📢", title: "تم تفعيل الحملة",
+        intro: "تم تفعيل حملتك وأصبحت نشطة.",
+        fields: [htmlLine("الحملة", v.campaignTitle)],
+        status: dynamicStatus("ar", "الحالة", v.status, "success"),
+      })
+      : card({
+        icon: "📢", title: "Campaign activated",
+        intro: "Your campaign has been activated and is now active.",
+        fields: [htmlLine("Campaign", v.campaignTitle)],
+        status: dynamicStatus("en", "Status", v.status, "success"),
+      }),
   }),
   template({
     id: "campaign_paused", category: "advertisers", image: "sheet2-r3-c3.jpg",
@@ -211,8 +582,24 @@ const templates = [
     description: { ar: "عند حفظ الحالة الموقوفة للحملة.", en: "When a campaign's paused state is saved." },
     buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `⏸️ <b>تم إيقاف الحملة</b>\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الحالة", v.status)}${v.reason ? `\n${htmlLine("السبب", v.reason)}` : ""}`
-      : `⏸️ <b>Campaign paused</b>\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Status", v.status)}${v.reason ? `\n${htmlLine("Reason", v.reason)}` : ""}`,
+      ? card({
+        icon: "📢", title: "تم إيقاف الحملة",
+        intro: "تم إيقاف حملتك مؤقتًا.",
+        fields: [
+          htmlLine("الحملة", v.campaignTitle),
+          v.reason ? htmlLine("السبب", v.reason) : null,
+        ],
+        status: dynamicStatus("ar", "الحالة", v.status, "attention"),
+      })
+      : card({
+        icon: "📢", title: "Campaign paused",
+        intro: "Your campaign has been paused.",
+        fields: [
+          htmlLine("Campaign", v.campaignTitle),
+          v.reason ? htmlLine("Reason", v.reason) : null,
+        ],
+        status: dynamicStatus("en", "Status", v.status, "attention"),
+      }),
   }),
   template({
     id: "campaign_rejected", category: "advertisers", image: "sheet2-r3-c5.jpg",
@@ -220,8 +607,18 @@ const templates = [
     description: { ar: "عند حفظ قرار رفض الحملة من الإدارة.", en: "When an administrator records a campaign rejection." },
     buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `❌ <b>لم تتم الموافقة على الحملة</b>\n${htmlLine("الحملة", v.campaignTitle)}`
-      : `❌ <b>Your campaign was not accepted</b>\n${htmlLine("Campaign", v.campaignTitle)}`,
+      ? card({
+        icon: "📢", title: "لم تتم الموافقة على الحملة",
+        intro: "لم تتم الموافقة على حملتك.",
+        fields: [htmlLine("الحملة", v.campaignTitle)],
+        status: statusLine("failure", "الحالة", "مرفوضة"),
+      })
+      : card({
+        icon: "📢", title: "Campaign not accepted",
+        intro: "Your campaign was not accepted.",
+        fields: [htmlLine("Campaign", v.campaignTitle)],
+        status: statusLine("failure", "Status", "Rejected"),
+      }),
   }),
   template({
     id: "campaign_exhausted", category: "advertisers", image: "sheet2-r3-c5.jpg",
@@ -229,8 +626,20 @@ const templates = [
     description: { ar: "قالب جاهز؛ لا يُرسل تلقائيًا لأن النظام الحالي لا يغيّر حالة الحملات عند نفاد الرصيد.", en: "Template prepared; not sent automatically because the current system does not change campaign state on balance exhaustion." },
     buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `⚠️ <b>تحديث رصيد الحملة</b>\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الحالة المسجلة", v.status)}\nلم يتم إيقاف الحملة تلقائيًا ما لم تؤكد قاعدة البيانات ذلك.`
-      : `⚠️ <b>Campaign balance update</b>\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Recorded status", v.status)}\nThe campaign is not treated as paused unless the database confirms it.`,
+      ? card({
+        icon: "📢", title: "تحديث رصيد الحملة",
+        intro: "طرأ تحديث على رصيد حملتك.",
+        fields: [htmlLine("الحملة", v.campaignTitle)],
+        status: dynamicStatus("ar", "الحالة المسجلة", v.status, "attention"),
+        footer: "لا تُعتبر الحملة موقوفة إلا إذا أكّدت حالتها المسجلة ذلك.",
+      })
+      : card({
+        icon: "📢", title: "Campaign balance update",
+        intro: "There is an update to your campaign balance.",
+        fields: [htmlLine("Campaign", v.campaignTitle)],
+        status: dynamicStatus("en", "Recorded status", v.status, "attention"),
+        footer: "The campaign is only treated as paused if its recorded status says so.",
+      }),
   }),
   template({
     id: "campaign_resumed", category: "advertisers", image: "sheet2-r3-c4.jpg",
@@ -238,8 +647,18 @@ const templates = [
     description: { ar: "عند عودة الحملة إلى الحالة النشطة.", en: "When a campaign returns to the active state." },
     buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `▶️ <b>تم استئناف الحملة</b>\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الحالة", v.status)}`
-      : `▶️ <b>Campaign resumed</b>\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Status", v.status)}`,
+      ? card({
+        icon: "📢", title: "تم استئناف الحملة",
+        intro: "عادت حملتك إلى الحالة النشطة.",
+        fields: [htmlLine("الحملة", v.campaignTitle)],
+        status: dynamicStatus("ar", "الحالة", v.status, "success"),
+      })
+      : card({
+        icon: "📢", title: "Campaign resumed",
+        intro: "Your campaign is active again.",
+        fields: [htmlLine("Campaign", v.campaignTitle)],
+        status: dynamicStatus("en", "Status", v.status, "success"),
+      }),
   }),
   template({
     id: "campaign_completed", category: "advertisers", image: "sheet1-r4-c1.jpg",
@@ -247,8 +666,18 @@ const templates = [
     description: { ar: "قالب جاهز للأحداث التي يسجلها النظام عند الاكتمال.", en: "Template for completion events recorded by the system." },
     buttonPayload: "campaigns",
     render: (lang, v) => lang === "ar"
-      ? `🏁 <b>اكتملت الحملة</b>\n${htmlLine("الحملة", v.campaignTitle)}\n${htmlLine("الحالة", v.status)}`
-      : `🏁 <b>Campaign completed</b>\n${htmlLine("Campaign", v.campaignTitle)}\n${htmlLine("Status", v.status)}`,
+      ? card({
+        icon: "📢", title: "اكتملت الحملة",
+        intro: "اكتملت حملتك بنجاح.",
+        fields: [htmlLine("الحملة", v.campaignTitle)],
+        status: dynamicStatus("ar", "الحالة", v.status, "success"),
+      })
+      : card({
+        icon: "📢", title: "Campaign completed",
+        intro: "Your campaign has finished.",
+        fields: [htmlLine("Campaign", v.campaignTitle)],
+        status: dynamicStatus("en", "Status", v.status, "success"),
+      }),
   }),
   template({
     id: "proof_received", category: "users", image: "sheet2-r4-c5.jpg",
@@ -256,8 +685,26 @@ const templates = [
     description: { ar: "بعد حفظ إثبات المستخدم بحالة قيد المراجعة.", en: "After the user's proof is saved as pending review." },
     sample: { proofId: "PRF-204-9988" }, buttonPayload: "tiktok-tasks",
     render: (lang, v) => lang === "ar"
-      ? `📨 <b>تم استلام إثباتك بنجاح</b>\n${htmlLine("المهمة", v.taskTitle)}\n${htmlLine("الحالة", "قيد المراجعة")}\n${htmlLine("رقم الإثبات", v.proofId)}`
-      : `📨 <b>Your task proof was received</b>\n${htmlLine("Task", v.taskTitle)}\n${htmlLine("Status", "Under review")}\n${htmlLine("Proof ID", v.proofId)}`,
+      ? card({
+        icon: "📝", title: "تم استلام إثباتك",
+        intro: "استلمنا إثبات المهمة وهو الآن قيد المراجعة.",
+        fields: [
+          htmlLine("المهمة", v.taskTitle),
+          htmlLine("رقم الإثبات", v.proofId, true),
+        ],
+        status: statusLine("pending", "الحالة", "قيد المراجعة"),
+        footer: "سنُعلمك بالنتيجة بعد انتهاء المراجعة.",
+      })
+      : card({
+        icon: "📝", title: "Task proof received",
+        intro: "We received your task proof and it is now under review.",
+        fields: [
+          htmlLine("Task", v.taskTitle),
+          htmlLine("Proof ID", v.proofId, true),
+        ],
+        status: statusLine("pending", "Status", "Under review"),
+        footer: "We'll let you know the result once the review is done.",
+      }),
   }),
   template({
     id: "proof_accepted", category: "users", image: "sheet2-r4-c1.jpg",
@@ -265,8 +712,24 @@ const templates = [
     description: { ar: "بعد اعتماد الإثبات وإضافة المكافأة مرة واحدة.", en: "After the proof is approved and the reward is credited once." },
     buttonPayload: "proofs",
     render: (lang, v) => lang === "ar"
-      ? `✅ <b>تم قبول إثباتك بنجاح</b>\n${htmlLine("المهمة", v.taskTitle)}\n${htmlLine("المكافأة المسجلة", `${v.reward} USDT`)}\n${htmlLine("الحالة", "معتمد")}`
-      : `✅ <b>Your task proof was approved</b>\n${htmlLine("Task", v.taskTitle)}\n${htmlLine("Recorded reward", `${v.reward} USDT`)}\n${htmlLine("Status", "Approved")}`,
+      ? card({
+        icon: "📝", title: "تم قبول إثباتك",
+        intro: "تمت الموافقة على إثبات المهمة.",
+        fields: [
+          htmlLine("المهمة", v.taskTitle),
+          htmlLine("المكافأة المسجلة", amountText(v.reward, "USDT"), true),
+        ],
+        status: statusLine("success", "الحالة", "معتمد"),
+      })
+      : card({
+        icon: "📝", title: "Task proof approved",
+        intro: "Your task proof has been approved.",
+        fields: [
+          htmlLine("Task", v.taskTitle),
+          htmlLine("Recorded reward", amountText(v.reward, "USDT"), true),
+        ],
+        status: statusLine("success", "Status", "Approved"),
+      }),
   }),
   template({
     id: "proof_rejected", category: "users", image: "sheet2-r4-c2.jpg",
@@ -274,24 +737,54 @@ const templates = [
     description: { ar: "بعد حفظ حالة الرفض وسببها إن توفر.", en: "After the proof is marked declined, with a reason when available." },
     buttonPayload: "proofs",
     render: (lang, v) => lang === "ar"
-      ? `❌ <b>لم تتم الموافقة على إثبات المهمة</b>\n${htmlLine("المهمة", v.taskTitle)}${v.reason ? `\n${htmlLine("السبب", v.reason)}` : ""}\nيمكنك إعادة التقديم إذا كانت المهمة تسمح بذلك.`
-      : `❌ <b>Your task proof was not approved</b>\n${htmlLine("Task", v.taskTitle)}${v.reason ? `\n${htmlLine("Reason", v.reason)}` : ""}\nYou may resubmit if the task allows it.`,
+      ? card({
+        icon: "📝", title: "لم يتم قبول إثباتك",
+        intro: "لم تتم الموافقة على إثبات المهمة.",
+        fields: [
+          htmlLine("المهمة", v.taskTitle),
+          v.reason ? htmlLine("السبب", v.reason) : null,
+        ],
+        status: statusLine("failure", "الحالة", "مرفوض"),
+        footer: "يمكنك إعادة التقديم إذا كانت المهمة تسمح بذلك.",
+      })
+      : card({
+        icon: "📝", title: "Task proof not approved",
+        intro: "Your task proof was not approved.",
+        fields: [
+          htmlLine("Task", v.taskTitle),
+          v.reason ? htmlLine("Reason", v.reason) : null,
+        ],
+        status: statusLine("failure", "Status", "Declined"),
+        footer: "You may resubmit if the task allows it.",
+      }),
   }),
   template({
     id: "generic", category: "admin", image: "sheet1-r5-c2.jpg",
     title: { ar: "إشعار عام", en: "General notification" },
     description: { ar: "قالب عام ثنائي اللغة.", en: "A bilingual general template." },
     render: (lang, v) => lang === "ar"
-      ? `ℹ️ <b>${escapeHtml(valueOr(v.title, "إشعار"))}</b>\n${escapeHtml(valueOr(v.message, "تفاصيل الإشعار"))}`
-      : `ℹ️ <b>${escapeHtml(valueOr(v.title, "Notification"))}</b>\n${escapeHtml(valueOr(v.message, "Notification details"))}`,
+      ? card({
+        icon: "🔔", title: valueOr(v.title, "إشعار"),
+        intro: valueOr(v.message, "تفاصيل الإشعار"),
+      })
+      : card({
+        icon: "🔔", title: valueOr(v.title, "Notification"),
+        intro: valueOr(v.message, "Notification details"),
+      }),
   }),
   template({
     id: "warning", category: "admin", image: "sheet1-r5-c3.jpg",
     title: { ar: "تحذير أو خطأ", en: "Warning or error" },
     description: { ar: "قالب تحذير؛ لا يُرسل إلا عند وجود حالة يدعمها النظام.", en: "Warning template; sent only for states supported by the system." },
     render: (lang, v) => lang === "ar"
-      ? `⚠️ <b>${escapeHtml(valueOr(v.title, "تنبيه"))}</b>\n${escapeHtml(valueOr(v.message, v.reason))}`
-      : `⚠️ <b>${escapeHtml(valueOr(v.title, "Notice"))}</b>\n${escapeHtml(valueOr(v.message, v.reason))}`,
+      ? card({
+        icon: "⚠️", title: valueOr(v.title, "تنبيه"),
+        intro: valueOr(v.message, v.reason),
+      })
+      : card({
+        icon: "⚠️", title: valueOr(v.title, "Notice"),
+        intro: valueOr(v.message, v.reason),
+      }),
   }),
 ];
 
@@ -301,13 +794,7 @@ function sampleValues(item, language) {
   const lang = normalizeLanguage(language);
   const values = { ...item.sample };
   if (lang === "en") {
-    const statuses = {
-      "قيد المعالجة": "Processing", "تم": "Completed", "تم التأكيد": "Confirmed",
-      "مرفوض": "Declined", "موقوف": "Paused", "نشط": "Active",
-      "مكتمل": "Completed", "قيد المراجعة": "Under review", "معتمد": "Approved",
-      "تم الإلغاء": "Cancelled", "بانتظار تحقق البوت": "Waiting for bot verification",
-    };
-    if (statuses[values.status]) values.status = statuses[values.status];
+    if (STATUS_EN[values.status]) values.status = STATUS_EN[values.status];
     if (values.firstName === "أحمد") values.firstName = "Ahmed";
     if (values.taskTitle === "متابعة قناة VidReward") values.taskTitle = "Follow the VidReward channel";
     if (values.campaignTitle === "حملة صيفية") values.campaignTitle = "Summer campaign";
