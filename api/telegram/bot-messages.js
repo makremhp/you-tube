@@ -39,7 +39,7 @@ const valueOr = (value, fallback = "—") => value === undefined || value === nu
 
 function htmlLine(label, value, code = false) {
   const safeValue = escapeHtml(valueOr(value));
-  return `<b>${escapeHtml(label)}:</b> ${code ? `<code>${safeValue}</code>` : safeValue}`;
+  return `${escapeHtml(label)}: ${code ? `<code>${safeValue}</code>` : `<b>${safeValue}</b>`}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -48,9 +48,9 @@ function htmlLine(label, value, code = false) {
 //   {icon} <b>Title</b>
 //   Short reason for the notification
 //
-//   <b>Label:</b> value          <- details (important values in <code>)
+//   Label: <b>value</b>          <- details (bold values; IDs, amounts, addresses in <code> so they can be copied)
 //
-//   <b>Status:</b> value         <- status / outcome
+//   Status: <b>value</b>         <- status / outcome
 //
 //   <i>Short closing note</i>    <- only when it adds something
 //
@@ -79,7 +79,7 @@ function statusTone(value, fallback = "info") {
 
 // `tone` is kept for call-site compatibility; the card has no coloured indicator.
 function statusLine(tone, label, value) {
-  return `<b>${escapeHtml(label)}:</b> ${escapeHtml(valueOr(value))}`;
+  return `${escapeHtml(label)}: <b>${escapeHtml(valueOr(value))}</b>`;
 }
 
 // Status coming from the database/caller: localise known Arabic values for English users
@@ -115,12 +115,12 @@ function safeHttpsUrl(value) {
 // Optional clickable line; renders nothing unless the caller supplies a valid https URL.
 function linkLine(label, url, text) {
   const safeUrl = safeHttpsUrl(url);
-  return safeUrl ? `<b>${escapeHtml(label)}:</b> <a href="${escapeHtml(safeUrl)}">${escapeHtml(text)}</a>` : null;
+  return safeUrl ? `${escapeHtml(label)}: <a href="${escapeHtml(safeUrl)}"><b>${escapeHtml(text)}</b></a>` : null;
 }
 
 // fields: a flat array of lines, or an array of groups (arrays) separated by a blank line.
 // Falsy entries are skipped so optional lines can be written inline.
-function card({ icon, title, intro, fields = [], status, footer }) {
+function card({ icon, title, intro, fields = [], status, footer, spaced = false }) {
   const groups = (Array.isArray(fields[0]) ? fields : [fields])
     .map((group) => group.filter(Boolean).join("\n"))
     .filter(Boolean);
@@ -128,7 +128,7 @@ function card({ icon, title, intro, fields = [], status, footer }) {
   if (intro) blocks.push(escapeHtml(intro));
   blocks.push(...groups);
   if (status) blocks.push(status);
-  let text = `${icon} <b>${escapeHtml(title)}</b>\n${blocks.join("\n\n")}`;
+  let text = `${icon} <b>${escapeHtml(title)}</b>${spaced ? "\n\n" : "\n"}${blocks.join("\n\n")}`;
   if (footer) text += `\n\n<i>${escapeHtml(footer)}</i>`;
   return text;
 }
@@ -762,29 +762,22 @@ const templates = [
     id: "generic", category: "admin", image: "sheet1-r5-c2.jpg",
     title: { ar: "إشعار عام", en: "General notification" },
     description: { ar: "قالب عام ثنائي اللغة.", en: "A bilingual general template." },
-    render: (lang, v) => lang === "ar"
-      ? card({
-        icon: "🔔", title: valueOr(v.title, "إشعار"),
-        intro: valueOr(v.message, "تفاصيل الإشعار"),
-      })
-      : card({
-        icon: "🔔", title: valueOr(v.title, "Notification"),
-        intro: valueOr(v.message, "Notification details"),
-      }),
+    render: (lang, v) => card({
+      icon: "🔔", spaced: true,
+      title: valueOr(v.title, lang === "ar" ? "إشعار" : "Notification"),
+      intro: valueOr(v.message, lang === "ar" ? "تفاصيل الإشعار" : "Notification details"),
+    }),
   }),
   template({
     id: "warning", category: "admin", image: "sheet1-r5-c3.jpg",
     title: { ar: "تحذير أو خطأ", en: "Warning or error" },
     description: { ar: "قالب تحذير؛ لا يُرسل إلا عند وجود حالة يدعمها النظام.", en: "Warning template; sent only for states supported by the system." },
-    render: (lang, v) => lang === "ar"
-      ? card({
-        icon: "⚠️", title: valueOr(v.title, "تنبيه"),
-        intro: valueOr(v.message, v.reason),
-      })
-      : card({
-        icon: "⚠️", title: valueOr(v.title, "Notice"),
-        intro: valueOr(v.message, v.reason),
-      }),
+    render: (lang, v) => card({
+      icon: "⚠️", spaced: true,
+      title: valueOr(v.title, lang === "ar" ? "تنبيه" : "Notice"),
+      intro: valueOr(v.message, v.reason),
+      fields: [v.message && v.reason && v.message !== v.reason ? htmlLine(lang === "ar" ? "السبب" : "Reason", v.reason) : null],
+    }),
   }),
 ];
 
