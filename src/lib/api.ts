@@ -9,6 +9,7 @@ import {
   type Video,
   type WithdrawRecord,
 } from '@/legacy/shared';
+import { getClientSignals } from '@/lib/clientSignals';
 
 export class ApiError extends Error {
   status: number;
@@ -22,6 +23,7 @@ export class ApiError extends Error {
 }
 
 export const VPN_BLOCKED_EVENT = 'vr:vpn-blocked';
+export const DEVICE_BLOCKED_EVENT = 'vr:device-blocked';
 const REQUEST_TIMEOUT_MS = 30_000;
 
 function isArabicUi() {
@@ -75,6 +77,10 @@ export async function apiRequest<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   const initData = window.Telegram?.WebApp?.initData;
   if (initData) headers['x-telegram-init-data'] = initData;
   headers['x-client-device-id'] = readOrCreateSecurityValue('vr-security-device-id', 32);
+  const signals = await getClientSignals();
+  if (/^[a-f0-9]{64}$/i.test(signals.fingerprint)) headers['x-device-fingerprint'] = signals.fingerprint;
+  if (signals.timezone && signals.timezone.length <= 64) headers['x-client-timezone'] = signals.timezone;
+  if (signals.webrtcIps) headers['x-client-webrtc-ips'] = signals.webrtcIps;
   const securitySessionId = readSecurityValue('vr-security-session-id');
   if (securitySessionId && /^[a-f0-9]{64}$/i.test(securitySessionId)) headers['x-security-session-id'] = securitySessionId;
   if (method !== 'GET') headers['x-request-nonce'] = randomHex(16);
@@ -128,6 +134,7 @@ export async function apiRequest<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   if (!response.ok || !envelope || !envelope.success) {
     const code = envelope && !envelope.success ? envelope.code : undefined;
     if (code === 'VPN_DETECTED') window.dispatchEvent(new Event(VPN_BLOCKED_EVENT));
+    if (code === 'MULTI_ACCOUNT_DEVICE') window.dispatchEvent(new Event(DEVICE_BLOCKED_EVENT));
     throw new ApiError(response.status, envelope && !envelope.success ? envelope.error : 'Request failed', code);
   }
   return envelope.data;
