@@ -2,6 +2,7 @@ import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { sql } from './db.js';
 import { HttpError } from './errors.js';
 import { requestIp } from './ip.js';
+import { isAdmin } from './auth.js';
 
 const RATE_WINDOW_MS = 5_000;
 const SESSION_TTL_HOURS = 24;
@@ -117,6 +118,100 @@ async function applyRateLimit({ identity, userId, route, method, ipHash, deviceH
     key: eventKey('rate-limit', identity, scope, windowStart),
   });
   throw new HttpError(429, 'Too many requests. Please try again shortly.');
+}
+
+export const DEVICE_ERROR_CODE = 'MULTI_ACCOUNT_DEVICE';
+export const DEVICE_REQUIRED_CODE = 'DEVICE_REQUIRED';
+const DEVICE_LINK_WINDOW_DAYS = 30;
+const DEVICE_CACHE_TTL_MS = 5 * 60 * 1000;
+const deviceAllowedCache = new Map();
+
+export function resetDeviceCacheForTests() {
+  deviceAllowedCache.clear();
+}
+
+/*
+ * حساب واحد لكل جهاز.
+ *  - DEVICE_BINDING=off            تعطيل المنع بالكامل (الافتراضي: مفعّل).
+ *  - DEVICE_MAX_ACCOUNTS=1         عدد الحسابات المسموح لكل جهاز (1..10).
+ *  - DEVICE_FINGERPRINT_MODE       ip (الافتراضي) | strict | off
+ *      ip:     البصمة تحظر فقط إذا ظهر الحساب الآخر من نفس الشبكة (IP) خلال 30 يومًا؛ لأن الهواتف المتطابقة الطراز
+ *              (خصوصًا iPhone) تنتج بصمات متطابقة، فالحظر بالبصمة وحدها يظلم مستخدمين مختلفين.
+ *      strict: البصمة وحدها تكفي للحظر (تشديد أقصى مع خطر حظر هواتف متطابقة لأشخاص مختلفين).
+ *      off:    معرّف الجهاز المخزَّن فقط.
+ * معرّف الجهاز يُنشأ في المتصفح، لذا هو إشارة قوية ضد الاستخدام العادي لا إثبات هوية ضد من يكتب سكربتًا مخصصًا.
+ */
+function deviceBindingEnabled() {
+  return String(process.env.DEVICE_BINDING ?? 'on').toLowerCase() !== 'off';
+}
+
+function maxAccountsPerDevice() {
+  const value = Number(process.env.DEVICE_MAX_ACCOUNTS);
+  return Number.isSafeInteger(value) && value >= 1 && value <= 10 ? value : 1;
+}
+
+function fingerprintMode() {
+  const mode = String(process.env.DEVICE_FINGERPRINT_MODE ?? 'ip').toLowerCase();
+  return mode === 'strict' || mode === 'off' ? mode : 'ip';
+}
+
+async function enforceDeviceLimit({ userId, deviceHash, fingerprintHash, ipHash, route, method }) {
+  const max = maxAccountsPerDevice();
+  const cacheKey = `${userId}|${deviceHash}|${fingerprintHash ?? ''}|${ipHash ?? ''}`;
+  const cached = deviceAllowedCache.get(cacheKey);
+  if (cached && cached > Date.now()) return;
+
+  const strict = fingerprintMode() === 'strict';
+  const rows = await sql.query(
+    `SELECT l.user_id::text AS user_id, MIN(l.first_seen_at) AS first_seen_at
+     FROM vr_device_links l
+     JOIN vr_users u ON u.id = l.user_id
+     WHERE l.user_id <> $1
+       AND (
+         (l.kind = 'id' AND l.device_key = $2)
+         OR (l.kind = 'fp' AND l.device_key = $3 AND ($4::boolean
+              OR (l.ip_hash IS NOT NULL AND l.ip_hash = $5
+                  AND l.last_seen_at > now() - make_interval(days => $6::int))))
+       )
+     GROUP BY l.user_id`,
+    [userId, deviceHash, fingerprintHash ?? '', strict, ipHash, DEVICE_LINK_WINDOW_DAYS],
+  );
+  const mine = await sql.query(
+    `SELECT MIN(first_seen_at) AS first_seen_at
+     FROM vr_device_links
+     WHERE user_id = $1 AND (device_key = $2 OR device_key = $3)`,
+    [userId, deviceHash, fingerprintHash ?? ''],
+  );
+  const myFirst = mine[0]?.first_seen_at ? new Date(mine[0].first_seen_at).getTime() : null;
+  // أقدم الحسابات هي المالكة: من لديه سجل سابق لا يُمنع إلا بسبب حسابات أقدم منه، ومن لا سجل له يُمنع إن امتلأ الجهاز.
+  const owners = rows.filter((row) => myFirst === null || new Date(row.first_seen_at).getTime() < myFirst);
+
+  if (owners.length >= max) {
+    const day = new Date().toISOString().slice(0, 10);
+    await recordSecurityEvent({
+      userId,
+      eventType: 'multi_account_blocked',
+      route,
+      method,
+      ipHash,
+      deviceHash,
+      details: { owners: owners.length },
+      key: eventKey('multi-account-blocked', userId, deviceHash, day),
+    });
+    throw new HttpError(403, 'This device is already linked to another account.', DEVICE_ERROR_CODE);
+  }
+
+  const values = [userId, ipHash, deviceHash];
+  let statement = `INSERT INTO vr_device_links (device_key, kind, user_id, ip_hash) VALUES ($3, 'id', $1, $2)`;
+  if (fingerprintHash) {
+    values.push(fingerprintHash);
+    statement += `, ($4, 'fp', $1, $2)`;
+  }
+  statement += ` ON CONFLICT (device_key, user_id) DO UPDATE
+     SET ip_hash = COALESCE(EXCLUDED.ip_hash, vr_device_links.ip_hash), last_seen_at = now()`;
+  await sql.query(statement, values);
+  deviceAllowedCache.set(cacheKey, Date.now() + DEVICE_CACHE_TTL_MS);
+  if (deviceAllowedCache.size > 5000) deviceAllowedCache.clear();
 }
 
 async function registerDeviceSession({ userId, deviceHash, ipHash, suppliedSessionId, route, method }) {
@@ -318,6 +413,16 @@ export async function applyApiSecurity(req, res, authUser, routeKey) {
         });
       }
     }
+  }
+
+  if (userId !== null && deviceBindingEnabled() && !isAdmin(userId)) {
+    // بدون معرّف جهاز صالح لا يمكن ربط الحساب بجهاز، فيُرفض الطلب بدل أن يكون حذف الترويسة طريقًا للتهرب.
+    if (!validDeviceId) throw new HttpError(400, 'Device verification required', DEVICE_REQUIRED_CODE);
+    const rawFingerprint = readHeader(req, 'x-device-fingerprint');
+    const fingerprintHash = fingerprintMode() !== 'off' && typeof rawFingerprint === 'string' && /^[a-f0-9]{64}$/i.test(rawFingerprint)
+      ? keyedHash(`fp:${rawFingerprint.toLowerCase()}`)
+      : null;
+    await enforceDeviceLimit({ userId, deviceHash, fingerprintHash, ipHash, route, method });
   }
 
   if (userId !== null) {

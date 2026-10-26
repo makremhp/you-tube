@@ -288,6 +288,22 @@ export function ensureSchema() {
           provider TEXT NOT NULL,
           checked_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )`,
+        // ربط الأجهزة بالحسابات (حساب واحد لكل جهاز). device_key هاش مفتاحي لمعرّف الجهاز أو لبصمته؛ لا نخزّن أي قيمة خام.
+        // لا مفتاح أجنبي عمدًا: السجل يُكتب في أول طلب قبل إنشاء صف المستخدم؛ والاستعلام يربط vr_users فحذف المستخدم يحرّر الجهاز.
+        `CREATE TABLE IF NOT EXISTS vr_device_links (
+          device_key TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          user_id BIGINT NOT NULL,
+          ip_hash TEXT,
+          first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (device_key, user_id)
+        )`,
+        `CREATE INDEX IF NOT EXISTS vr_device_links_user_idx ON vr_device_links (user_id)`,
+        // ترحيل من الجلسات القديمة: أقدم حساب على كل جهاز يبقى هو المالك، وما بعده يُمنع.
+        `INSERT INTO vr_device_links (device_key, kind, user_id, ip_hash, first_seen_at, last_seen_at)
+           SELECT device_hash, 'id', user_id, ip_hash, created_at, last_seen_at FROM vr_security_sessions
+           ON CONFLICT (device_key, user_id) DO NOTHING`,
       ];
       for (const statement of statements) {
         await sql.query(statement);

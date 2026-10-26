@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { sql } from './db.js';
 import { HttpError } from './errors.js';
 import { isAdmin } from './auth.js';
@@ -17,6 +18,12 @@ import { keyedHash } from './security.js';
  *  - VPN_FAIL_CLOSED=true        حظر المستخدم عند تعذّر الفحص (الافتراضي: السماح لتفادي تعطيل المنصة).
  *  - VPN_CACHE_HOURS             مدة حفظ النتيجة (الافتراضي 12 ساعة).
  *  - VPN_CHECK_TIMEOUT_MS        مهلة مزوّد الفحص (الافتراضي 3500).
+ *  - VPN_WEBRTC_CHECK=off        تعطيل مقارنة IP الذي يكشفه WebRTC بالـ IP الذي يراه الخادم (الافتراضي: مفعّلة).
+ *  - VPN_TIMEZONE_CHECK=off      تعطيل مقارنة المنطقة الزمنية للجهاز بمنطقة الـ IP (الافتراضي: مفعّلة).
+ *
+ * إشارات المتصفح (WebRTC والمنطقة الزمنية) تلتقط إضافات VPN المجانية في المتصفح التي تغيّر الـ IP لحركة HTTP فقط:
+ * تبقى المنطقة الزمنية للجهاز كما هي، وغالبًا يكشف WebRTC عنوان الشبكة الحقيقي. هي إشارات يرسلها العميل فيمكن
+ * لمن يكتب سكربتًا مخصصًا تزويرها، لكنها تُغلق الباب أمام الاستخدام العادي لهذه الإضافات.
  */
 export const VPN_ERROR_CODE = 'VPN_DETECTED';
 const MEMORY_TTL_MS = 10 * 60 * 1000;
@@ -118,6 +125,63 @@ async function writeCache(ipHash, value) {
   }
 }
 
+function normalizeIp(value) {
+  return String(value ?? '').trim().replace(/^::ffff:/i, '').toLowerCase();
+}
+
+function readHeader(req, name) {
+  const value = req.headers?.[name];
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function webrtcIps(req) {
+  const raw = readHeader(req, 'x-client-webrtc-ips');
+  if (typeof raw !== 'string' || !raw || raw.length > 400) return [];
+  return raw
+    .split(',')
+    .map(normalizeIp)
+    .filter((ip) => isIP(ip) && !isPrivateOrLocalIp(ip))
+    .slice(0, 6);
+}
+
+function offsetMinutes(timeZone) {
+  if (typeof timeZone !== 'string' || !/^[A-Za-z][A-Za-z0-9_+\-/]{1,63}$/.test(timeZone)) return null;
+  try {
+    const part = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset' })
+      .formatToParts(new Date())
+      .find((item) => item.type === 'timeZoneName')?.value;
+    if (!part) return null;
+    if (part === 'GMT') return 0;
+    const match = /^GMT([+-])(\d{2}):(\d{2})$/.exec(part);
+    if (!match) return null;
+    return (match[1] === '-' ? -1 : 1) * (Number(match[2]) * 60 + Number(match[3]));
+  } catch {
+    return null;
+  }
+}
+
+/*
+ * فحص إشارات المتصفح دون أي استعلام خارجي. يعيد { proxy, kind } أو null إن لم تتوفر إشارة كافية.
+ *  - WebRTC: إن كشف المتصفح عنوانًا عامًا من نفس عائلة عنوان الطلب (IPv4 أو IPv6) ولا يطابقه فالطلب يمر عبر وسيط.
+ *  - المنطقة الزمنية: إن اختلف توقيت جهاز المستخدم عن توقيت موقع الـ IP (ترويسة Vercel) فالـ IP ليس من موقع الجهاز.
+ */
+export function assessClientSignals(req, ip) {
+  const requestIpValue = normalizeIp(ip);
+  const family = isIP(requestIpValue);
+
+  if (String(process.env.VPN_WEBRTC_CHECK ?? 'on').toLowerCase() !== 'off' && family) {
+    const sameFamily = webrtcIps(req).filter((candidate) => isIP(candidate) === family);
+    if (sameFamily.length && !sameFamily.includes(requestIpValue)) return { proxy: true, kind: 'WebRTC mismatch' };
+  }
+
+  if (String(process.env.VPN_TIMEZONE_CHECK ?? 'on').toLowerCase() !== 'off') {
+    const ipOffset = offsetMinutes(readHeader(req, 'x-vercel-ip-timezone'));
+    const deviceOffset = offsetMinutes(readHeader(req, 'x-client-timezone'));
+    if (ipOffset !== null && deviceOffset !== null && ipOffset !== deviceOffset) return { proxy: true, kind: 'Timezone mismatch' };
+  }
+  return null;
+}
+
 export function resetNetworkCacheForTests() {
   memoryCache.clear();
 }
@@ -131,6 +195,10 @@ export async function inspectNetwork(req) {
   if (!vpnProtectionEnabled()) return { enforced: false, checked: false, proxy: false, kind: null };
   const ip = requestIp(req);
   if (!ip || isPrivateOrLocalIp(ip)) return { enforced: false, checked: false, proxy: false, kind: null };
+
+  // إشارات المتصفح تُفحص أولًا: لا تكلّف طلبًا خارجيًا وتلتقط إضافات VPN التي لا يعرفها مزوّد السمعة.
+  const clientSignal = assessClientSignals(req, ip);
+  if (clientSignal) return { enforced: true, checked: true, ...clientSignal };
 
   const ipHash = keyedHash(`vpn:${ip}`);
   const cached = await readCached(ipHash);
