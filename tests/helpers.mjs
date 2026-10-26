@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 
 export const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
@@ -15,6 +15,7 @@ export function signInitData(user, { authDate = Math.floor(Date.now() / 1000), b
 }
 
 export const nonce = () => randomBytes(16).toString('hex');
+export const deviceIdFor = (label) => createHash('sha256').update(`test-device-${label}`).digest('hex');
 
 export function makeRes() {
   return {
@@ -34,7 +35,11 @@ export async function call({ method = 'GET', path, user, body, ip = '203.0.113.1
     'x-vercel-forwarded-for': ip,
     ...headers,
   };
-  if (user) requestHeaders['x-telegram-init-data'] = initData ?? signInitData(user);
+  if (user) {
+    requestHeaders['x-telegram-init-data'] = initData ?? signInitData(user);
+    // كل مستخدم اختبار «يملك» جهازه الخاص افتراضيًا؛ تتجاوز الاختبارات الترويسة صراحةً لمحاكاة جهاز مشترك.
+    if (!('x-client-device-id' in requestHeaders)) requestHeaders['x-client-device-id'] = deviceIdFor(user.id);
+  }
   else if (initData) requestHeaders['x-telegram-init-data'] = initData;
   if (method !== 'GET' && withNonce && !requestHeaders['x-request-nonce']) requestHeaders['x-request-nonce'] = nonce();
   const req = { method, url: `/api/${path}`, headers: requestHeaders, body };

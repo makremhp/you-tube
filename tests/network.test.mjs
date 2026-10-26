@@ -153,3 +153,50 @@ describe('الحماية ضد VPN / Proxy', () => {
     }
   });
 });
+
+describe('إشارات المتصفح: WebRTC والمنطقة الزمنية (إضافات VPN المجانية)', () => {
+  test('عنوان WebRTC عام مختلف عن عنوان الطلب يُحجب دون استعلام المزوّد', async () => {
+    const before = providerCalls;
+    const res = await call({ path: 'network/check', ip: '198.51.100.70', headers: { 'x-client-webrtc-ips': '203.0.113.200' } });
+    assert.equal(res.body.data.vpn, true);
+    assert.equal(providerCalls, before, 'القرار من الإشارة لا من مزوّد خارجي');
+  });
+
+  test('تطابق WebRTC مع عنوان الطلب، أو اختلاف عائلة IPv4/IPv6، أو عنوان محلي: لا حظر', async () => {
+    const same = await call({ path: 'network/check', ip: '198.51.100.71', headers: { 'x-client-webrtc-ips': '198.51.100.71' } });
+    assert.equal(same.body.data.vpn, false);
+    const otherFamily = await call({ path: 'network/check', ip: '198.51.100.72', headers: { 'x-client-webrtc-ips': '2001:db8::1' } });
+    assert.equal(otherFamily.body.data.vpn, false);
+    const privateOnly = await call({ path: 'network/check', ip: '198.51.100.73', headers: { 'x-client-webrtc-ips': '192.168.1.5' } });
+    assert.equal(privateOnly.body.data.vpn, false);
+    const garbage = await call({ path: 'network/check', ip: '198.51.100.74', headers: { 'x-client-webrtc-ips': 'not-an-ip,<script>' } });
+    assert.equal(garbage.body.data.vpn, false);
+  });
+
+  test('اختلاف المنطقة الزمنية للجهاز عن موقع الـ IP يُحجب، والتطابق يمر', async () => {
+    const mismatch = await call({ path: 'network/check', ip: '198.51.100.75', headers: { 'x-vercel-ip-timezone': 'America/New_York', 'x-client-timezone': 'Asia/Riyadh' } });
+    assert.equal(mismatch.body.data.vpn, true);
+    const match = await call({ path: 'network/check', ip: '198.51.100.76', headers: { 'x-vercel-ip-timezone': 'Asia/Riyadh', 'x-client-timezone': 'Asia/Riyadh' } });
+    assert.equal(match.body.data.vpn, false);
+    const sameOffset = await call({ path: 'network/check', ip: '198.51.100.77', headers: { 'x-vercel-ip-timezone': 'Asia/Riyadh', 'x-client-timezone': 'Europe/Istanbul' } });
+    assert.equal(sameOffset.body.data.vpn, false, 'المقارنة بفارق التوقيت لا باسم المنطقة');
+    const missing = await call({ path: 'network/check', ip: '198.51.100.78', headers: { 'x-client-timezone': 'Asia/Riyadh' } });
+    assert.equal(missing.body.data.vpn, false);
+  });
+
+  test('عمليات الكتابة تُرفض برمز VPN_DETECTED عند عدم تطابق WebRTC، وVPN_WEBRTC_CHECK=off يعطّله', async () => {
+    const user = makeUser(70050);
+    await ensureUser(user);
+    const headers = { 'x-client-webrtc-ips': '203.0.113.201' };
+    const blocked = await call({ method: 'POST', path: 'withdrawals', user, ip: CLEAN_IP, headers, body: { method: 'nope' } });
+    assert.equal(blocked.statusCode, 403);
+    assert.equal(blocked.body.code, 'VPN_DETECTED');
+    process.env.VPN_WEBRTC_CHECK = 'off';
+    try {
+      const allowed = await call({ method: 'POST', path: 'withdrawals', user, ip: CLEAN_IP, headers, body: { method: 'nope' } });
+      assert.equal(allowed.statusCode, 400);
+    } finally {
+      delete process.env.VPN_WEBRTC_CHECK;
+    }
+  });
+});
