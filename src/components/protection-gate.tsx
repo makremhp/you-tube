@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ShieldAlert } from 'lucide-react';
-import { apiGet, VPN_BLOCKED_EVENT } from '@/lib/api';
+import { apiGet, DEVICE_BLOCKED_EVENT, VPN_BLOCKED_EVENT } from '@/lib/api';
 import { detectAdBlocker } from '@/lib/adblock';
 
-type Reason = 'vpn' | 'adblock';
+type Reason = 'device' | 'vpn' | 'adblock';
 
 const COPY = {
   ar: {
@@ -12,6 +12,12 @@ const COPY = {
       title: 'أوقف VPN للمتابعة',
       body: 'اكتشفنا أنك تستخدم VPN أو بروكسي. لحماية المكافآت والرصيد من التلاعب لا يمكن استخدام المنصة عبر هذه الخدمات. أوقف الـ VPN ثم حدّث الصفحة.',
       steps: ['أوقف تطبيق الـ VPN أو البروكسي من هاتفك.', 'ارجع إلى التطبيق واضغط «تحديث الصفحة».'],
+    },
+    device: {
+      badge: 'تعدد حسابات',
+      title: 'هذا الجهاز مرتبط بحساب آخر',
+      body: 'يُسمح بحساب واحد فقط لكل جهاز لحماية المكافآت من التلاعب. هذا الجهاز مستخدم مع حساب آخر في المنصة.',
+      steps: ['سجّل الدخول من تيليجرام بالحساب الأول الذي استخدمته على هذا الجهاز.', 'إن كان هذا حسابك الوحيد وتعتقد أن الحجب خاطئ فتواصل مع الدعم.'],
     },
     adblock: {
       badge: 'مانع إعلانات مفعّل',
@@ -31,6 +37,12 @@ const COPY = {
       body: 'We detected a VPN or proxy. To protect rewards and balances from abuse, the platform can’t be used through these services. Turn the VPN off, then refresh the page.',
       steps: ['Turn off the VPN or proxy app on your device.', 'Come back and tap “Refresh page”.'],
     },
+    device: {
+      badge: 'MULTIPLE ACCOUNTS',
+      title: 'This device is linked to another account',
+      body: 'Only one account is allowed per device to protect rewards from abuse. This device is already used with another account on the platform.',
+      steps: ['Sign in from Telegram with the first account you used on this device.', 'If this is your only account and you believe this is a mistake, contact support.'],
+    },
     adblock: {
       badge: 'AD BLOCKER DETECTED',
       title: 'Turn off your ad blocker to continue',
@@ -49,6 +61,7 @@ const ADBLOCK_POLL_MS = 20_000;
 
 export function ProtectionGate({ language, children }: { language: 'ar' | 'en'; children: ReactNode }) {
   const [vpn, setVpn] = useState(false);
+  const [device, setDevice] = useState(false);
   const [adblock, setAdblock] = useState(false);
   const [checking, setChecking] = useState(false);
   const [retried, setRetried] = useState(false);
@@ -57,7 +70,10 @@ export function ProtectionGate({ language, children }: { language: 'ar' | 'en'; 
   const checkVpn = useCallback(async () => {
     try {
       const result = await apiGet<{ vpn: boolean }>('network/check');
-      if (alive.current) setVpn(Boolean(result.vpn));
+      if (alive.current) {
+        setVpn(Boolean(result.vpn));
+        setDevice(false);
+      }
     } catch {
       // فشل الفحص (شبكة/صيانة) لا يحجب المستخدم؛ الخادم يرفض العمليات الحساسة من خلف VPN على أي حال.
     }
@@ -75,19 +91,22 @@ export function ProtectionGate({ language, children }: { language: 'ar' | 'en'; 
     const vpnTimer = window.setInterval(checkVpn, NETWORK_POLL_MS);
     const adTimer = window.setInterval(checkAdblock, ADBLOCK_POLL_MS);
     const onVpn = () => setVpn(true);
+    const onDevice = () => setDevice(true);
     const onFocus = () => { void checkVpn(); void checkAdblock(); };
     window.addEventListener(VPN_BLOCKED_EVENT, onVpn);
+    window.addEventListener(DEVICE_BLOCKED_EVENT, onDevice);
     window.addEventListener('focus', onFocus);
     return () => {
       alive.current = false;
       window.clearInterval(vpnTimer);
       window.clearInterval(adTimer);
       window.removeEventListener(VPN_BLOCKED_EVENT, onVpn);
+      window.removeEventListener(DEVICE_BLOCKED_EVENT, onDevice);
       window.removeEventListener('focus', onFocus);
     };
   }, [checkVpn, checkAdblock]);
 
-  const reason: Reason | null = vpn ? 'vpn' : adblock ? 'adblock' : null;
+  const reason: Reason | null = device ? 'device' : vpn ? 'vpn' : adblock ? 'adblock' : null;
   if (!reason) return <>{children}</>;
 
   const text = COPY[language];
