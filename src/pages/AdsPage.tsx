@@ -8,6 +8,7 @@ import {
 import { useLanguage } from '@/i18n';
 import { apiPost, apiGet } from '@/lib/api';
 import {
+  buildAdsteraDocument,
   useAdsteraAds,
   type AdProvider,
   type AdsteraAd,
@@ -67,40 +68,20 @@ function formatReward(amount: number) {
   return `${value.toFixed(precision)} USDT`;
 }
 
-// Adsterra banners rely on the global window.atOptions, so units must be loaded one at a time.
-// The code is injected straight into the page (not into a srcdoc iframe) so the network can see
-// the real site origin/referrer and verify the domain; invoke.js builds its own iframe.
-let bannerQueue: Promise<void> = Promise.resolve();
-
-function runScriptsSequentially(root: HTMLElement, ad: AdsteraAd, isCancelled: () => boolean): Promise<void> {
-  const parsed = new DOMParser().parseFromString(ad.code, 'text/html');
-  const sources = Array.from(parsed.body.querySelectorAll('script'));
-  return sources.reduce<Promise<void>>((chain, source) => chain.then(() => new Promise<void>((resolve) => {
-    if (isCancelled()) return resolve();
-    const script = document.createElement('script');
-    Array.from(source.attributes).forEach(({ name, value }) => {
-      if (name !== 'src' && name !== 'async') script.setAttribute(name, value);
-    });
-    script.dataset.vidrewardAdstera = ad.id;
-    const src = source.getAttribute('src');
-    if (!src) {
-      script.textContent = source.textContent ?? '';
-      root.appendChild(script);
-      return resolve();
-    }
-    const timer = window.setTimeout(resolve, 6000);
-    const done = () => { window.clearTimeout(timer); resolve(); };
-    script.onload = done;
-    script.onerror = done;
-    script.async = true;
-    script.src = new URL(src, document.baseURI).href;
-    root.appendChild(script);
-  })), Promise.resolve());
-}
-
-function appendAdsteraBanner(root: HTMLElement, ad: AdsteraAd, isCancelled: () => boolean) {
-  const run = bannerQueue.then(() => (isCancelled() ? undefined : runScriptsSequentially(root, ad, isCancelled)));
-  bannerQueue = run.catch(() => undefined);
+// Same rendering path as the admin preview (srcdoc iframe), which is known to load these codes.
+// Every banner lives in its own iframe, so each keeps its own window.atOptions.
+function appendAdsteraBanner(root: HTMLElement, ad: AdsteraAd) {
+  const frame = document.createElement('iframe');
+  frame.title = `${ad.provider === 'monetag' ? 'Monetag' : 'Adsterra'} ${ad.name}`;
+  frame.width = '320';
+  frame.height = ad.format === '320x50' ? '50' : '80';
+  frame.referrerPolicy = 'no-referrer-when-downgrade';
+  frame.style.display = 'block';
+  frame.style.maxWidth = '100%';
+  frame.style.border = '0';
+  frame.dataset.vidrewardAdsteraCode = ad.id;
+  frame.srcdoc = buildAdsteraDocument(ad);
+  root.appendChild(frame);
 }
 
 function appendAdsteraSocialCode(root: HTMLElement, ad: AdsteraAd) {
@@ -144,11 +125,11 @@ function AdsterraBannerSlot({
       return;
     }
 
-    let cancelled = false;
     root.replaceChildren();
-    appendAdsteraBanner(root, ad, () => cancelled);
-    return () => { cancelled = true; root.replaceChildren(); };
-  }, [active, ad]);
+    // Stagger the requests so ten units are not fetched at the same instant.
+    const timer = window.setTimeout(() => appendAdsteraBanner(root, ad), index * 600);
+    return () => { window.clearTimeout(timer); root.replaceChildren(); };
+  }, [active, ad, index]);
 
   return (
     <div
